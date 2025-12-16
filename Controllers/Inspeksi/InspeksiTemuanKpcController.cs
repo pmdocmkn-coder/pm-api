@@ -114,33 +114,49 @@ namespace Pm.Controllers
         [HttpPatch("{id}")]
         public async Task<IActionResult> Update(int id, [FromForm] UpdateInspeksiTemuanKpcDto dto)
         {
-            _logger.LogInformation("🔄 Update request for ID: {Id}", id);
-            _logger.LogInformation("📁 Files received: {Count}", dto.FotoHasilFiles?.Count ?? 0);
+            try
+            {
+                _logger.LogInformation("🔄 UPDATE REQUEST - ID: {Id}, User: {UserId}", id, _userId);
+                
+                // ✅ LOG FORM DATA DETAILS
+                _logger.LogInformation("📦 FormData values:");
+                _logger.LogInformation("  - Ruang: '{Ruang}'", dto.Ruang ?? "NULL");
+                _logger.LogInformation("  - Status: '{Status}'", dto.Status ?? "NULL");
+                _logger.LogInformation("  - NoFollowUp: '{NoFollowUp}'", dto.NoFollowUp ?? "NULL");
+                _logger.LogInformation("  - PicPelaksana: '{PicPelaksana}'", dto.PicPelaksana ?? "NULL");
+                _logger.LogInformation("  - PerbaikanDilakukan: '{Perbaikan}'", dto.PerbaikanDilakukan ?? "NULL");
+                _logger.LogInformation("  - Keterangan: '{Keterangan}'", dto.Keterangan ?? "NULL");
+                _logger.LogInformation("  - TanggalPerbaikan: {Date}", dto.TanggalPerbaikan ?? "NULL");
+                _logger.LogInformation("  - TanggalSelesaiPerbaikan: {Date}", dto.TanggalSelesaiPerbaikan ?? "NULL");
+                
+                // ✅ LOG CLEAR FLAGS
+                _logger.LogInformation("  - Clear flags:");
+                _logger.LogInformation("    • ClearNoFollowUp: {Value}", dto.ClearNoFollowUp ?? "false");
+                _logger.LogInformation("    • ClearPicPelaksana: {Value}", dto.ClearPicPelaksana ?? "false");
+                _logger.LogInformation("    • ClearPerbaikanDilakukan: {Value}", dto.ClearPerbaikanDilakukan ?? "false");
+                _logger.LogInformation("    • ClearKeterangan: {Value}", dto.ClearKeterangan ?? "false");
+                _logger.LogInformation("    • ClearTanggalPerbaikan: {Value}", dto.ClearTanggalPerbaikan ?? "false");
+                _logger.LogInformation("    • ClearTanggalSelesaiPerbaikan: {Value}", dto.ClearTanggalSelesaiPerbaikan ?? "false");
+                
+                // ✅ LOG FILES
+                _logger.LogInformation("  - Files: Temuan={TemuanCount}, Hasil={HasilCount}", 
+                    dto.FotoTemuanFiles?.Count ?? 0, dto.FotoHasilFiles?.Count ?? 0);
 
-            // ✅ ENHANCED DEBUG LOGGING
-            _logger.LogInformation("📊 Received DTO values - " +
-                "NoFollowUp: '{NoFollowUp}', " +
-                "PicPelaksana: '{PicPelaksana}', " +
-                "PerbaikanDilakukan: '{PerbaikanDilakukan}', " +
-                "Keterangan: '{Keterangan}', " +
-                "TanggalPerbaikan: {TanggalPerbaikan}, " +
-                "TanggalSelesaiPerbaikan: {TanggalSelesaiPerbaikan}, " +
-                "Status: {Status}",
-                dto.NoFollowUp ?? "NULL",
-                dto.PicPelaksana ?? "NULL", 
-                dto.PerbaikanDilakukan ?? "NULL",
-                dto.Keterangan ?? "NULL",
-                dto.TanggalPerbaikan?.ToString("yyyy-MM-dd") ?? "NULL",
-                dto.TanggalSelesaiPerbaikan?.ToString("yyyy-MM-dd") ?? "NULL",
-                dto.Status ?? "NULL");
+                var updatedDto = await _service.UpdateAsync(id, dto, _userId);
+                
+                if (updatedDto == null)
+                    return ApiResponse.NotFound($"Data dengan ID {id} tidak ditemukan");
 
-            var updatedDto = await _service.UpdateAsync(id, dto, _userId);
-            if (updatedDto == null) return NotFound("Data tidak ditemukan atau sudah dihapus");
-
-            return ApiResponse.Success(
-                data: updatedDto,
-                message: "Temuan berhasil diperbarui"
-            );
+                return ApiResponse.Success(
+                    data: updatedDto,
+                    message: "Temuan berhasil diperbarui"
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ UNHANDLED ERROR in Update - ID: {Id}", id);
+                return ApiResponse.InternalServerError($"Update gagal: {ex.Message}");
+            }
         }
 
         // DELETE: api/inspeksi-temuan-kpc/5
