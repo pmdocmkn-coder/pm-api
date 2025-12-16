@@ -10,9 +10,9 @@ using Pm.Helper;
 using Pm.Middleware;
 using Pm.DTOs;
 using Pm.Validators;
-using OfficeOpenXml;
 using Microsoft.AspNetCore.Http.Features;
 using Pm.DTOs.Auth;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,8 +21,8 @@ if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONM
     Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Production");
 }
 
-// ===== EPPlus License =====
-ExcelPackage.License.SetNonCommercialOrganization("MKN");
+
+
 
 // ✅ FORCE application timezone to UTC
 TimeZoneInfo.ClearCachedData();
@@ -176,6 +176,9 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<RegisterDto>, RegisterDtoValidator>();
 builder.Services.AddScoped<IValidator<CreateUserDto>, CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
+
+// ===== Signal NEC ===== 
+builder.Services.AddScoped<INecSignalService, NecSignalService>();
 
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(options =>

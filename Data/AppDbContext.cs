@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Models;
+using Pm.Models.NEC;
 
 namespace Pm.Data
 {
@@ -19,6 +20,10 @@ namespace Pm.Data
         public DbSet<FileImportHistory> FileImportHistories { get; set; }
         public DbSet<InspeksiTemuanKpc> InspeksiTemuanKpcs { get; set; } = null!;
         public DbSet<ActivityLog> ActivityLogs { get; set; } = null!;
+
+        public DbSet<Tower> Towers { get; set; }
+        public DbSet<NecLink> NecLinks { get; set; }
+        public DbSet<NecRslHistory> NecRslHistories { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -338,6 +343,53 @@ namespace Pm.Data
             {
                 entity.HasKey(e => e.ImportHistoryId);
                 entity.ToTable("FileImportHistories");
+            });
+
+
+            
+            // ===========================================
+            // TABEL NEC SIGNAL CONFIGURATION
+            // ===========================================
+
+            modelBuilder.Entity<Tower>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecTowers");
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Location).HasMaxLength(200);
+            });
+
+            modelBuilder.Entity<NecLink>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecLinks");
+                entity.Property(e => e.LinkName).IsRequired().HasMaxLength(200);
+                entity.HasIndex(e => e.LinkName).IsUnique();
+
+                entity.HasOne(e => e.NearEndTower)
+                    .WithMany(t => t.NearEndLinks)
+                    .HasForeignKey(e => e.NearEndTowerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.FarEndTower)
+                    .WithMany(t => t.FarEndLinks)
+                    .HasForeignKey(e => e.FarEndTowerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<NecRslHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecRslHistories");
+
+                entity.HasOne(e => e.NecLink)
+                    .WithMany(l => l.Histories)
+                    .HasForeignKey(e => e.NecLinkId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Date);
+                entity.HasIndex(e => new { e.NecLinkId, e.Date }).IsUnique(); // cegah duplikat harian
             });
         }
     }

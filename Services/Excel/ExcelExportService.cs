@@ -12,7 +12,7 @@ namespace Pm.Services
         // Static ctor → jalankan sekali untuk set lisensi
         static ExcelExportService()
         {
-            ExcelPackage.License.SetNonCommercialPersonal("MKN");
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
             // Kalau punya lisensi komersial:
             // ExcelPackage.License.SetLicense(new OfficeOpenXml.License.CommercialLicense("your-key"));
         }

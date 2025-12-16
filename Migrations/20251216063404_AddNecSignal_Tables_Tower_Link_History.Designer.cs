@@ -12,8 +12,8 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251121032439_SetIsActiveDefaultValue")]
-    partial class SetIsActiveDefaultValue
+    [Migration("20251216063404_AddNecSignal_Tables_Tower_Link_History")]
+    partial class AddNecSignal_Tables_Tower_Link_History
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -35,30 +35,39 @@ namespace Pm.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
 
                     b.Property<int?>("EntityId")
                         .HasColumnType("int");
 
                     b.Property<string>("Module")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ActivityLog_UserId");
 
-                    b.ToTable("ActivityLogs");
+                    b.HasIndex("Module", "Timestamp")
+                        .HasDatabaseName("IX_ActivityLog_Module_Time");
+
+                    b.ToTable("ActivityLogs", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.CallRecord", b =>
@@ -90,9 +99,9 @@ namespace Pm.Migrations
                         .HasDatabaseName("IX_CallRecord_Date");
 
                     b.HasIndex("CallDate", "CallTime")
-                        .HasDatabaseName("IX_CallRecord_HourQuery");
+                        .HasDatabaseName("IX_CallRecord_DateTime");
 
-                    b.ToTable("CallRecords");
+                    b.ToTable("CallRecords", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.CallSummary", b =>
@@ -142,7 +151,7 @@ namespace Pm.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_CallSummary_DateHour");
 
-                    b.ToTable("CallSummaries");
+                    b.ToTable("CallSummaries", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.FileImportHistory", b =>
@@ -174,7 +183,7 @@ namespace Pm.Migrations
 
                     b.HasKey("ImportHistoryId");
 
-                    b.ToTable("FileImportHistories");
+                    b.ToTable("FileImportHistories", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.FleetStatistic", b =>
@@ -212,7 +221,7 @@ namespace Pm.Migrations
 
                     b.HasKey("FleetStatisticId");
 
-                    b.ToTable("FleetStatistics");
+                    b.ToTable("FleetStatistics", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.InspeksiTemuanKpc", b =>
@@ -224,7 +233,9 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
@@ -246,22 +257,27 @@ namespace Pm.Migrations
                         .HasColumnType("varchar(200)");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("KategoriTemuan")
-                        .HasColumnType("longtext");
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("Keterangan")
                         .HasColumnType("longtext");
 
                     b.Property<string>("NoFollowUp")
-                        .HasColumnType("longtext");
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("PerbaikanDilakukan")
                         .HasColumnType("longtext");
 
                     b.Property<string>("PicPelaksana")
-                        .HasColumnType("longtext");
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("Ruang")
                         .IsRequired()
@@ -270,11 +286,17 @@ namespace Pm.Migrations
 
                     b.Property<string>("Severity")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("Medium");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("longtext");
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("Open");
 
                     b.Property<DateTime?>("TanggalClosed")
                         .HasColumnType("datetime(6)");
@@ -307,9 +329,113 @@ namespace Pm.Migrations
 
                     b.HasIndex("DeletedBy");
 
+                    b.HasIndex("Ruang")
+                        .HasDatabaseName("IX_InspeksiTemuanKpc_Ruang");
+
+                    b.HasIndex("TanggalTemuan")
+                        .HasDatabaseName("IX_InspeksiTemuanKpc_Tanggal");
+
                     b.HasIndex("UpdatedBy");
 
-                    b.ToTable("InspeksiTemuanKpcs");
+                    b.HasIndex("IsDeleted", "Status")
+                        .HasDatabaseName("IX_InspeksiTemuanKpc_Deleted_Status");
+
+                    b.ToTable("InspeksiTemuanKpcs", (string)null);
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.NecLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ExpectedRslMax")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal>("ExpectedRslMin")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<int>("FarEndTowerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LinkName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("NearEndTowerId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarEndTowerId");
+
+                    b.HasIndex("LinkName")
+                        .IsUnique();
+
+                    b.HasIndex("NearEndTowerId");
+
+                    b.ToTable("NecLinks", (string)null);
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.NecRslHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("NecLinkId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("RslFarEnd")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal>("RslNearEnd")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("NecLinkId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("NecRslHistories", (string)null);
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.Tower", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("NecTowers", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.Permission", b =>
@@ -321,7 +447,9 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("PermissionId"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(255)
@@ -339,9 +467,10 @@ namespace Pm.Migrations
                     b.HasKey("PermissionId");
 
                     b.HasIndex("PermissionName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_Permission_PermissionName");
 
-                    b.ToTable("Permissions");
+                    b.ToTable("Permissions", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.Role", b =>
@@ -353,14 +482,18 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RoleId"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("RoleName")
                         .IsRequired()
@@ -370,9 +503,10 @@ namespace Pm.Migrations
                     b.HasKey("RoleId");
 
                     b.HasIndex("RoleName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_Role_RoleName");
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.RolePermission", b =>
@@ -384,7 +518,9 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RolePermissionId"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<int>("PermissionId")
                         .HasColumnType("int");
@@ -397,9 +533,10 @@ namespace Pm.Migrations
                     b.HasIndex("PermissionId");
 
                     b.HasIndex("RoleId", "PermissionId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_RolePermission_RoleId_PermissionId");
 
-                    b.ToTable("RolePermissions");
+                    b.ToTable("RolePermissions", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.User", b =>
@@ -411,7 +548,9 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("UserId"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<string>("Email")
                         .HasMaxLength(200)
@@ -454,15 +593,15 @@ namespace Pm.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.ActivityLog", b =>
                 {
                     b.HasOne("Pm.Models.User", "User")
-                        .WithMany()
+                        .WithMany("ActivityLogs")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("User");
@@ -473,22 +612,54 @@ namespace Pm.Migrations
                     b.HasOne("Pm.Models.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedBy")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Pm.Models.User", "DeletedByUser")
                         .WithMany()
-                        .HasForeignKey("DeletedBy");
+                        .HasForeignKey("DeletedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Pm.Models.User", "UpdatedByUser")
                         .WithMany()
-                        .HasForeignKey("UpdatedBy");
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("DeletedByUser");
 
                     b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.NecLink", b =>
+                {
+                    b.HasOne("Pm.Models.NEC.Tower", "FarEndTower")
+                        .WithMany("FarEndLinks")
+                        .HasForeignKey("FarEndTowerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Pm.Models.NEC.Tower", "NearEndTower")
+                        .WithMany("NearEndLinks")
+                        .HasForeignKey("NearEndTowerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FarEndTower");
+
+                    b.Navigation("NearEndTower");
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.NecRslHistory", b =>
+                {
+                    b.HasOne("Pm.Models.NEC.NecLink", "NecLink")
+                        .WithMany("Histories")
+                        .HasForeignKey("NecLinkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NecLink");
                 });
 
             modelBuilder.Entity("Pm.Models.RolePermission", b =>
@@ -521,6 +692,18 @@ namespace Pm.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("Pm.Models.NEC.NecLink", b =>
+                {
+                    b.Navigation("Histories");
+                });
+
+            modelBuilder.Entity("Pm.Models.NEC.Tower", b =>
+                {
+                    b.Navigation("FarEndLinks");
+
+                    b.Navigation("NearEndLinks");
+                });
+
             modelBuilder.Entity("Pm.Models.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
@@ -531,6 +714,11 @@ namespace Pm.Migrations
                     b.Navigation("RolePermissions");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("Pm.Models.User", b =>
+                {
+                    b.Navigation("ActivityLogs");
                 });
 #pragma warning restore 612, 618
         }
