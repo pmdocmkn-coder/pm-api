@@ -70,16 +70,13 @@ namespace Pm.Services
             }
             catch (DbUpdateException dbEx)
             {
-                // Log error tapi jangan crash
-                _logger.LogError(dbEx, "❌ Database error in ActivityLog");
+                // Log sebagai Warning, bukan Error
+                _logger.LogWarning(dbEx, "⚠️ Database error in ActivityLog (non-critical)");
                 
                 if (dbEx.InnerException != null)
                 {
                     var msg = dbEx.InnerException.Message;
-                    _logger.LogError("🔍 Inner: {Message}", msg);
-                    
-                    if (msg.Contains("foreign key"))
-                        _logger.LogError("🔍 Foreign key issue with UserId={UserId}", userId);
+                    _logger.LogWarning("🔍 FK constraint failed for UserId={UserId}", userId);
                 }
             }
             catch (Exception ex)
