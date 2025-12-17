@@ -1,0 +1,105 @@
+name: Deploy .NET 8 API from main branch
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: 📦 Publish .NET app
+        run: |
+          dotnet publish -c Release -r linux-x64 --self-contained false -o ./publish
+          cp appsettings.Production.json ./publish/
+
+      - name: 🧹 Clean old publish folder on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            rm -rf /www/wwwroot/api.mknops.web.id/publish/*
+            echo "✅ Folder publish lama dibersihkan"
+
+      - name: 📤 Upload new files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          source: "./publish/"
+          target: "/www/wwwroot/api.mknops.web.id/publish/"
+          strip_components: 1 # Biar gak bikin subfolder publish/publish
+          overwrite: true
+
+      - name: 🔧 Fix folder structure (jaga-jaga)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            # Kalau masih ada folder publish/publish, fix
+            if [ -d "/www/wwwroot/api.mknops.web.id/publish/publish" ]; then
+              echo "⚠️  Masih ada folder publish/publish, fixing..."
+              mv /www/wwwroot/api.mknops.web.id/publish/publish/* /www/wwwroot/api.mknops.web.id/publish/
+              rmdir /www/wwwroot/api.mknops.web.id/publish/publish
+              echo "✅ Fixed"
+            fi
+
+      - name: ✅ Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            echo "=== Cek Pm.dll ==="
+            ls -la /www/wwwroot/api.mknops.web.id/publish/Pm.dll
+            echo "=== Isi folder ==="
+            ls -la /www/wwwroot/api.mknops.web.id/publish/
+
+      - name: ♻️ Restart systemd service (with sudo fix)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          envs: SSH_PASSWORD=${{ secrets.SSH_PASSWORD }}
+          script: |
+            # Method 1: Coba restart service dengan sudo -S (baca password dari stdin)
+            echo "Restarting pm-api service..."
+            echo "$SSH_PASSWORD" | sudo -S systemctl restart pm-api
+
+            # Method 2: Kalau masih gagal, coba daemon-reload dulu
+            if ! systemctl is-active --quiet pm-api; then
+              echo "Service masih tidak aktif, coba daemon-reload..."
+              echo "$SSH_PASSWORD" | sudo -S systemctl daemon-reload
+              echo "$SSH_PASSWORD" | sudo -S systemctl restart pm-api
+            fi
+
+            echo "✅ Service 'pm-api' di-restart"
+
+            # Cek status service
+            echo "=== Status service ==="
+            echo "$SSH_PASSWORD" | sudo -S systemctl status pm-api --no-pager || true
+
+            # Tampilkan log terakhir
+            echo "=== 10 log terakhir ==="
+            echo "$SSH_PASSWORD" | sudo -S journalctl -u pm-api -n 10 --no-pager || true

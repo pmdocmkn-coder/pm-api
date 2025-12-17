@@ -10,21 +10,41 @@ using Pm.Helper;
 using Pm.Middleware;
 using Pm.DTOs;
 using Pm.Validators;
-using OfficeOpenXml;
 using Microsoft.AspNetCore.Http.Features;
+using Pm.DTOs.Auth;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ===== EPPlus License =====
-ExcelPackage.License.SetNonCommercialOrganization("MKN");
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")))
+{
+    Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Production");
+}
+
+
+
+
+// ✅ FORCE application timezone to UTC
+TimeZoneInfo.ClearCachedData();
+Environment.SetEnvironmentVariable("TZ", "UTC");
 
 // ===== Add Controllers =====
 builder.Services.AddControllers(options =>
 {
-    options.Filters.Add<ResponseWrapperFilter>(); // wrapper response global
+    // ✅ Register ResponseWrapperFilter globally
+    options.Filters.Add<ResponseWrapperFilter>();
+})
+.AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    
+    // ✅ OPTIONAL: Ignore null values for cleaner response
+    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 });
 
-// ===== Swagger Configuration =====
+// ===== Swagger =====
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -35,7 +55,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "API PM & Documentation"
     });
 
-    // JWT di Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Gunakan format: Bearer {token}",
@@ -60,17 +79,48 @@ builder.Services.AddSwaggerGen(c =>
 // ===== Database Context =====
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    // Priority: Environment Variable > appsettings.json
+    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
+                        ?? builder.Configuration.GetConnectionString("DefaultConnection");
+    
     if (string.IsNullOrEmpty(connectionString))
+        throw new InvalidOperationException("Connection string tidak ditemukan.");
+
+    options.UseMySql(
+        connectionString,
+        new MySqlServerVersion(new Version(8, 0, 0)),
+        mySqlOptions =>
+        {
+            mySqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null
+            );
+            mySqlOptions.CommandTimeout(180);
+        }
+    );
+
+    if (builder.Environment.IsDevelopment())
     {
-        throw new InvalidOperationException("Connection string 'DefaultConnection' tidak ditemukan. Pastikan sudah diatur di Render Environment Variables.");
+        options.EnableSensitiveDataLogging();
+        options.EnableDetailedErrors();
     }
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
 });
+
+builder.WebHost.UseUrls("http://*:5116");
 
 // ===== JWT Authentication =====
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey tidak ditemukan di konfigurasi.");
+var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") 
+            ?? jwtSettings["SecretKey"] 
+            ?? throw new InvalidOperationException("JWT SecretKey tidak ditemukan.");
+
+
+var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") 
+            ?? jwtSettings["Issuer"];
+            
+var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") 
+            ?? jwtSettings["Audience"];
 
 var key = Encoding.ASCII.GetBytes(secretKey);
 
@@ -81,22 +131,27 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = true; // aktifkan HTTPS di production
+    options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(key),
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(secretKey)
+        ),
+
         ValidateIssuer = true,
-        ValidIssuer = jwtSettings["Issuer"],
+        ValidIssuer = issuer,        // ✅ INI YANG DIGANTI
         ValidateAudience = true,
-        ValidAudience = jwtSettings["Audience"],
+        ValidAudience = audience,    // ✅ INI YANG DIGANTI
+
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
 });
 
-// ===== Authorization Policy =====
+// ===== Authorization =====
 builder.Services.AddAuthorization(options =>
 {
     options.AddCustomAuthorizationPolicies();
@@ -106,11 +161,34 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IRolePermissionService, RolePermissionService>();
 builder.Services.AddScoped<ICallRecordService, CallRecordService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
+builder.Services.AddScoped<IInspeksiTemuanKpcService, InspeksiTemuanKpcService>();
+builder.Services.AddScoped<IActivityLogService, ActivityLogService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
-// ===== Fluent Validation =====
+// ===== Validators =====
 builder.Services.AddValidatorsFromAssemblyContaining<CreateUserDtoValidator>();
+builder.Services.AddScoped<IValidator<RegisterDto>, RegisterDtoValidator>();
+builder.Services.AddScoped<IValidator<CreateUserDto>, CreateUserDtoValidator>();
+builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
+
+// ===== Signal NEC ===== 
+builder.Services.AddScoped<INecSignalService, NecSignalService>();
+
+// ===== Cloudinary =====
+builder.Services.Configure<CloudinarySettings>(options =>
+{
+    options.CloudName = builder.Configuration["Cloudinary:CloudName"] ?? "dz3rhkitn";
+    options.ApiKey = builder.Configuration["Cloudinary:ApiKey"] ?? "565287517278285";
+    options.ApiSecret = builder.Configuration["Cloudinary:ApiSecret"] ?? "VB7L7av5BE-Fi6bmyxWJziW2a5M";
+});
+
+builder.Services.AddHttpContextAccessor();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -118,13 +196,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
+            "https://pm.mknops.web.id",
             "https://pmfrontend.vercel.app",
-            "http://localhost:3000", 
+            "http://localhost:3000",
             "http://localhost:5173",
-            // ✅ TAMBAH INI untuk semua preview URLs
-            "https://pmfrontend-*.vercel.app",
-            "https://pmfrontend-git-*-jupripratamas-projects.vercel.app",
-            "https://*.vercel.app" // ✅ ATAU INI untuk semua Vercel domains
+            "https://pmfrontend-git-*.vercel.app",
+            "https://*.vercel.app"
         )
         .AllowAnyHeader()
         .AllowAnyMethod()
@@ -146,62 +223,68 @@ builder.Services.Configure<IISServerOptions>(options =>
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 1073741824; // 1GB
+    options.MultipartBodyLengthLimit = 1073741824;
 });
-
 
 var app = builder.Build();
 
-// ===== Middleware Pipeline =====
+// ===== Middleware =====
 app.UseSwagger();
-
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1 (DEV)");
-        c.RoutePrefix = "swagger";
-    });
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1 (DEV)"));
 }
 else
 {
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1");
-        c.RoutePrefix = string.Empty;
-    });
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1"));
 }
 
-// ===== Error Handling =====
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-app.UseHttpsRedirection();
-
-// ===== Enable CORS untuk frontend =====
-app.UseCors("AllowFrontend");
-
-// ===== Authentication & Authorization =====
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-
-// ===== Database Migration (otomatis buat DB jika belum ada) =====
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment())
 {
+    app.UseHttpsRedirection();
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// ===== SEEDING (Development Only) =====
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
     try
     {
-        context.Database.EnsureCreated();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogInformation("Database initialized successfully.");
+        // Pastikan tabel sudah ada → JIKA BELUM, JALANKAN MIGRASI DULU!
+        // Jika Anda belum buat migrasi, ganti dengan:
+        // await context.Database.EnsureCreatedAsync();
+        // TAPI LEBIH BAIK PAKAI MIGRASI
+
+        await context.SeedInitialDataAsync(logger);
+        logger.LogInformation("✅ Seeding completed.");
     }
     catch (Exception ex)
     {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while initializing the database.");
-        throw;
+        logger.LogError(ex, "❌ Seeding failed.");
     }
 }
+
+app.UseMiddleware<ErrorHandlingMiddleware>();
+app.UseRequestLogging();
+
+
+app.UseCors("AllowFrontend");
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Logger.LogInformation("Environment: {Env}", app.Environment.EnvironmentName);
+app.Logger.LogInformation("DB Connection String: {Conn}", builder.Configuration.GetConnectionString("DefaultConnection"));
 
 app.Run();

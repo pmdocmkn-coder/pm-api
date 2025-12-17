@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Models;
+using Pm.Models.NEC;
 
 namespace Pm.Data
 {
@@ -17,192 +18,379 @@ namespace Pm.Data
         public DbSet<CallSummary> CallSummaries { get; set; }
         public DbSet<FleetStatistic> FleetStatistics { get; set; }
         public DbSet<FileImportHistory> FileImportHistories { get; set; }
+        public DbSet<InspeksiTemuanKpc> InspeksiTemuanKpcs { get; set; } = null!;
+        public DbSet<ActivityLog> ActivityLogs { get; set; } = null!;
 
+        public DbSet<Tower> Towers { get; set; }
+        public DbSet<NecLink> NecLinks { get; set; }
+        public DbSet<NecRslHistory> NecRslHistories { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            // if (!optionsBuilder.IsConfigured)
-            // {
-            //     // Add performance optimizations for large data
-            //     optionsBuilder.EnableSensitiveDataLogging(false)
-            //                 .EnableDetailedErrors(false);
-            // }
-
             base.OnConfiguring(optionsBuilder);
-    
+
             // Optimizations untuk bulk operations
             optionsBuilder
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking) // Default no tracking
                 .EnableSensitiveDataLogging(false) // Disable untuk performa
                 .EnableDetailedErrors(false); // Disable untuk performa
         }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // User Configuration
+            // ===========================================
+            // ✅ USER CONFIGURATION - PERBAIKI!
+            // ===========================================
             modelBuilder.Entity<User>(entity =>
             {
                 entity.HasKey(e => e.UserId);
-                entity.HasIndex(e => e.Username).IsUnique();
-                entity.HasIndex(e => e.Email).IsUnique();
+                entity.ToTable("Users");
+                
+                entity.Property(e => e.Username)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                
+                entity.Property(e => e.FullName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Email)
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.PasswordHash)
+                    .IsRequired()
+                    .HasMaxLength(255);
+                
+                entity.Property(e => e.PhotoUrl)
+                    .HasMaxLength(500);
+                
+                entity.Property(e => e.IsActive)
+                    .HasDefaultValue(false);
+                
+                entity.Property(e => e.LastLogin)
+                    .IsRequired(false);
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+                
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired(false);
+
+                // ✅ TAMBAHKAN RELASI KE ActivityLogs
+                entity.HasMany(u => u.ActivityLogs)
+                    .WithOne(al => al.User)
+                    .HasForeignKey(al => al.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasOne(u => u.Role)
-                      .WithMany(r => r.Users)
-                      .HasForeignKey(u => u.RoleId)
-                      .OnDelete(DeleteBehavior.Restrict);
-
+                    .WithMany(r => r.Users)
+                    .HasForeignKey(u => u.RoleId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // Role Configuration
+            // ===========================================
+            // ✅ ACTIVITY LOG CONFIGURATION - TAMBAHKAN!
+            // ===========================================
+            modelBuilder.Entity<ActivityLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("ActivityLogs");
+                
+                entity.Property(e => e.Module)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                
+                entity.Property(e => e.Action)
+                    .IsRequired()
+                    .HasMaxLength(50);
+                
+                entity.Property(e => e.Description)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+                
+                entity.Property(e => e.Timestamp)
+                    .IsRequired()
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+                
+                entity.Property(e => e.EntityId)
+                    .IsRequired(false);
+                
+                entity.Property(e => e.UserId)
+                    .IsRequired();
+
+                // ✅ FOREIGN KEY KE USER - PASTIKAN INI ADA!
+                entity.HasOne(al => al.User)
+                    .WithMany(u => u.ActivityLogs)
+                    .HasForeignKey(al => al.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Index untuk query performance
+                entity.HasIndex(e => new { e.Module, e.Timestamp })
+                    .HasDatabaseName("IX_ActivityLog_Module_Time");
+                
+                entity.HasIndex(e => e.UserId)
+                    .HasDatabaseName("IX_ActivityLog_UserId");
+            });
+
+            // ===========================================
+            // ROLE CONFIGURATION
+            // ===========================================
             modelBuilder.Entity<Role>(entity =>
             {
                 entity.HasKey(e => e.RoleId);
-                entity.HasIndex(e => e.RoleName).IsUnique();
+                entity.ToTable("Roles");
+                
+                entity.HasIndex(e => e.RoleName)
+                    .IsUnique()
+                    .HasDatabaseName("IX_Role_RoleName");
+                
+                entity.Property(e => e.RoleName)
+                    .IsRequired()
+                    .HasMaxLength(50);
+                
+                entity.Property(e => e.Description)
+                    .HasMaxLength(255);
+                
+                entity.Property(e => e.IsActive)
+                    .HasDefaultValue(true);
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
             });
 
-            // Permission Configuration
+            // ===========================================
+            // PERMISSION CONFIGURATION
+            // ===========================================
             modelBuilder.Entity<Permission>(entity =>
             {
                 entity.HasKey(e => e.PermissionId);
-                entity.HasIndex(e => e.PermissionName).IsUnique();
+                entity.ToTable("Permissions");
+                
+                entity.HasIndex(e => e.PermissionName)
+                    .IsUnique()
+                    .HasDatabaseName("IX_Permission_PermissionName");
+                
+                entity.Property(e => e.PermissionName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                
+                entity.Property(e => e.Description)
+                    .HasMaxLength(255);
+                
+                entity.Property(e => e.Group)
+                    .HasMaxLength(50);
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
             });
 
-            // RolePermission Configuration
+            // ===========================================
+            // ROLE PERMISSION CONFIGURATION
+            // ===========================================
             modelBuilder.Entity<RolePermission>(entity =>
             {
                 entity.HasKey(e => e.RolePermissionId);
-
+                entity.ToTable("RolePermissions");
+                
                 entity.HasOne(rp => rp.Role)
-                      .WithMany(r => r.RolePermissions)
-                      .HasForeignKey(rp => rp.RoleId)
-                      .OnDelete(DeleteBehavior.Cascade);
-
+                    .WithMany(r => r.RolePermissions)
+                    .HasForeignKey(rp => rp.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
                 entity.HasOne(rp => rp.Permission)
-                      .WithMany(p => p.RolePermissions)
-                      .HasForeignKey(rp => rp.PermissionId)
-                      .OnDelete(DeleteBehavior.Cascade);
-
+                    .WithMany(p => p.RolePermissions)
+                    .HasForeignKey(rp => rp.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
                 // Unique constraint untuk kombinasi RoleId dan PermissionId
-                entity.HasIndex(e => new { e.RoleId, e.PermissionId }).IsUnique();
+                entity.HasIndex(e => new { e.RoleId, e.PermissionId })
+                    .IsUnique()
+                    .HasDatabaseName("IX_RolePermission_RoleId_PermissionId");
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
             });
 
-            // CallRecord Configuration dengan optimasi
-            modelBuilder.Entity<CallRecord>(entity =>
-            {                                                                   
-                entity.HasKey(e => e.CallRecordId);
+            // ===========================================
+            // INSPEKSI TEMUAN KPC CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<InspeksiTemuanKpc>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("InspeksiTemuanKpcs");
                 
-                // Composite index untuk query yang sering dipakai
+                entity.Property(e => e.Ruang)
+                    .IsRequired()
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Temuan)
+                    .IsRequired();
+                
+                entity.Property(e => e.KategoriTemuan)
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Inspector)
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Severity)
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Medium");
+                
+                entity.Property(e => e.NoFollowUp)
+                    .HasMaxLength(100);
+                
+                entity.Property(e => e.PerbaikanDilakukan);
+                
+                entity.Property(e => e.PicPelaksana)
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Open");
+                
+                entity.Property(e => e.Keterangan);
+                
+                entity.Property(e => e.FotoTemuanUrls);
+                entity.Property(e => e.FotoHasilUrls);
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+                
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired(false);
+                
+                entity.Property(e => e.DeletedAt)
+                    .IsRequired(false);
+                
+                entity.Property(e => e.IsDeleted)
+                    .HasDefaultValue(false);
+
+                // Foreign keys
+                entity.HasOne(e => e.CreatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne(e => e.UpdatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.UpdatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+                
+                entity.HasOne(e => e.DeletedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.DeletedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Indexes
+                entity.HasIndex(e => new { e.IsDeleted, e.Status })
+                    .HasDatabaseName("IX_InspeksiTemuanKpc_Deleted_Status");
+                
+                entity.HasIndex(e => e.Ruang)
+                    .HasDatabaseName("IX_InspeksiTemuanKpc_Ruang");
+                
+                entity.HasIndex(e => e.TanggalTemuan)
+                    .HasDatabaseName("IX_InspeksiTemuanKpc_Tanggal");
+            });
+
+            // ===========================================
+            // TABEL LAINNYA (CallRecord, CallSummary, dll)
+            // ===========================================
+            modelBuilder.Entity<CallRecord>(entity =>
+            {
+                entity.HasKey(e => e.CallRecordId);
+                entity.ToTable("CallRecords");
+                
                 entity.HasIndex(e => new { e.CallDate, e.CallTime })
                     .HasDatabaseName("IX_CallRecord_DateTime");
-                    
+                
                 entity.HasIndex(e => e.CallCloseReason)
                     .HasDatabaseName("IX_CallRecord_CloseReason");
-                    
+                
                 entity.HasIndex(e => e.CallDate)
                     .HasDatabaseName("IX_CallRecord_Date");
-                    
-                // Index untuk hour-based queries
-                entity.HasIndex("CallDate", "CallTime")
-                    .HasDatabaseName("IX_CallRecord_HourQuery");
-            });                                                                                                                                                                                                                                                                                                                                                                                                                                       
+            });
 
-            // CallSummary dengan partitioning hint
             modelBuilder.Entity<CallSummary>(entity =>
             {
                 entity.HasKey(e => e.CallSummaryId);
+                entity.ToTable("CallSummaries");
+                
                 entity.HasIndex(e => new { e.SummaryDate, e.HourGroup })
                     .IsUnique()
                     .HasDatabaseName("IX_CallSummary_DateHour");
                 
-                entity.Property(e => e.TEBusyPercent).HasColumnType("decimal(5,2)");
-                entity.Property(e => e.SysBusyPercent).HasColumnType("decimal(5,2)");
-                entity.Property(e => e.OthersPercent).HasColumnType("decimal(5,2)");
-            });
-
-
-
-            // Seed Data
-            // SeedData(modelBuilder);
-        }
-
-        private void SeedData(ModelBuilder modelBuilder)
-        {
-            // Seed Roles
-            modelBuilder.Entity<Role>().HasData(
-                new Role { RoleId = 1, RoleName = "Super Admin", Description = "Full system access", CreatedAt = DateTime.UtcNow },
-                new Role { RoleId = 2, RoleName = "Admin", Description = "Administrative access", CreatedAt = DateTime.UtcNow },
-                new Role { RoleId = 3, RoleName = "User", Description = "Standard user access", CreatedAt = DateTime.UtcNow }
-            );
-
-            // Seed Permissions
-            var permissions = new[]
-            {
-                // User permissions
-                new Permission { PermissionId = 1, PermissionName = "user.view-any", Description = "View all users", Group = "User", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 2, PermissionName = "user.view", Description = "View user detail", Group = "User", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 3, PermissionName = "user.create", Description = "Create new user", Group = "User", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 4, PermissionName = "user.update", Description = "Update user", Group = "User", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 5, PermissionName = "user.delete", Description = "Delete user", Group = "User", CreatedAt = DateTime.UtcNow },
+                entity.Property(e => e.TEBusyPercent)
+                    .HasColumnType("decimal(5,2)");
                 
-                // Role permissions
-                new Permission { PermissionId = 6, PermissionName = "role.view-any", Description = "View all roles", Group = "Role", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 7, PermissionName = "role.view", Description = "View role detail", Group = "Role", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 8, PermissionName = "role.create", Description = "Create new role", Group = "Role", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 9, PermissionName = "role.update", Description = "Update role", Group = "Role", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 10, PermissionName = "role.delete", Description = "Delete role", Group = "Role", CreatedAt = DateTime.UtcNow },
+                entity.Property(e => e.SysBusyPercent)
+                    .HasColumnType("decimal(5,2)");
                 
-                // Permission permissions
-                new Permission { PermissionId = 11, PermissionName = "permission.view", Description = "View permissions", Group = "Permission", CreatedAt = DateTime.UtcNow },
-                new Permission { PermissionId = 12, PermissionName = "permission.edit", Description = "Edit permissions", Group = "Permission", CreatedAt = DateTime.UtcNow },
-            };
-
-            modelBuilder.Entity<Permission>().HasData(permissions);
-
-            // Seed RolePermissions (Super Admin gets all permissions)
-            var rolePermissions = new List<RolePermission>();
-            for (int i = 1; i <= permissions.Length; i++)
-            {
-                rolePermissions.Add(new RolePermission 
-                { 
-                    RolePermissionId = i, 
-                    RoleId = 1, 
-                    PermissionId = i, 
-                    CreatedAt = DateTime.UtcNow 
-                });
-            }
-
-            // Admin gets limited permissions
-            rolePermissions.AddRange(new[]
-            {
-                new RolePermission { RolePermissionId = 13, RoleId = 2, PermissionId = 1, CreatedAt = DateTime.UtcNow }, // user.view-any
-                new RolePermission { RolePermissionId = 14, RoleId = 2, PermissionId = 2, CreatedAt = DateTime.UtcNow }, // user.view
-                new RolePermission { RolePermissionId = 15, RoleId = 2, PermissionId = 3, CreatedAt = DateTime.UtcNow }, // user.create
-                new RolePermission { RolePermissionId = 16, RoleId = 2, PermissionId = 4, CreatedAt = DateTime.UtcNow }, // user.update
+                entity.Property(e => e.OthersPercent)
+                    .HasColumnType("decimal(5,2)");
             });
 
-            // User gets basic permissions
-            rolePermissions.AddRange(new[]
+            modelBuilder.Entity<FleetStatistic>(entity =>
             {
-                new RolePermission { RolePermissionId = 17, RoleId = 3, PermissionId = 2, CreatedAt = DateTime.UtcNow }, // user.view
+                entity.HasKey(e => e.FleetStatisticId);
+                entity.ToTable("FleetStatistics");
             });
 
-            modelBuilder.Entity<RolePermission>().HasData(rolePermissions);
+            modelBuilder.Entity<FileImportHistory>(entity =>
+            {
+                entity.HasKey(e => e.ImportHistoryId);
+                entity.ToTable("FileImportHistories");
+            });
 
-            // Seed Default Super Admin User
-            modelBuilder.Entity<User>().HasData(
-                new User
-                {
-                    UserId = 1,
-                    Username = "admin",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"), // Default password
-                    FullName = "System Administrator",
-                    Email = "admin@yourdomain.com",
-                    IsActive = true,
-                    RoleId = 1,
-                    CreatedAt = DateTime.UtcNow
-                }
-            );
+
+            
+            // ===========================================
+            // TABEL NEC SIGNAL CONFIGURATION
+            // ===========================================
+
+            modelBuilder.Entity<Tower>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecTowers");
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.Property(e => e.Location).HasMaxLength(200);
+            });
+
+            modelBuilder.Entity<NecLink>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecLinks");
+                entity.Property(e => e.LinkName).IsRequired().HasMaxLength(200);
+                entity.HasIndex(e => e.LinkName).IsUnique();
+
+                entity.HasOne(e => e.NearEndTower)
+                    .WithMany(t => t.NearEndLinks)
+                    .HasForeignKey(e => e.NearEndTowerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.FarEndTower)
+                    .WithMany(t => t.FarEndLinks)
+                    .HasForeignKey(e => e.FarEndTowerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<NecRslHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("NecRslHistories");
+
+                entity.HasOne(e => e.NecLink)
+                    .WithMany(l => l.Histories)
+                    .HasForeignKey(e => e.NecLinkId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Date);
+                entity.HasIndex(e => new { e.NecLinkId, e.Date }).IsUnique(); // cegah duplikat harian
+            });
         }
     }
 }

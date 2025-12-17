@@ -6,28 +6,34 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
-    <PackageReference Include="EFCore.BulkExtensions" Version="8.1.2" />
-    <PackageReference Include="EPPlus" Version="8.2.0" />
-    <PackageReference Include="FluentValidation" Version="12.0.0" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.5" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.20" />
+<ItemGroup>
+  <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+  <PackageReference Include="ClosedXML" Version="0.105.0" />
+  <PackageReference Include="CloudinaryDotNet" Version="1.27.8" />
+  <PackageReference Include="EFCore.BulkExtensions" Version="8.1.2" />
+  <PackageReference Include="EPPlus" Version="7.5.1" /> <!-- tetap 7.x untuk .NET 8 -->
+  <PackageReference Include="FluentValidation" Version="11.10.0" />
+  <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
+  <PackageReference Include="MailKit" Version="4.8.0" />
+  <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
+  <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.11" />
 
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
+  <!-- EF Core utama naik ke 8.0.11 -->
+  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+  <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
+  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.11">
+    <PrivateAssets>all</PrivateAssets>
+    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+  </PackageReference>
 
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.10">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
+  <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
 
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
-  </ItemGroup>
+  <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+  <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.1.2" />
+  <PackageReference Include="System.Linq.Dynamic.Core" Version="1.5.0" /> <!-- ignore vulnerability warning dulu, atau update ke 1.5.0 kalau mau -->
+</ItemGroup>
 
 </Project>
