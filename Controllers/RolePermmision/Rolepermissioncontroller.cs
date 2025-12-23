@@ -44,8 +44,8 @@ namespace Pm.Controllers
             return ApiResponse.Success(result, "Permissions untuk role berhasil dimuat");
         }
 
-        [Authorize(Policy = "CanEditPermissions")]
         [HttpPost]
+        [Authorize(Policy = "CanEditPermissions")]
         public async Task<IActionResult> AddPermissionToRole([FromBody] CreateRolePermissionDto dto)
         {
             if (!ModelState.IsValid)
@@ -70,8 +70,8 @@ namespace Pm.Controllers
             }
         }
 
-        [Authorize(Policy = "CanEditPermissions")]
         [HttpPut("role/{roleId}")]
+        [Authorize(Policy = "CanEditPermissions")]
         public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsDto dto)
         {
             if (!ModelState.IsValid)
@@ -96,8 +96,8 @@ namespace Pm.Controllers
             }
         }
 
-        [Authorize(Policy = "CanEditPermissions")]
         [HttpDelete("role/{roleId}/permission/{permissionId}")]
+        [Authorize(Policy = "CanEditPermissions")]
         public async Task<IActionResult> RemovePermissionFromRole(int roleId, int permissionId)
         {
             try

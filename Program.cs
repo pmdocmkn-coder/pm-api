@@ -12,6 +12,7 @@ using Pm.DTOs;
 using Pm.Validators;
 using Microsoft.AspNetCore.Http.Features;
 using Pm.DTOs.Auth;
+using System.Text.Json.Serialization;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,15 +34,18 @@ builder.Services.AddControllers(options =>
 {
     // ✅ Register ResponseWrapperFilter globally
     options.Filters.Add<ResponseWrapperFilter>();
+    
 })
 .AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-    
+
     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-    
+
     // ✅ OPTIONAL: Ignore null values for cleaner response
     options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
 // ===== Swagger =====

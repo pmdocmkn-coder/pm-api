@@ -78,6 +78,14 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "inspeksi.temuan-kpc.restore"));
             options.AddPolicy("InspeksiTemuanKpcUpdate", policy =>
                 policy.RequireClaim("Permission", "inspeksi.temuan-kpc.update"));
+
+
+            options.AddPolicy("NecSignalView", policy =>
+                policy.RequireClaim("Permission", "nec.signal.view"));
+            options.AddPolicy("NecSignalDelete", policy =>
+                policy.RequireClaim("Permission", "nec.signal.delete"));
+        
+
         }
 
 
