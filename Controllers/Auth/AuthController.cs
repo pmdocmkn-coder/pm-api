@@ -76,6 +76,12 @@ namespace Pm.Controllers
 
             var user = await _userService.CreateUserAsync(createUserDto);
 
+            if (user == null)
+            {
+                _logger.LogError("❌ User creation failed - returned null");
+                return ApiResponse.BadRequest("message", "Gagal membuat user");
+            }
+
             _logger.LogInformation("✅ User registered - ID: {UserId}, Username: {Username}",
                 user.UserId, user.Username);
 
