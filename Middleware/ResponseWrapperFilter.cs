@@ -21,6 +21,16 @@ namespace Pm.Middleware
 
                 // Cek apakah ini hasil dari ApiResponse (yaitu objek dengan properti 'data')
                 var originalType = originalValue?.GetType();
+                if (originalType != null && 
+                originalType.IsGenericType && 
+                originalType.GetGenericTypeDefinition() == typeof(PagedResultDto<>))
+                    {
+                        // Biarkan PagedResultDto<T> langsung dikembalikan
+                        // Filter tidak perlu wrap lagi
+                        return;
+                    }
+
+                else
                 if (originalType != null && originalValue is not string)
                 {
                     var props = originalType.GetProperties(BindingFlags.Public | BindingFlags.Instance);

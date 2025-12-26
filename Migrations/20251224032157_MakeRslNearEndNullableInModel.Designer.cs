@@ -12,8 +12,8 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251216063404_AddNecSignal_Tables_Tower_Link_History")]
-    partial class AddNecSignal_Tables_Tower_Link_History
+    [Migration("20251224032157_MakeRslNearEndNullableInModel")]
+    partial class MakeRslNearEndNullableInModel
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -372,8 +372,7 @@ namespace Pm.Migrations
 
                     b.HasIndex("FarEndTowerId");
 
-                    b.HasIndex("LinkName")
-                        .IsUnique();
+                    b.HasIndex("LinkName");
 
                     b.HasIndex("NearEndTowerId");
 
@@ -389,7 +388,9 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime(6)");
@@ -397,18 +398,27 @@ namespace Pm.Migrations
                     b.Property<int>("NecLinkId")
                         .HasColumnType("int");
 
-                    b.Property<decimal?>("RslFarEnd")
-                        .HasColumnType("decimal(65,30)");
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
 
-                    b.Property<decimal>("RslNearEnd")
-                        .HasColumnType("decimal(65,30)");
+                    b.Property<decimal?>("RslFarEnd")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal?>("RslNearEnd")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Date");
+                    b.HasIndex("Date")
+                        .HasDatabaseName("IX_NecRslHistory_Date");
 
                     b.HasIndex("NecLinkId", "Date")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_NecRslHistory_LinkDate");
 
                     b.ToTable("NecRslHistories", (string)null);
                 });

@@ -94,7 +94,7 @@ namespace Pm.Controllers
             }
         }
 
-        [Authorize(Policy = "CanEditPermission")]
+        [Authorize(Policy = "CanEditPermissions")]
         [HttpPut("{permissionId}")]
         public async Task<IActionResult> UpdatePermission(int permissionId, [FromBody] UpdatePermissionDto dto)
         {

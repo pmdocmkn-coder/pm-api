@@ -39,65 +39,48 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
-            try
+            _logger.LogInformation("📝 Register attempt - Username: {Username}, Email: {Email}",
+                dto.Username, dto.Email);
+
+            // 1. Validasi FluentValidation
+            var validationResult = await _registerValidator.ValidateAsync(dto);
+            if (!validationResult.IsValid)
             {
-                _logger.LogInformation("📝 Register attempt - Username: {Username}, Email: {Email}",
-                    dto.Username, dto.Email);
+                var errors = validationResult.Errors
+                    .GroupBy(e => e.PropertyName)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(e => e.ErrorMessage).ToArray()
+                    );
 
-                var validationResult = await _registerValidator.ValidateAsync(dto);
-                if (!validationResult.IsValid)
-                {
-                    _logger.LogWarning("❌ Validation failed for registration");
-
-                    var errors = validationResult.Errors
-                        .GroupBy(e => e.PropertyName)
-                        .ToDictionary(
-                            g => g.Key,
-                            g => g.Select(e => e.ErrorMessage).ToArray()
-                        );
-
-                    return BadRequest(new { data = errors });
-                }
-
-                if (await _userService.IsUsernameExistsAsync(dto.Username))
-                {
-                    _logger.LogWarning("❌ Username already exists: {Username}", dto.Username);
-                    return ApiResponse.BadRequest("username", "Username sudah digunakan");
-                }
-
-                if (await _userService.IsEmailExistsAsync(dto.Email))
-                {
-                    _logger.LogWarning("❌ Email already exists: {Email}", dto.Email);
-                    return ApiResponse.BadRequest("email", "Email sudah digunakan");
-                }
-
-                var createUserDto = new CreateUserDto
-                {
-                    Username = dto.Username.Trim(),
-                    Password = dto.Password,
-                    FullName = dto.FullName.Trim(),
-                    Email = dto.Email.Trim(),
-                    RoleId = 3
-                };
-
-                var user = await _userService.CreateUserAsync(createUserDto);
-                if (user == null)
-                {
-                    _logger.LogError("❌ Failed to create user");
-                    return ApiResponse.BadRequest("message", "Gagal membuat user");
-                }
-
-                _logger.LogInformation("✅ User registered successfully - ID: {UserId}, Username: {Username}",
-                    user.UserId, user.Username);
-
-                HttpContext.Items["message"] = "Registrasi berhasil. Akun Anda menunggu aktivasi dari Admin.";
-                return ApiResponse.Created(user);
+                _logger.LogWarning("❌ Validation failed: {@Errors}", errors);
+                
+                return BadRequest(new 
+                { 
+                    statusCode = 400,
+                    message = "Validasi gagal",
+                    data = new { errors },
+                    meta = new { }
+                });
             }
-            catch (Exception ex)
+
+            // 2. Buat user (let service & middleware handle errors)
+            var createUserDto = new CreateUserDto
             {
-                _logger.LogError(ex, "❌ Error during registration");
-                return ApiResponse.BadRequest("message", ex.Message);
-            }
+                Username = dto.Username.Trim(),
+                Password = dto.Password,
+                FullName = dto.FullName.Trim(),
+                Email = dto.Email.Trim(),
+                RoleId = 3
+            };
+
+            var user = await _userService.CreateUserAsync(createUserDto);
+
+            _logger.LogInformation("✅ User registered - ID: {UserId}, Username: {Username}",
+                user.UserId, user.Username);
+
+            HttpContext.Items["message"] = "Registrasi berhasil. Akun Anda menunggu aktivasi dari Admin.";
+            return ApiResponse.Created(user);
         }
 
         /// <summary>
@@ -109,19 +92,27 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
-            if (!ModelState.IsValid)
+            try
             {
-                return BadRequest(new { data = ModelState });
-            }
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { data = ModelState });
+                }
 
-            var result = await _authService.LoginAsync(dto);
-            if (result == null)
+                var result = await _authService.LoginAsync(dto);
+                if (result == null)
+                {
+                    return ApiResponse.Unauthorized();
+                }
+
+                HttpContext.Items["message"] = "Login berhasil";
+                return ApiResponse.Success(result);
+            }
+            catch (Exception ex)
             {
-                return ApiResponse.Unauthorized();
+                _logger.LogError(ex, "❌ Error during login");
+                return ApiResponse.BadRequest("message", ex.Message);
             }
-
-            HttpContext.Items["message"] = "Login berhasil";
-            return ApiResponse.Success(result);
         }
 
         /// <summary>
@@ -134,19 +125,19 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new { data = ModelState });
-            }
-
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(userIdClaim, out var userId))
-            {
-                return ApiResponse.Unauthorized();
-            }
-
             try
             {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { data = ModelState });
+                }
+
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!int.TryParse(userIdClaim, out var userId))
+                {
+                    return ApiResponse.Unauthorized();
+                }
+
                 var result = await _authService.ChangePasswordAsync(userId, dto);
                 if (!result)
                 {
@@ -158,7 +149,7 @@ namespace Pm.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error changing password for user {UserId}", userId);
+                _logger.LogError(ex, "❌ Error changing password");
                 return ApiResponse.BadRequest("message", ex.Message);
             }
         }
@@ -172,20 +163,28 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetProfile()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(userIdClaim, out var userId))
+            try
             {
-                return ApiResponse.Unauthorized();
-            }
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!int.TryParse(userIdClaim, out var userId))
+                {
+                    return ApiResponse.Unauthorized();
+                }
 
-            var userDto = await _userService.GetUserByIdAsync(userId);
-            if (userDto == null)
+                var userDto = await _userService.GetUserByIdAsync(userId);
+                if (userDto == null)
+                {
+                    return ApiResponse.NotFound("User tidak ditemukan");
+                }
+
+                HttpContext.Items["message"] = "Profile berhasil dimuat";
+                return ApiResponse.Success(userDto);
+            }
+            catch (Exception ex)
             {
-                return ApiResponse.NotFound("User tidak ditemukan");
+                _logger.LogError(ex, "❌ Error getting profile");
+                return ApiResponse.BadRequest("message", ex.Message);
             }
-
-            HttpContext.Items["message"] = "Profile berhasil dimuat";
-            return ApiResponse.Success(userDto);
         }
 
         /// <summary>

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Pm.Models.NEC
 {
     public class NecLink
@@ -12,7 +14,7 @@ namespace Pm.Models.NEC
         public Tower FarEndTower { get; set; } = null!;
 
         public decimal ExpectedRslMin { get; set; } = -60m;  // batas bawah normal
-        public decimal ExpectedRslMax { get; set; } = -30m;  // batas atas normal
+        public decimal ExpectedRslMax { get; set; } = -40m;  // batas atas normal
 
         public ICollection<NecRslHistory> Histories { get; set; } = new List<NecRslHistory>();
     }

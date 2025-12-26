@@ -116,7 +116,8 @@ namespace Pm.Services
             var roleExists = await _context.Roles.AnyAsync(r => r.RoleId == dto.RoleId);
             if (!roleExists)
             {
-                throw new Exception("Role tidak ditemukan");
+                _logger.LogError("❌ RoleId {RoleId} tidak ditemukan", dto.RoleId);
+                throw new ArgumentException($"Konfigurasi sistem belum lengkap. Hubungi administrator.");
             }
 
             var user = new User

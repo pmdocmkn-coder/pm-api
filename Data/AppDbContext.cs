@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Pm.Enums;
 using Pm.Models;
 using Pm.Models.NEC;
 
@@ -24,18 +25,6 @@ namespace Pm.Data
         public DbSet<Tower> Towers { get; set; }
         public DbSet<NecLink> NecLinks { get; set; }
         public DbSet<NecRslHistory> NecRslHistories { get; set; }
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            base.OnConfiguring(optionsBuilder);
-
-            // Optimizations untuk bulk operations
-            optionsBuilder
-                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking) // Default no tracking
-                .EnableSensitiveDataLogging(false) // Disable untuk performa
-                .EnableDetailedErrors(false); // Disable untuk performa
-        }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -365,7 +354,7 @@ namespace Pm.Data
                 entity.HasKey(e => e.Id);
                 entity.ToTable("NecLinks");
                 entity.Property(e => e.LinkName).IsRequired().HasMaxLength(200);
-                entity.HasIndex(e => e.LinkName).IsUnique();
+                entity.HasIndex(e => e.LinkName);
 
                 entity.HasOne(e => e.NearEndTower)
                     .WithMany(t => t.NearEndLinks)
@@ -383,13 +372,46 @@ namespace Pm.Data
                 entity.HasKey(e => e.Id);
                 entity.ToTable("NecRslHistories");
 
+                // ✅ Status conversion
+                entity.Property(h => h.Status)
+                    .HasConversion<string>()
+                    .IsRequired()
+                    .HasColumnType("varchar(50)");
+
+                // ✅ Notes as nullable TEXT
+                entity.Property(e => e.Notes)
+                    .IsRequired(false)
+                    .HasColumnType("text");
+
+                // ✅ FIX: RslNearEnd menjadi nullable
+                entity.Property(e => e.RslNearEnd)
+                    .HasColumnType("decimal(10,2)")
+                    .IsRequired(false); // ← INI YANG PERLU DIPERBAIKI
+
+                // ✅ RslFarEnd tetap nullable
+                entity.Property(e => e.RslFarEnd)
+                    .HasColumnType("decimal(10,2)")
+                    .IsRequired(false);
+
+                entity.Property(e => e.Date)
+                    .IsRequired();
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                // ✅ Relations
                 entity.HasOne(e => e.NecLink)
                     .WithMany(l => l.Histories)
                     .HasForeignKey(e => e.NecLinkId)
                     .OnDelete(DeleteBehavior.Cascade);
 
-                entity.HasIndex(e => e.Date);
-                entity.HasIndex(e => new { e.NecLinkId, e.Date }).IsUnique(); // cegah duplikat harian
+                // ✅ Indexes
+                entity.HasIndex(e => e.Date)
+                    .HasDatabaseName("IX_NecRslHistory_Date");
+                
+                entity.HasIndex(e => new { e.NecLinkId, e.Date })
+                    .IsUnique()
+                    .HasDatabaseName("IX_NecRslHistory_LinkDate");
             });
         }
     }
