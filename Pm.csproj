@@ -33,7 +33,7 @@
 
   <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.1.2" />
-  <PackageReference Include="System.Linq.Dynamic.Core" Version="1.5.0" /> <!-- ignore vulnerability warning dulu, atau update ke 1.5.0 kalau mau -->
+  <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.0" />
 </ItemGroup>
 
 </Project>

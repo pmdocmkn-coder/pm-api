@@ -104,7 +104,7 @@ namespace Pm.Services
             };
         }
 
-        private string GetWarningMessage(decimal avgRsl)
+        private string? GetWarningMessage(decimal avgRsl)
         {
             var status = GetRslStatus(avgRsl);
             return status != "optimal" ? GetStatusMessage(avgRsl, status) : null;
@@ -201,7 +201,11 @@ namespace Pm.Services
 
                 _logger.LogInformation("✅ GetYearlyAsync completed - {Count} towers found", result.Count);
                 
-                return new NecYearlySummaryDto { Year = year, Towers = result };
+                return new NecYearlySummaryDto 
+                    { 
+                        Year = year, 
+                        Towers = result ?? new List<NecTowerYearlyDto>() 
+                    };
             }
             catch (Exception ex)
             {
