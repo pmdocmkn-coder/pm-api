@@ -224,30 +224,34 @@ namespace Pm.Services
                 throw new Exception($"Permission tidak valid: {string.Join(", ", invalid)}");
             }
 
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var executionStrategy = _context.Database.CreateExecutionStrategy();
+            return await executionStrategy.ExecuteAsync(async () =>
             {
-                _context.RolePermissions.RemoveRange(role.RolePermissions);
-                await _context.SaveChangesAsync();
-
-                var newPermissions = permissionIds.Select(pid => new RolePermission
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    RoleId = roleId,
-                    PermissionId = pid,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
+                    _context.RolePermissions.RemoveRange(role.RolePermissions);
+                    await _context.SaveChangesAsync();
 
-                await _context.RolePermissions.AddRangeAsync(newPermissions);
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                    var newPermissions = permissionIds.Select(pid => new RolePermission
+                    {
+                        RoleId = roleId,
+                        PermissionId = pid,
+                        CreatedAt = DateTime.UtcNow
+                    }).ToList();
 
-                return await GetPermissionsByRoleAsync(roleId);
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                    await _context.RolePermissions.AddRangeAsync(newPermissions);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return await GetPermissionsByRoleAsync(roleId);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         public async Task<bool> RemovePermissionFromRoleAsync(int roleId, int permissionId)
         {

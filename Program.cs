@@ -10,9 +10,11 @@ using Pm.Helper;
 using Pm.Middleware;
 using Pm.DTOs;
 using Pm.Validators;
-using OfficeOpenXml;
 using Microsoft.AspNetCore.Http.Features;
 using Pm.DTOs.Auth;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,8 +23,8 @@ if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONM
     Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Production");
 }
 
-// ===== EPPlus License =====
-ExcelPackage.License.SetNonCommercialOrganization("MKN");
+
+
 
 // ✅ FORCE application timezone to UTC
 TimeZoneInfo.ClearCachedData();
@@ -33,15 +35,18 @@ builder.Services.AddControllers(options =>
 {
     // ✅ Register ResponseWrapperFilter globally
     options.Filters.Add<ResponseWrapperFilter>();
+    
 })
 .AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-    
+
     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-    
+
     // ✅ OPTIONAL: Ignore null values for cleaner response
     options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
 // ===== Swagger =====
@@ -131,16 +136,21 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // false karena development bisa http
+    options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(secretKey)
+        ),
+
         ValidateIssuer = true,
-        ValidIssuer = jwtSettings["Issuer"],
+        ValidIssuer = issuer,        // ✅ INI YANG DIGANTI
         ValidateAudience = true,
-        ValidAudience = jwtSettings["Audience"],
+        ValidAudience = audience,    // ✅ INI YANG DIGANTI
+
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
@@ -172,6 +182,9 @@ builder.Services.AddScoped<IValidator<RegisterDto>, RegisterDtoValidator>();
 builder.Services.AddScoped<IValidator<CreateUserDto>, CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
 
+// ===== Signal NEC ===== 
+builder.Services.AddScoped<INecSignalService, NecSignalService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(options =>
 {
@@ -188,6 +201,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
+            "https://pm.mknops.web.id",
             "https://pmfrontend.vercel.app",
             "http://localhost:3000",
             "http://localhost:5173",
@@ -198,6 +212,22 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod()
         .AllowCredentials();
     });
+});
+
+
+// Enable detailed model binding errors
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var logger = context.HttpContext.RequestServices
+            .GetRequiredService<ILogger<Program>>();
+        
+        logger.LogWarning("❌ Model validation failed: {@Errors}", 
+            context.ModelState);
+        
+        return new BadRequestObjectResult(context.ModelState);
+    };
 });
 
 // ===== Logging =====
@@ -267,6 +297,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
+app.UseRequestLogging();
+
+
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

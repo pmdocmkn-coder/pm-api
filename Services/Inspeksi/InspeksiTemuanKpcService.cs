@@ -275,10 +275,9 @@ namespace Pm.Services
         {
             try
             {
-                _logger.LogInformation("🔄 Starting update for ID: {Id}", id);
-                _logger.LogInformation("📁 Files received - FotoTemuan: {TemuanCount}, FotoHasil: {HasilCount}", 
-                    dto.FotoTemuanFiles?.Count ?? 0, dto.FotoHasilFiles?.Count ?? 0);
+                _logger.LogInformation("🔄 UPDATE - Starting for ID: {Id}", id);
 
+                // ✅ 1. GET ENTITY
                 var entity = await _context.InspeksiTemuanKpcs
                     .AsTracking()
                     .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -289,304 +288,313 @@ namespace Pm.Services
                     return null;
                 }
 
+                // ✅ 2. LOG RECEIVED DATA
+                _logger.LogInformation("📊 Received DTO:");
+                _logger.LogInformation("  - Ruang: '{Ruang}'", dto.Ruang ?? "NULL");
+                _logger.LogInformation("  - Status: '{Status}'", dto.Status ?? "NULL");
+                _logger.LogInformation("  - Clear flags: KategoriTemuan={ClearKategoriTemuan}, Inspector={ClearInspector}",
+                    dto.ClearKategoriTemuan ?? "false", dto.ClearInspector ?? "false");
+
+                var changes = new List<string>();
                 var oldStatus = entity.Status;
 
-                // ===================================
-                // ✅ LOG RECEIVED DATA
-                // ===================================
-                _logger.LogInformation("📊 Received DTO - Ruang: '{Ruang}', Temuan: '{Temuan}', Status: '{Status}'", 
-                    dto.Ruang ?? "NULL", dto.Temuan ?? "NULL", dto.Status ?? "NULL");
+                // ✅ 3. HANDLE CLEAR FLAGS FIRST (FE mengirim string "true")
+                bool ShouldClear(string? clearFlag) => 
+                    !string.IsNullOrEmpty(clearFlag) && clearFlag.ToLower() == "true";
 
-                // ===================================
-                // ✅ UPDATE REQUIRED FIELDS
-                // ===================================
+                // ✅ 4. UPDATE BASIC FIELDS (jika ada)
                 if (!string.IsNullOrWhiteSpace(dto.Ruang))
                 {
                     entity.Ruang = dto.Ruang.Trim();
-                    _logger.LogInformation("📝 Updated Ruang: '{Value}'", entity.Ruang);
+                    changes.Add($"Ruang: '{entity.Ruang}'");
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Temuan))
                 {
                     entity.Temuan = dto.Temuan.Trim();
-                    _logger.LogInformation("📝 Updated Temuan: '{Value}'", entity.Temuan);
+                    changes.Add($"Temuan updated");
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Severity))
                 {
                     entity.Severity = dto.Severity;
-                    _logger.LogInformation("📝 Updated Severity: '{Value}'", entity.Severity);
-                }
-
-                if (dto.TanggalTemuan.HasValue)
-                {
-                    entity.TanggalTemuan = dto.TanggalTemuan.Value.Date;
-                    _logger.LogInformation("📝 Updated TanggalTemuan: {Date}", entity.TanggalTemuan);
+                    changes.Add($"Severity: {entity.Severity}");
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Status))
                 {
                     entity.Status = dto.Status;
-                    _logger.LogInformation("📝 Updated Status: {Old} → {New}", oldStatus, entity.Status);
+                    changes.Add($"Status: {oldStatus} → {entity.Status}");
+
+                    // Auto-set TanggalClosed jika status menjadi Closed
+                    if (dto.Status == "Closed" && !entity.TanggalClosed.HasValue)
+                    {
+                        entity.TanggalClosed = DateTime.UtcNow;
+                        changes.Add("TanggalClosed: auto-set to now");
+                    }
                 }
 
-                // ===================================
-                // ✅ UPDATE OPTIONAL TEXT FIELDS
-                // ===================================
-                
-                // KategoriTemuan
-                if (dto.ClearKategoriTemuan)
+                // ✅ 5. HANDLE TANGGAL TEMUAN
+                if (!string.IsNullOrWhiteSpace(dto.TanggalTemuan))
+                {
+                    if (DateTime.TryParse(dto.TanggalTemuan, out var tanggalTemuan))
+                    {
+                        entity.TanggalTemuan = tanggalTemuan.Date;
+                        changes.Add($"TanggalTemuan: {entity.TanggalTemuan:yyyy-MM-dd}");
+                    }
+                }
+
+                // ✅ 6. HANDLE OPTIONAL TEXT FIELDS DENGAN CLEAR FLAGS
+                if (ShouldClear(dto.ClearKategoriTemuan))
                 {
                     entity.KategoriTemuan = null;
-                    _logger.LogInformation("🗑️ Cleared KategoriTemuan");
+                    changes.Add("KategoriTemuan: cleared");
                 }
-                else if (dto.KategoriTemuan != null)
+                else if (!string.IsNullOrWhiteSpace(dto.KategoriTemuan))
                 {
-                    entity.KategoriTemuan = string.IsNullOrWhiteSpace(dto.KategoriTemuan) ? null : dto.KategoriTemuan.Trim();
-                    _logger.LogInformation("📝 Updated KategoriTemuan: '{Value}'", entity.KategoriTemuan ?? "NULL");
+                    entity.KategoriTemuan = dto.KategoriTemuan.Trim();
+                    changes.Add($"KategoriTemuan: '{entity.KategoriTemuan}'");
                 }
 
-                // Inspector
-                if (dto.ClearInspector)
+                if (ShouldClear(dto.ClearInspector))
                 {
                     entity.Inspector = null;
-                    _logger.LogInformation("🗑️ Cleared Inspector");
+                    changes.Add("Inspector: cleared");
                 }
-                else if (dto.Inspector != null)
+                else if (!string.IsNullOrWhiteSpace(dto.Inspector))
                 {
-                    entity.Inspector = string.IsNullOrWhiteSpace(dto.Inspector) ? null : dto.Inspector.Trim();
-                    _logger.LogInformation("📝 Updated Inspector: '{Value}'", entity.Inspector ?? "NULL");
+                    entity.Inspector = dto.Inspector.Trim();
+                    changes.Add($"Inspector: '{entity.Inspector}'");
                 }
 
-                // NoFollowUp
-                if (dto.ClearNoFollowUp)
+                if (ShouldClear(dto.ClearNoFollowUp))
                 {
                     entity.NoFollowUp = null;
-                    _logger.LogInformation("🗑️ Cleared NoFollowUp");
+                    changes.Add("NoFollowUp: cleared");
                 }
-                else if (dto.NoFollowUp != null)
+                else if (!string.IsNullOrWhiteSpace(dto.NoFollowUp))
                 {
-                    entity.NoFollowUp = string.IsNullOrWhiteSpace(dto.NoFollowUp) ? null : dto.NoFollowUp.Trim();
-                    _logger.LogInformation("📝 Updated NoFollowUp: '{Value}'", entity.NoFollowUp ?? "NULL");
+                    entity.NoFollowUp = dto.NoFollowUp.Trim();
+                    changes.Add($"NoFollowUp: '{entity.NoFollowUp}'");
                 }
 
-                // PicPelaksana
-                if (dto.ClearPicPelaksana)
+                if (ShouldClear(dto.ClearPicPelaksana))
                 {
                     entity.PicPelaksana = null;
-                    _logger.LogInformation("🗑️ Cleared PicPelaksana");
+                    changes.Add("PicPelaksana: cleared");
                 }
-                else if (dto.PicPelaksana != null)
+                else if (!string.IsNullOrWhiteSpace(dto.PicPelaksana))
                 {
-                    entity.PicPelaksana = string.IsNullOrWhiteSpace(dto.PicPelaksana) ? null : dto.PicPelaksana.Trim();
-                    _logger.LogInformation("📝 Updated PicPelaksana: '{Value}'", entity.PicPelaksana ?? "NULL");
+                    entity.PicPelaksana = dto.PicPelaksana.Trim();
+                    changes.Add($"PicPelaksana: '{entity.PicPelaksana}'");
                 }
 
-                // PerbaikanDilakukan
-                if (dto.ClearPerbaikanDilakukan)
+                if (ShouldClear(dto.ClearPerbaikanDilakukan))
                 {
                     entity.PerbaikanDilakukan = null;
-                    _logger.LogInformation("🗑️ Cleared PerbaikanDilakukan");
+                    changes.Add("PerbaikanDilakukan: cleared");
                 }
-                else if (dto.PerbaikanDilakukan != null)
+                else if (!string.IsNullOrWhiteSpace(dto.PerbaikanDilakukan))
                 {
-                    entity.PerbaikanDilakukan = string.IsNullOrWhiteSpace(dto.PerbaikanDilakukan) ? null : dto.PerbaikanDilakukan.Trim();
-                    _logger.LogInformation("📝 Updated PerbaikanDilakukan: '{Value}'", entity.PerbaikanDilakukan ?? "NULL");
+                    entity.PerbaikanDilakukan = dto.PerbaikanDilakukan.Trim();
+                    changes.Add($"PerbaikanDilakukan: '{entity.PerbaikanDilakukan}'");
                 }
 
-                // Keterangan
-                if (dto.ClearKeterangan)
+                if (ShouldClear(dto.ClearKeterangan))
                 {
                     entity.Keterangan = null;
-                    _logger.LogInformation("🗑️ Cleared Keterangan");
+                    changes.Add("Keterangan: cleared");
                 }
-                else if (dto.Keterangan != null)
+                else if (!string.IsNullOrWhiteSpace(dto.Keterangan))
                 {
-                    entity.Keterangan = string.IsNullOrWhiteSpace(dto.Keterangan) ? null : dto.Keterangan.Trim();
-                    _logger.LogInformation("📝 Updated Keterangan: '{Value}'", entity.Keterangan ?? "NULL");
+                    entity.Keterangan = dto.Keterangan.Trim();
+                    changes.Add($"Keterangan: '{entity.Keterangan}'");
                 }
 
-                // ===================================
-                // ✅ UPDATE DATE FIELDS
-                // ===================================
-                
-                // TanggalPerbaikan
-                if (dto.ClearTanggalPerbaikan)
+                // ✅ 7. HANDLE DATE FIELDS DENGAN CLEAR FLAGS
+                if (ShouldClear(dto.ClearTanggalPerbaikan))
                 {
                     entity.TanggalPerbaikan = null;
-                    _logger.LogInformation("🗑️ Cleared TanggalPerbaikan");
+                    changes.Add("TanggalPerbaikan: cleared");
                 }
-                else if (dto.TanggalPerbaikan.HasValue)
+                else if (!string.IsNullOrWhiteSpace(dto.TanggalPerbaikan))
                 {
-                    entity.TanggalPerbaikan = dto.TanggalPerbaikan.Value.Date;
-                    _logger.LogInformation("📝 Updated TanggalPerbaikan: {Date}", entity.TanggalPerbaikan);
+                    if (DateTime.TryParse(dto.TanggalPerbaikan, out var tanggalPerbaikan))
+                    {
+                        entity.TanggalPerbaikan = tanggalPerbaikan.Date;
+                        changes.Add($"TanggalPerbaikan: {entity.TanggalPerbaikan:yyyy-MM-dd}");
+                    }
                 }
 
-                // TanggalSelesaiPerbaikan
-                if (dto.ClearTanggalSelesaiPerbaikan)
+                if (ShouldClear(dto.ClearTanggalSelesaiPerbaikan))
                 {
                     entity.TanggalSelesaiPerbaikan = null;
-                    _logger.LogInformation("🗑️ Cleared TanggalSelesaiPerbaikan");
+                    changes.Add("TanggalSelesaiPerbaikan: cleared");
                 }
-                else if (dto.TanggalSelesaiPerbaikan.HasValue)
+                else if (!string.IsNullOrWhiteSpace(dto.TanggalSelesaiPerbaikan))
                 {
-                    entity.TanggalSelesaiPerbaikan = dto.TanggalSelesaiPerbaikan.Value.Date;
-                    _logger.LogInformation("📝 Updated TanggalSelesaiPerbaikan: {Date}", entity.TanggalSelesaiPerbaikan);
+                    if (DateTime.TryParse(dto.TanggalSelesaiPerbaikan, out var tanggalSelesai))
+                    {
+                        entity.TanggalSelesaiPerbaikan = tanggalSelesai.Date;
+                        changes.Add($"TanggalSelesaiPerbaikan: {entity.TanggalSelesaiPerbaikan:yyyy-MM-dd}");
+                    }
                 }
 
-                // ===================================
-                // ✅ UPLOAD FOTO TEMUAN BARU (APPEND)
-                // ===================================
-                if (dto.FotoTemuanFiles != null && dto.FotoTemuanFiles.Count > 0)
-                {
-                    _logger.LogInformation("📤 UPLOAD FOTO TEMUAN - Starting upload for {Count} files", dto.FotoTemuanFiles.Count);
-                    
-                    var existingUrls = new List<string>();
-                    if (!string.IsNullOrEmpty(entity.FotoTemuanUrls))
-                    {
-                        try
-                        {
-                            existingUrls = JsonSerializer.Deserialize<List<string>>(entity.FotoTemuanUrls) ?? new List<string>();
-                            _logger.LogInformation("📁 Existing foto temuan: {Count} images", existingUrls.Count);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning("⚠️ Error parsing existing foto temuan: {Message}", ex.Message);
-                            existingUrls = new List<string>();
-                        }
-                    }
+                // ✅ 8. HANDLE FILE UPLOADS
+                await HandleFileUploads(entity, dto, changes);
 
-                    int successCount = 0;
-                    foreach (var file in dto.FotoTemuanFiles)
-                    {
-                        if (file.Length > 0)
-                        {
-                            try
-                            {
-                                _logger.LogInformation("⬆️ Uploading foto temuan: {FileName} ({Size} bytes)", 
-                                    file.FileName, file.Length);
-                                
-                                var url = await _cloudinary.UploadImageAsync(file, "inspeksi/kpc/temuan");
-                                
-                                if (!string.IsNullOrEmpty(url))
-                                {
-                                    existingUrls.Add(url);
-                                    successCount++;
-                                    _logger.LogInformation("✅ SUCCESS uploaded foto temuan: {Url}", url);
-                                }
-                                else
-                                {
-                                    _logger.LogWarning("❌ Cloudinary returned empty URL for: {FileName}", file.FileName);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "❌ UPLOAD FAILED for foto temuan: {FileName}", file.FileName);
-                            }
-                        }
-                    }
-
-                    entity.FotoTemuanUrls = existingUrls.Count > 0 ? JsonSerializer.Serialize(existingUrls) : null;
-                    _logger.LogInformation("📊 FOTO TEMUAN UPLOAD SUMMARY - Success: {SuccessCount}, Total URLs: {Total}", 
-                        successCount, existingUrls.Count);
-                }
-
-                // ===================================
-                // ✅ UPLOAD FOTO HASIL BARU (APPEND)
-                // ===================================
-                if (dto.FotoHasilFiles != null && dto.FotoHasilFiles.Count > 0)
-                {
-                    _logger.LogInformation("📤 UPLOAD FOTO HASIL - Starting upload for {Count} files", dto.FotoHasilFiles.Count);
-                    
-                    var existingUrls = new List<string>();
-                    if (!string.IsNullOrEmpty(entity.FotoHasilUrls))
-                    {
-                        try
-                        {
-                            existingUrls = JsonSerializer.Deserialize<List<string>>(entity.FotoHasilUrls) ?? new List<string>();
-                            _logger.LogInformation("📁 Existing foto hasil: {Count} images", existingUrls.Count);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning("⚠️ Error parsing existing foto hasil: {Message}", ex.Message);
-                            existingUrls = new List<string>();
-                        }
-                    }
-
-                    int successCount = 0;
-                    int failedCount = 0;
-                    
-                    foreach (var file in dto.FotoHasilFiles)
-                    {
-                        if (file.Length > 0)
-                        {
-                            try
-                            {
-                                _logger.LogInformation("⬆️ Uploading foto hasil: {FileName} ({Size} bytes)", 
-                                    file.FileName, file.Length);
-                                
-                                var url = await _cloudinary.UploadImageAsync(file, "inspeksi/kpc/hasil");
-                                
-                                if (!string.IsNullOrEmpty(url))
-                                {
-                                    existingUrls.Add(url);
-                                    successCount++;
-                                    _logger.LogInformation("✅ SUCCESS uploaded foto hasil: {Url}", url);
-                                }
-                                else
-                                {
-                                    failedCount++;
-                                    _logger.LogWarning("❌ Cloudinary returned empty URL for: {FileName}", file.FileName);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                failedCount++;
-                                _logger.LogError(ex, "❌ UPLOAD FAILED for foto hasil: {FileName}", file.FileName);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning("⚠️ Empty file skipped: {FileName}", file.FileName);
-                            failedCount++;
-                        }
-                    }
-
-                    entity.FotoHasilUrls = existingUrls.Count > 0 ? JsonSerializer.Serialize(existingUrls) : null;
-                    _logger.LogInformation("📊 FOTO HASIL UPLOAD SUMMARY - Success: {Success}, Failed: {Failed}, Total URLs: {Total}", 
-                        successCount, failedCount, existingUrls.Count);
-                }
-
-                // ===================================
-                // ✅ UPDATE AUDIT TRAIL
-                // ===================================
+                // ✅ 9. UPDATE AUDIT TRAIL
                 entity.UpdatedBy = userId;
                 entity.UpdatedAt = DateTime.UtcNow;
-
-                _logger.LogInformation("💾 Saving changes to database...");
-                var changes = await _context.SaveChangesAsync();
-
-                _logger.LogInformation("✅ SaveChanges completed: {Changes} rows affected", changes);
-
-                if (changes > 0)
+                
+                if (changes.Count > 0)
                 {
-                    await _log.LogAsync("InspeksiTemuanKpc", id, "Updated", userId, 
-                        $"Status: {oldStatus} → {entity.Status}");
-                    
-                    // ✅ RELOAD DATA TERBARU
-                    var updatedItem = await GetByIdAsync(id);
-                    _logger.LogInformation("🔄 UPDATED ITEM VERIFICATION - ID: {Id}, FotoHasilUrls count: {Count}, FotoTemuanUrls count: {TemuanCount}", 
-                        id, updatedItem?.FotoHasilUrls?.Count ?? 0, updatedItem?.FotoTemuanUrls?.Count ?? 0);
-                    
-                    return updatedItem;
+                    changes.Add("Audit trail updated");
                 }
 
-                _logger.LogWarning("⚠️ No changes saved for ID: {Id}", id);
-                return null;
+                // ✅ 10. SAVE CHANGES
+                return await SaveChangesAndReturn(entity, id, userId, changes);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ UPDATE FAILED for ID: {Id}", id);
+                throw;
+            }
+        }
+
+        private async Task HandleFileUploads(InspeksiTemuanKpc entity, UpdateInspeksiTemuanKpcDto dto, List<string> changes)
+        {
+            // Foto Temuan (append)
+            if (dto.FotoTemuanFiles != null && dto.FotoTemuanFiles.Count > 0)
+            {
+                var existingUrls = GetExistingUrls(entity.FotoTemuanUrls);
+                var uploadedCount = await UploadFiles(dto.FotoTemuanFiles, "inspeksi/kpc/temuan", existingUrls);
+                
+                if (uploadedCount > 0)
+                {
+                    entity.FotoTemuanUrls = existingUrls.Count > 0 
+                        ? JsonSerializer.Serialize(existingUrls) 
+                        : null;
+                    changes.Add($"FotoTemuan: +{uploadedCount} images");
+                }
+            }
+
+            // Foto Hasil (append)
+            if (dto.FotoHasilFiles != null && dto.FotoHasilFiles.Count > 0)
+            {
+                var existingUrls = GetExistingUrls(entity.FotoHasilUrls);
+                var uploadedCount = await UploadFiles(dto.FotoHasilFiles, "inspeksi/kpc/hasil", existingUrls);
+                
+                if (uploadedCount > 0)
+                {
+                    entity.FotoHasilUrls = existingUrls.Count > 0 
+                        ? JsonSerializer.Serialize(existingUrls) 
+                        : null;
+                    changes.Add($"FotoHasil: +{uploadedCount} images");
+                }
+            }
+        }
+
+        private List<string> GetExistingUrls(string? jsonUrls)
+        {
+            if (string.IsNullOrEmpty(jsonUrls)) return new List<string>();
+            
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(jsonUrls) ?? new List<string>();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        private async Task<int> UploadFiles(List<IFormFile> files, string folder, List<string> urlList)
+        {
+            int uploadedCount = 0;
+            
+            foreach (var file in files)
+            {
+                if (file.Length > 0)
+                {
+                    try
+                    {
+                        var url = await _cloudinary.UploadImageAsync(file, folder);
+                        if (!string.IsNullOrEmpty(url))
+                        {
+                            urlList.Add(url);
+                            uploadedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "❌ Error uploading file: {FileName}", file.FileName);
+                    }
+                }
+            }
+            
+            return uploadedCount;
+        }
+
+        private async Task<InspeksiTemuanKpcDto?> SaveChangesAndReturn(
+                    InspeksiTemuanKpc entity, int id, int userId, List<string> changes)
+        {
+            if (changes.Count == 0)
+            {
+                _logger.LogInformation("📝 No changes detected for ID: {Id}", id);
+                return await GetByIdAsync(id);
+            }
+
+            _logger.LogInformation("📝 Changes made for ID {Id}: {Changes}", id, string.Join(", ", changes));
+
+            try
+            {
+                var rowsAffected = await _context.SaveChangesAsync();
+                _logger.LogInformation("💾 SaveChanges: {RowsAffected} rows affected", rowsAffected);
+
+                if (rowsAffected > 0)
+                {
+                    // ✅ ACTIVITY LOG DENGAN TRY-CATCH (NON-CRITICAL)
+                    try
+                    {
+                        await _log.LogAsync(
+                            "InspeksiTemuanKpc",
+                            id,
+                            "Updated",
+                            userId,
+                            $"Updated: {string.Join(", ", changes.Take(5))}" // Ambil 5 perubahan pertama saja
+                        );
+                        _logger.LogInformation("✅ Activity log recorded for ID: {Id}", id);
+                    }
+                    catch (Exception logEx)
+                    {
+                        _logger.LogWarning("⚠️ ActivityLog failed (non-critical): {Message}", logEx.Message);
+                        // Jangan throw - continue dengan update utama
+                    }
+
+                    // Return updated data
+                    return await GetByIdAsync(id);
+                }
+
+                return null;
+            }
+            catch (DbUpdateException dbEx)
+            {
+                _logger.LogError(dbEx, "❌ Database update error for ID: {Id}", id);
+                
+                // ✅ DETAILED ERROR DIAGNOSIS
+                _logger.LogError("📊 Entity State:");
+                _logger.LogError("  - ID: {Id}", entity.Id);
+                _logger.LogError("  - Ruang: {Ruang}", entity.Ruang);
+                _logger.LogError("  - Status: {Status}", entity.Status);
+                _logger.LogError("  - UpdatedBy: {UpdatedBy}", entity.UpdatedBy);
+                _logger.LogError("  - UpdatedAt: {UpdatedAt}", entity.UpdatedAt);
+                
+                if (dbEx.InnerException != null)
+                {
+                    _logger.LogError("🔍 Inner Exception: {Message}", dbEx.InnerException.Message);
+                }
+                
                 throw;
             }
         }
