@@ -401,7 +401,7 @@ namespace Pm.Migrations
                     b.Property<decimal?>("RslFarEnd")
                         .HasColumnType("decimal(10,2)");
 
-                    b.Property<decimal>("RslNearEnd")
+                    b.Property<decimal?>("RslNearEnd")
                         .HasColumnType("decimal(10,2)");
 
                     b.Property<string>("Status")

@@ -11,7 +11,7 @@ namespace Pm.Models.NEC
         public NecLink NecLink { get; set; } = null!;
 
         public DateTime Date { get; set; }
-        public decimal RslNearEnd { get; set; }
+        public decimal? RslNearEnd { get; set; }
         public decimal? RslFarEnd { get; set; }
 
         [Column(TypeName = "text")]

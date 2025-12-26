@@ -32,30 +32,34 @@ namespace Pm.Services
         private const decimal CRITICAL = -65m;          // < -65 (lebih negatif dari -65)
 
         // ✅ PERBAIKAN: Logika comparison untuk RSL
-        private string GetRslStatus(decimal rsl)
+        private string GetRslStatus(decimal? rsl)
         {
-            // Too Strong: -30 sampai -44.9 (nilai lebih besar/kurang negatif dari -45)
+            if (!rsl.HasValue) return "no_data";
+            
+            // Too Strong: -30 sampai -44.9
             if (rsl > TOO_STRONG_MIN && rsl <= TOO_STRONG_MAX) 
                 return "too_strong";
             
-            // Optimal: -45 sampai -54.9 (range optimal)
+            // Optimal: -45 sampai -54.9
             if (rsl > OPTIMAL_MIN && rsl <= OPTIMAL_MAX) 
                 return "optimal";
             
-            // Warning: -55 sampai -59.9 (mulai perlu perhatian)
+            // Warning: -55 sampai -59.9
             if (rsl > WARNING_MIN && rsl <= WARNING_MAX) 
                 return "warning";
             
-            // Sub-optimal: -60 sampai -64.9 (di bawah optimal tapi belum critical)
+            // Sub-optimal: -60 sampai -64.9
             if (rsl > SUB_OPTIMAL_MIN && rsl <= SUB_OPTIMAL_MAX) 
                 return "sub_optimal";
             
-            // Critical: <= -65 (nilai -65, -66, -67, dst = semakin lemah = CRITICAL!)
+            // Critical: <= -65
             return "critical";
         }
 
-        private string GetStatusMessage(decimal rsl, string status)
+        private string GetStatusMessage(decimal? rsl, string status)
         {
+            if (!rsl.HasValue) return "Tidak ada data";
+            
             return status switch
             {
                 "too_strong" => $"Terlalu kuat ({rsl:F1} dBm)",
@@ -63,7 +67,8 @@ namespace Pm.Services
                 "warning" => $"Warning ({rsl:F1} dBm)",
                 "sub_optimal" => $"Sub-optimal ({rsl:F1} dBm)",
                 "critical" => $"Critical ({rsl:F1} dBm)",
-                _ => null
+                "no_data" => "Tidak ada data",
+                _ => $"({rsl:F1} dBm)"
             };
         }
 
@@ -79,6 +84,23 @@ namespace Pm.Services
                 "removed" => NecOperationalStatus.Removed,
                 "obstacle" => NecOperationalStatus.Obstacle,
                 _ => NecOperationalStatus.Active
+            };
+        }
+
+        private NecRslHistoryItemDto MapToItemDto(NecRslHistory history, NecLink link)
+        {
+            return new NecRslHistoryItemDto
+            {
+                Id = history.Id,
+                NecLinkId = history.NecLinkId,
+                LinkName = link.LinkName,
+                NearEndTower = link.NearEndTower.Name,
+                FarEndTower = link.FarEndTower.Name,
+                Date = history.Date,
+                RslNearEnd = history.RslNearEnd, // ✅ Handle nullable
+                RslFarEnd = history.RslFarEnd,
+                Notes = history.Notes,
+                Status = history.Status
             };
         }
 
@@ -102,66 +124,6 @@ namespace Pm.Services
         // MONTHLY & YEARLY SUMMARY (TIDAK ADA PERUBAHAN)
         // ============================================
         
-        public async Task<NecMonthlyHistoryResponseDto> GetMonthlyAsync(int year, int month)
-        {
-            try
-            {
-                _logger.LogInformation("📊 GetMonthlyAsync - Year: {Year}, Month: {Month}", year, month);
-                if (month < 1 || month > 12) throw new ArgumentException("Bulan tidak valid.");
-
-                var startDate = new DateTime(year, month, 1);
-                var endDate = startDate.AddMonths(1);
-
-                // Ambil data + ambil status operasional terbaru per link
-                var rawData = await _context.NecRslHistories
-                    .AsNoTracking()
-                    .Where(h => h.Date >= startDate && h.Date < endDate)
-                    .GroupBy(h => new { 
-                        TowerName = h.NecLink.NearEndTower.Name, 
-                        LinkName = h.NecLink.LinkName 
-                    })
-                    .Select(g => new
-                    {
-                        TowerName = g.Key.TowerName,
-                        LinkName = g.Key.LinkName,
-                        AvgRsl = Math.Round(g.Average(h => h.RslNearEnd), 1),
-                        // Ambil status operasional dari entri terbaru di bulan ini
-                        OperationalStatus = g.OrderByDescending(h => h.Date)
-                            .Select(h => h.Status)
-                            .FirstOrDefault()
-                    })
-                    .ToListAsync();
-
-                var result = rawData
-                    .GroupBy(x => x.TowerName)
-                    .Select(tg => new NecTowerMonthlyDto
-                    {
-                        TowerName = tg.Key,
-                        Links = tg.Select(x => new NecLinkMonthlyDto
-                        {
-                            LinkName = x.LinkName,
-                            AvgRsl = x.AvgRsl,
-                            Status = x.OperationalStatus.ToString(), // ✅ Kirim sebagai string ke frontend
-                            WarningMessage = GetWarningMessage(x.AvgRsl) // Tetap berdasarkan RSL
-                        }).OrderBy(l => l.LinkName).ToList()
-                    })
-                    .OrderBy(t => t.TowerName)
-                    .ToList();
-
-                _logger.LogInformation("✅ GetMonthlyAsync completed - {Count} towers found", result.Count);
-                return new NecMonthlyHistoryResponseDto
-                {
-                    Period = startDate.ToString("MMMM yyyy", new CultureInfo("id-ID")),
-                    Data = result
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error in GetMonthlyAsync");
-                throw;
-            }
-        }
-
         public async Task<NecYearlySummaryDto> GetYearlyAsync(int year)
         {
             try
@@ -179,11 +141,12 @@ namespace Pm.Services
                         Tower = h.NecLink.NearEndTower.Name,
                         Link = h.NecLink.LinkName,
                         Month = h.Date.Month,
-                        Rsl = h.RslNearEnd
+                        Rsl = h.RslNearEnd // ✅ Bisa null
                     })
                     .ToListAsync();
 
                 var result = rawData
+                    .Where(x => x.Rsl.HasValue) // ✅ Filter null di memory
                     .GroupBy(x => x.Tower)
                     .Select(tg => new NecTowerYearlyDto
                     {
@@ -191,29 +154,46 @@ namespace Pm.Services
                         Links = tg.GroupBy(l => l.Link)
                             .ToDictionary(
                                 lg => lg.Key,
-                                lg => new NecLinkYearlyDto
+                                lg => 
                                 {
-                                    MonthlyAvg = lg.GroupBy(m => m.Month)
-                                        .ToDictionary(
-                                            m => new DateTime(year, m.Key, 1).ToString("MMM", new CultureInfo("en-US")),
-                                            m => Math.Round(m.Average(x => x.Rsl), 1)
-                                        ),
-                                    YearlyAvg = Math.Round(lg.Average(x => x.Rsl), 1),
-                                    Warnings = lg.GroupBy(m => m.Month)
-                                        .Select(m =>
+                                    // ✅ Group by month, handle nullable dengan benar
+                                    var monthlyGroups = lg.GroupBy(m => m.Month)
+                                        .Select(mg => new
                                         {
-                                            var avg = Math.Round(m.Average(x => x.Rsl), 1);
-                                            var status = GetRslStatus(avg);
-                                            
-                                            if (status != "optimal")
-                                            {
-                                                var monthName = new DateTime(year, m.Key, 1).ToString("MMM", new CultureInfo("id-ID"));
-                                                return $"{monthName}: {GetStatusMessage(avg, status)}";
-                                            }
-                                            return null;
+                                            Month = mg.Key,
+                                            Avg = mg.Where(x => x.Rsl.HasValue)
+                                                .Select(x => x.Rsl!.Value)
+                                                .DefaultIfEmpty()
+                                                .Average()
                                         })
-                                        .Where(w => w != null)
-                                        .ToList()!
+                                        .Where(mg => mg.Avg != 0) // Skip jika tidak ada data
+                                        .ToList();
+
+                                    var yearlyAvg = monthlyGroups.Any() 
+                                        ? monthlyGroups.Average(mg => mg.Avg)
+                                        : 0;
+
+                                    return new NecLinkYearlyDto
+                                    {
+                                        MonthlyAvg = monthlyGroups.ToDictionary(
+                                            mg => new DateTime(year, mg.Month, 1).ToString("MMM", new CultureInfo("en-US")),
+                                            mg => Math.Round(mg.Avg, 1)
+                                        ),
+                                        YearlyAvg = Math.Round(yearlyAvg, 1),
+                                        Warnings = monthlyGroups
+                                            .Select(mg =>
+                                            {
+                                                var status = GetRslStatus((decimal)mg.Avg);
+                                                if (status != "optimal")
+                                                {
+                                                    var monthName = new DateTime(year, mg.Month, 1).ToString("MMM", new CultureInfo("id-ID"));
+                                                    return $"{monthName}: {GetStatusMessage((decimal)mg.Avg, status)}";
+                                                }
+                                                return null;
+                                            })
+                                            .Where(w => w != null)
+                                            .ToList()!
+                                    };
                                 })
                     })
                     .OrderBy(t => t.TowerName)
@@ -226,6 +206,69 @@ namespace Pm.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Error in GetYearlyAsync");
+                throw;
+            }
+        }
+
+        // ============================================
+        // MONTHLY & YEARLY SUMMARY
+        // ============================================
+
+        public async Task<NecMonthlyHistoryResponseDto> GetMonthlyAsync(int year, int month)
+        {
+            try
+            {
+                _logger.LogInformation("📊 GetMonthlyAsync - Year: {Year}, Month: {Month}", year, month);
+                if (month < 1 || month > 12) throw new ArgumentException("Bulan tidak valid.");
+
+                var startDate = new DateTime(year, month, 1);
+                var endDate = startDate.AddMonths(1);
+
+                var rawData = await _context.NecRslHistories
+                    .AsNoTracking()
+                    .Where(h => h.Date >= startDate && h.Date < endDate)
+                    .Where(h => h.RslNearEnd.HasValue) // ✅ Skip entries dengan RSL null
+                    .GroupBy(h => new { 
+                        TowerName = h.NecLink.NearEndTower.Name, 
+                        LinkName = h.NecLink.LinkName 
+                    })
+                    .Select(g => new
+                    {
+                        TowerName = g.Key.TowerName,
+                        LinkName = g.Key.LinkName,
+                        AvgRsl = g.Average(h => h.RslNearEnd!.Value), // ✅ Safe: sudah di-filter
+                        OperationalStatus = g.OrderByDescending(h => h.Date)
+                            .Select(h => h.Status)
+                            .FirstOrDefault()
+                    })
+                    .ToListAsync();
+
+                var result = rawData
+                    .GroupBy(x => x.TowerName)
+                    .Select(tg => new NecTowerMonthlyDto
+                    {
+                        TowerName = tg.Key,
+                        Links = tg.Select(x => new NecLinkMonthlyDto
+                        {
+                            LinkName = x.LinkName,
+                            AvgRsl = Math.Round(x.AvgRsl, 1),
+                            Status = x.OperationalStatus.ToString(),
+                            WarningMessage = GetWarningMessage(Math.Round(x.AvgRsl, 1))
+                        }).OrderBy(l => l.LinkName).ToList()
+                    })
+                    .OrderBy(t => t.TowerName)
+                    .ToList();
+
+                _logger.LogInformation("✅ GetMonthlyAsync completed - {Count} towers found", result.Count);
+                return new NecMonthlyHistoryResponseDto
+                {
+                    Period = startDate.ToString("MMMM yyyy", new CultureInfo("id-ID")),
+                    Data = result
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in GetMonthlyAsync");
                 throw;
             }
         }
@@ -251,7 +294,6 @@ namespace Pm.Services
                         .ThenInclude(l => l.FarEndTower)
                     .Where(h => h.Date >= start && h.Date < end);
 
-                // ✅ Filter by tower if provided
                 if (!string.IsNullOrEmpty(towerName))
                 {
                     query = query.Where(h => h.NecLink.NearEndTower.Name == towerName);
@@ -261,21 +303,20 @@ namespace Pm.Services
                     .Select(h => new
                     {
                         LinkId = h.NecLink.Id,
-                        LinkName = h.NecLink.LinkName,  // ✅ Use LinkName from NecLink
+                        LinkName = h.NecLink.LinkName,
                         Tower = h.NecLink.NearEndTower.Name,
                         Month = h.Date.Month,
                         Year = h.Date.Year,
-                        Rsl = h.RslNearEnd,
+                        Rsl = h.RslNearEnd, // ✅ Keep as nullable - NULL akan tetap NULL
                         ExpectedMin = h.NecLink.ExpectedRslMin,
                         ExpectedMax = h.NecLink.ExpectedRslMax,
-                        Notes = h.Notes,  // ✅ Include notes
-                        Status = h.Status, // ✅ Include status
+                        Notes = h.Notes,
+                        Status = h.Status,
                     })
                     .ToListAsync();
 
                 _logger.LogInformation("📊 Raw data count: {Count}", rawData.Count);
                 
-                // ✅ Group by LinkId + LinkName
                 var grouped = rawData
                     .GroupBy(x => new { x.LinkId, x.LinkName, x.Tower })
                     .Select(g => 
@@ -283,7 +324,6 @@ namespace Pm.Services
                         var monthlyValues = new Dictionary<string, decimal?>();
                         var monthlyNotes = new Dictionary<string, string>();
                         
-                        // Generate all months (Jan-Dec)
                         for (int month = 1; month <= 12; month++)
                         {
                             var monthKey = new DateTime(year, month, 1).ToString("MMM-yy", new CultureInfo("en-US"));
@@ -291,9 +331,21 @@ namespace Pm.Services
                             
                             if (monthData.Any())
                             {
-                                monthlyValues[monthKey] = Math.Round(monthData.Average(x => x.Rsl), 1);
+                                // ✅ FIX: Jangan replace NULL dengan -100!
+                                var validRslValues = monthData.Where(x => x.Rsl.HasValue && x.Rsl.Value != -100).ToList();
                                 
-                                // ✅ Collect notes for this month
+                                if (validRslValues.Any())
+                                {
+                                    monthlyValues[monthKey] = Math.Round(
+                                        validRslValues.Average(x => x.Rsl!.Value), 1
+                                    );
+                                }
+                                else
+                                {
+                                    // ✅ Tetap NULL jika tidak ada data valid
+                                    monthlyValues[monthKey] = null;
+                                }
+                                
                                 var note = monthData.FirstOrDefault(x => !string.IsNullOrEmpty(x.Notes))?.Notes;
                                 if (!string.IsNullOrEmpty(note))
                                 {
@@ -313,7 +365,7 @@ namespace Pm.Services
                             MonthlyValues = monthlyValues,
                             ExpectedRslMin = g.First().ExpectedMin,
                             ExpectedRslMax = g.First().ExpectedMax,
-                            Notes = monthlyNotes // ✅ Include notes as Dictionary
+                            Notes = monthlyNotes
                         };
                     })
                     .OrderBy(x => x.Tower)
@@ -508,8 +560,9 @@ namespace Pm.Services
                     {
                         NecLinkId = link.Id,
                         Date = monthDate.Date,
-                        RslNearEnd = (decimal)rslValue.Value,
-                        RslFarEnd = null // Pivot format biasanya tidak ada RSL Far End
+                        RslNearEnd = (decimal)rslValue.Value, // ✅ Ini sudah nullable
+                        RslFarEnd = null,
+                        Status = NecOperationalStatus.Active // ✅ Default status untuk import
                     });
 
                     result.SuccessfulInserts++;
@@ -1465,95 +1518,64 @@ namespace Pm.Services
 
         public async Task<NecRslHistoryItemDto> CreateHistoryAsync(NecRslHistoryCreateDto dto, int userId)
         {
-            try
+            var status = ParseStatus(dto.Status);
+            
+            // ✅ VALIDASI: RSL wajib jika status Active
+            if (status == NecOperationalStatus.Active && !dto.RslNearEnd.HasValue)
             {
-                _logger.LogInformation("🔄 CREATE History - LinkId: {LinkId}, Date: {Date}, User: {UserId}", 
-                    dto.NecLinkId, dto.Date, userId);
-
-                var link = await _context.NecLinks
-                    .Include(l => l.NearEndTower)
-                    .Include(l => l.FarEndTower)
-                    .FirstOrDefaultAsync(l => l.Id == dto.NecLinkId)
-                    ?? throw new KeyNotFoundException("Link tidak ditemukan.");
-
-                var duplicate = await _context.NecRslHistories
-                    .AnyAsync(h => h.NecLinkId == dto.NecLinkId && h.Date.Date == dto.Date.Date);
-
-                if (duplicate)
-                    throw new InvalidOperationException($"Data RSL untuk link {link.LinkName} tanggal {dto.Date:yyyy-MM-dd} sudah ada.");
-
-                // ✅ Parse status dari string
-                var status = ParseStatus(dto.Status);
-
-                // ✅ Validasi RSL hanya jika status Active
-                if (status == NecOperationalStatus.Active)
-                {
-                    if (dto.RslNearEnd > -10 || dto.RslNearEnd < -100)
-                        throw new ArgumentException("RSL Near End harus antara -100 hingga -10 dBm.");
-                }
-
-                var history = new NecRslHistory
-                {
-                    NecLinkId = dto.NecLinkId,
-                    Date = dto.Date.Date,
-                    RslNearEnd = status == NecOperationalStatus.Active ? dto.RslNearEnd : -100m,
-                    RslFarEnd = status == NecOperationalStatus.Active ? dto.RslFarEnd : null,
-                    Notes = dto.Notes,
-                    Status = status
-                };
-
-                var executionStrategy = _context.Database.CreateExecutionStrategy();
-                
-                return await executionStrategy.ExecuteAsync(async () =>
-                {
-                    using var transaction = await _context.Database.BeginTransactionAsync();
-                    try
-                    {
-                        _context.NecRslHistories.Add(history);
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                        
-                        _logger.LogInformation("💾 History created successfully - ID: {Id}", history.Id);
-
-                        try
-                        {
-                            await _activityLog.LogAsync("NEC Signal - History", history.Id, "Create", userId,
-                                $"Tambah RSL: {link.LinkName} - {dto.Date:yyyy-MM-dd} - Status: {status}");
-                        }
-                        catch (Exception logEx)
-                        {
-                            _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
-                        }
-
-                        return new NecRslHistoryItemDto
-                        {
-                            Id = history.Id,
-                            NecLinkId = history.NecLinkId,
-                            LinkName = link.LinkName,
-                            NearEndTower = link.NearEndTower.Name,
-                            FarEndTower = link.FarEndTower.Name,
-                            Date = history.Date,
-                            RslNearEnd = history.RslNearEnd,
-                            RslFarEnd = history.RslFarEnd,
-                            Notes = history.Notes,
-                            Status = history.Status
-                        };
-                    }
-                    catch (Exception ex)
-                    {
-                        await transaction.RollbackAsync();
-                        _logger.LogError(ex, "❌ Failed to save history");
-                        throw;
-                    }
-                });
+                throw new ArgumentException("RSL Near End wajib diisi untuk status Active");
             }
-            catch (Exception ex)
+            
+            // ✅ VALIDASI: Notes wajib jika status bukan Active
+            if (status != NecOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
             {
-                _logger.LogError(ex, "❌ CREATE FAILED for History - LinkId: {LinkId}", dto.NecLinkId);
-                throw;
+                throw new ArgumentException("Catatan wajib diisi untuk status non-Active");
             }
+
+            var link = await _context.NecLinks
+                .Include(l => l.NearEndTower)
+                .Include(l => l.FarEndTower)
+                .FirstOrDefaultAsync(l => l.Id == dto.NecLinkId)
+                ?? throw new KeyNotFoundException($"Link dengan ID {dto.NecLinkId} tidak ditemukan");
+
+            var history = new NecRslHistory
+            {
+                NecLinkId = dto.NecLinkId,
+                Date = dto.Date.Date,
+                RslNearEnd = status == NecOperationalStatus.Active 
+                    ? dto.RslNearEnd!.Value  // ✅ Safe: sudah di-validasi di atas
+                    : null,                  // ✅ Default untuk non-active
+                RslFarEnd = dto.RslFarEnd,
+                Notes = dto.Notes,
+                Status = status,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            if (status == NecOperationalStatus.Active && dto.RslNearEnd.HasValue)
+            {
+                if (dto.RslNearEnd.Value > -10 || dto.RslNearEnd.Value < -100)
+                    throw new ArgumentException("RSL Near End harus antara -100 hingga -10 dBm.");
+            }
+            
+            // Validasi notes untuk non-active
+            if (status != NecOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
+            {
+                throw new ArgumentException("Catatan wajib diisi untuk status non-Active");
+            }
+
+            _context.NecRslHistories.Add(history);
+            await _context.SaveChangesAsync();
+
+            await _activityLog.LogAsync(
+                module: "NEC Signal - History",
+                entityId: history.Id,
+                action: "Create",
+                userId: userId,
+                description: $"Menambahkan history RSL untuk link {link.LinkName} pada {dto.Date:dd/MM/yyyy} dengan status {status}"
+            );
+
+            return MapToItemDto(history, link);
         }
-
 
         public async Task<NecRslHistoryItemDto> UpdateHistoryAsync(int id, NecRslHistoryUpdateDto dto, int userId)
         {
@@ -1570,25 +1592,44 @@ namespace Pm.Services
                     .FirstOrDefaultAsync(h => h.Id == id)
                     ?? throw new KeyNotFoundException("History tidak ditemukan.");
 
-                // ✅ Parse status dari string
                 var status = ParseStatus(dto.Status);
 
-                // ✅ Validasi RSL hanya jika status Active
+                // ✅ VALIDASI: RSL wajib jika status Active
                 if (status == NecOperationalStatus.Active)
                 {
-                    if (dto.RslNearEnd > -10 || dto.RslNearEnd < -100)
+                    if (!dto.RslNearEnd.HasValue)
+                        throw new ArgumentException("RSL Near End wajib diisi untuk status Active");
+                        
+                    if (dto.RslNearEnd.Value > -10 || dto.RslNearEnd.Value < -100)
                         throw new ArgumentException("RSL Near End harus antara -100 hingga -10 dBm.");
+
+                    if (history.RslNearEnd != dto.RslNearEnd!.Value)
+                    {
+                        history.RslNearEnd = dto.RslNearEnd.Value;
+                    }
+                }
+                else
+                    {
+                        // User bisa tidak mengisi RSL meski status Active
+                        history.RslNearEnd = null;
+                    }
+                    
+
+                // ✅ VALIDASI: Notes wajib jika status bukan Active
+                if (status != NecOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
+                {
+                    throw new ArgumentException("Catatan wajib diisi untuk status non-Active");
                 }
 
                 var changes = new List<string>();
 
-                // ✅ Update RSL hanya jika Active
+                // ✅ Update RSL
                 if (status == NecOperationalStatus.Active)
                 {
-                    if (history.RslNearEnd != dto.RslNearEnd)
+                    if (history.RslNearEnd != dto.RslNearEnd!.Value)
                     {
-                        changes.Add($"RslNearEnd: {history.RslNearEnd} → {dto.RslNearEnd}");
-                        history.RslNearEnd = dto.RslNearEnd;
+                        changes.Add($"RslNearEnd: {history.RslNearEnd} → {dto.RslNearEnd.Value}");
+                        history.RslNearEnd = dto.RslNearEnd.Value;
                     }
 
                     if (history.RslFarEnd != dto.RslFarEnd)
@@ -1599,13 +1640,15 @@ namespace Pm.Services
                 }
                 else
                 {
-                    history.RslNearEnd = -100m;
+                    // Non-active: set default values
+                    history.RslNearEnd = null;
                     history.RslFarEnd = null;
                 }
+                
 
                 if (history.Notes != dto.Notes)
                 {
-                    changes.Add($"Notes updated");
+                    changes.Add("Notes updated");
                     history.Notes = dto.Notes;
                 }
 

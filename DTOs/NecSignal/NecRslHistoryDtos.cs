@@ -14,7 +14,7 @@ namespace Pm.DTOs
         public string NearEndTower { get; set; } = null!;
         public string FarEndTower { get; set; } = null!;
         public DateTime Date { get; set; }
-        public decimal RslNearEnd { get; set; }
+        public decimal? RslNearEnd { get; set; }
         public decimal? RslFarEnd { get; set; }
         public string? Notes { get; set; }
         
@@ -42,22 +42,21 @@ namespace Pm.DTOs
         [Required]
         public DateTime Date { get; set; }
         
-        public decimal RslNearEnd { get; set; }
+        // ✅ UBAH: RSL bisa null jika status bukan active
+        public decimal? RslNearEnd { get; set; }
         public decimal? RslFarEnd { get; set; }
         public string? Notes { get; set; }
         
-        // ✅ Accept string: "active", "dismantled", "removed", "obstacle"
         public string? Status { get; set; }
     }
 
-    // ✅ UBAH: Accept string dari frontend
     public class NecRslHistoryUpdateDto
     {
-        public decimal RslNearEnd { get; set; }
+        // ✅ UBAH: RSL bisa null jika status bukan active
+        public decimal? RslNearEnd { get; set; }
         public decimal? RslFarEnd { get; set; }
         public string? Notes { get; set; }
         
-        // ✅ Accept string: "active", "dismantled", "removed", "obstacle"
         public string? Status { get; set; }
     }
 

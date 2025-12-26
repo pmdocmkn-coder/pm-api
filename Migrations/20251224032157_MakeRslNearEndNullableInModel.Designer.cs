@@ -12,8 +12,8 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251223072723_FixStatusAndNotesColumns")]
-    partial class FixStatusAndNotesColumns
+    [Migration("20251224032157_MakeRslNearEndNullableInModel")]
+    partial class MakeRslNearEndNullableInModel
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -404,7 +404,7 @@ namespace Pm.Migrations
                     b.Property<decimal?>("RslFarEnd")
                         .HasColumnType("decimal(10,2)");
 
-                    b.Property<decimal>("RslNearEnd")
+                    b.Property<decimal?>("RslNearEnd")
                         .HasColumnType("decimal(10,2)");
 
                     b.Property<string>("Status")

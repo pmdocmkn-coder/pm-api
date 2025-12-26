@@ -372,27 +372,29 @@ namespace Pm.Data
                 entity.HasKey(e => e.Id);
                 entity.ToTable("NecRslHistories");
 
-                // ✅ CRITICAL FIX: Use VARCHAR instead of LONGTEXT for Status
+                // ✅ Status conversion
                 entity.Property(h => h.Status)
                     .HasConversion<string>()
                     .IsRequired()
-                    .HasColumnType("varchar(50)") ; // ✅ Changed from default longtext\
+                    .HasColumnType("varchar(50)");
 
                 // ✅ Notes as nullable TEXT
                 entity.Property(e => e.Notes)
                     .IsRequired(false)
                     .HasColumnType("text");
 
-                // ✅ Other properties
-                entity.Property(e => e.Date)
-                    .IsRequired();
-
+                // ✅ FIX: RslNearEnd menjadi nullable
                 entity.Property(e => e.RslNearEnd)
                     .HasColumnType("decimal(10,2)")
-                    .IsRequired();
+                    .IsRequired(false); // ← INI YANG PERLU DIPERBAIKI
 
+                // ✅ RslFarEnd tetap nullable
                 entity.Property(e => e.RslFarEnd)
-                    .HasColumnType("decimal(10,2)");
+                    .HasColumnType("decimal(10,2)")
+                    .IsRequired(false);
+
+                entity.Property(e => e.Date)
+                    .IsRequired();
 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("UTC_TIMESTAMP()");

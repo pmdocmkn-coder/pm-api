@@ -13,6 +13,7 @@ using Pm.Validators;
 using Microsoft.AspNetCore.Http.Features;
 using Pm.DTOs.Auth;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -211,6 +212,22 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod()
         .AllowCredentials();
     });
+});
+
+
+// Enable detailed model binding errors
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var logger = context.HttpContext.RequestServices
+            .GetRequiredService<ILogger<Program>>();
+        
+        logger.LogWarning("❌ Model validation failed: {@Errors}", 
+            context.ModelState);
+        
+        return new BadRequestObjectResult(context.ModelState);
+    };
 });
 
 // ===== Logging =====
