@@ -22,6 +22,7 @@ namespace Pm.Services
         {
             var roles = await _context.Roles
                 .Include(r => r.Users)
+                .Include(r => r.RolePermissions)
                 .OrderBy(r => r.RoleId)
                 .Select(r => new RoleDto
                 {
@@ -30,6 +31,7 @@ namespace Pm.Services
                     Description = r.Description,
                     IsActive = r.IsActive,
                     UserCount = r.Users.Count,
+                    PermissionCount = r.RolePermissions.Count,
                     CreatedAt = r.CreatedAt
                 })
                 .ToListAsync();
@@ -41,6 +43,7 @@ namespace Pm.Services
         {
             var role = await _context.Roles
                 .Include(r => r.Users)
+                .Include(r => r.RolePermissions) 
                 .FirstOrDefaultAsync(r => r.RoleId == roleId);
 
             if (role == null)
@@ -55,6 +58,7 @@ namespace Pm.Services
                 Description = role.Description,
                 IsActive = role.IsActive,
                 UserCount = role.Users.Count,
+                PermissionCount = role.RolePermissions.Count,
                 CreatedAt = role.CreatedAt
             };
         }
@@ -111,6 +115,7 @@ namespace Pm.Services
                 Description = role.Description,
                 IsActive = role.IsActive,
                 UserCount = 0,
+                PermissionCount = dto.PermissionIds?.Count ?? 0,
                 CreatedAt = role.CreatedAt
             };
         }
@@ -119,6 +124,7 @@ namespace Pm.Services
         {
             var role = await _context.Roles
                 .Include(r => r.Users)
+                .Include(r => r.RolePermissions)
                 .FirstOrDefaultAsync(r => r.RoleId == roleId);
 
             if (role == null)
@@ -168,6 +174,7 @@ namespace Pm.Services
                 Description = role.Description,
                 IsActive = role.IsActive,
                 UserCount = role.Users.Count,
+                PermissionCount = role.RolePermissions.Count,
                 CreatedAt = role.CreatedAt
             };
         }
@@ -223,6 +230,7 @@ namespace Pm.Services
                 Description = role.Description,
                 IsActive = role.IsActive,
                 UserCount = role.Users.Count,
+                PermissionCount = role.RolePermissions.Count,
                 CreatedAt = role.CreatedAt,
                 Permissions = role.RolePermissions
                     .Select(rp => new PermissionDto

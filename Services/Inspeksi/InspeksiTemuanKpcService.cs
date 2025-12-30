@@ -203,7 +203,15 @@ namespace Pm.Services
                             {
                                 _logger.LogInformation("⬆️ Uploading file: {FileName} ({Size} bytes)", file.FileName, file.Length);
 
-                                var url = await _cloudinary.UploadImageAsync(file, "inspeksi/kpc/temuan");
+                                // ✅ ENABLE RESIZE WITH MAX 1920x1080
+                                var url = await _cloudinary.UploadImageAsync(
+                                    file, 
+                                    "inspeksi/kpc/temuan", 
+                                    resize: true,      // Enable resize
+                                    maxWidth: 1920,    // Max width
+                                    maxHeight: 1080    // Max height
+                                );
+                                
                                 if (!string.IsNullOrEmpty(url))
                                 {
                                     fotoTemuanUrls.Add(url);
@@ -519,11 +527,36 @@ namespace Pm.Services
                 {
                     try
                     {
-                        var url = await _cloudinary.UploadImageAsync(file, folder);
+                        // ✅ ENABLE RESIZE BASED ON FOLDER TYPE
+                        bool shouldResize = true;
+                        int maxWidth = 1920;
+                        int maxHeight = 1080;
+
+                        // You can adjust resize settings based on folder
+                        if (folder.Contains("temuan"))
+                        {
+                            maxWidth = 1920;
+                            maxHeight = 1080;
+                        }
+                        else if (folder.Contains("hasil"))
+                        {
+                            maxWidth = 1920;
+                            maxHeight = 1080;
+                        }
+
+                        var url = await _cloudinary.UploadImageAsync(
+                            file, 
+                            folder, 
+                            resize: shouldResize,
+                            maxWidth: maxWidth,
+                            maxHeight: maxHeight
+                        );
+                        
                         if (!string.IsNullOrEmpty(url))
                         {
                             urlList.Add(url);
                             uploadedCount++;
+                            _logger.LogInformation("✅ Uploaded and resized: {FileName}", file.FileName);
                         }
                     }
                     catch (Exception ex)

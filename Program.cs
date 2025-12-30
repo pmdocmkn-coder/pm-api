@@ -207,6 +207,7 @@ builder.Services.AddCors(options =>
             "http://localhost:5173",
             "https://pmfrontend-git-*.vercel.app",
             "https://*.vercel.app"
+          
         )
         .AllowAnyHeader()
         .AllowAnyMethod()

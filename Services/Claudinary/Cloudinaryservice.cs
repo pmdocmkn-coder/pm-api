@@ -1,12 +1,15 @@
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Jpeg;
 
 namespace Pm.Services
 {
     public interface ICloudinaryService
     {
-        Task<string?> UploadImageAsync(IFormFile file, string folder = "profile");
+        Task<string?> UploadImageAsync(IFormFile file, string folder = "profile", bool resize = false, int maxWidth = 1920, int maxHeight = 1080);
         Task<bool> DeleteImageAsync(string publicId);
         string? GetPublicIdFromUrl(string imageUrl);
     }
@@ -37,46 +40,102 @@ namespace Pm.Services
             _cloudinary.Api.Secure = true;
         }
 
-        public async Task<string?> UploadImageAsync(IFormFile file, string folder = "profile")
+        public async Task<string?> UploadImageAsync(IFormFile file, string folder = "profile", bool resize = false, int maxWidth = 1920, int maxHeight = 1080)
         {
             if (file == null || file.Length == 0)
                 return null;
 
             // Validate file type
-            var allowedTypes = new[] { "image/jpeg", "image/png", "image/jpg", "image/gif" };
+            var allowedTypes = new[] { "image/jpeg", "image/png", "image/jpg", "image/gif", "image/webp" };
             if (!allowedTypes.Contains(file.ContentType.ToLower()))
             {
-                throw new Exception("Invalid file type. Only JPEG, PNG, JPG and GIF are allowed.");
+                throw new Exception("Invalid file type. Only JPEG, PNG, JPG, GIF, and WEBP are allowed.");
             }
 
-            // Validate file size (max 5MB)
-            if (file.Length > 5 * 1024 * 1024)
+            // Validate file size (max 10MB)
+            if (file.Length > 10 * 1024 * 1024)
             {
-                throw new Exception("File size must not exceed 5MB.");
+                throw new Exception("File size must not exceed 10MB.");
             }
 
             try
             {
-                using var stream = file.OpenReadStream();
+                Stream uploadStream;
+
+                // ✅ RESIZE IMAGE IF REQUESTED
+                if (resize)
+                {
+                    _logger.LogInformation("🖼️ Resizing image: {FileName}", file.FileName);
+                    
+                    using var originalStream = file.OpenReadStream();
+                    using var image = await Image.LoadAsync(originalStream);
+                    
+                    var originalWidth = image.Width;
+                    var originalHeight = image.Height;
+                    
+                    _logger.LogInformation("📏 Original size: {Width}x{Height}", originalWidth, originalHeight);
+
+                    // Only resize if image is larger than max dimensions
+                    if (originalWidth > maxWidth || originalHeight > maxHeight)
+                    {
+                        // Calculate aspect ratio
+                        var ratioX = (double)maxWidth / originalWidth;
+                        var ratioY = (double)maxHeight / originalHeight;
+                        var ratio = Math.Min(ratioX, ratioY);
+
+                        var newWidth = (int)(originalWidth * ratio);
+                        var newHeight = (int)(originalHeight * ratio);
+
+                        _logger.LogInformation("🔄 Resizing to: {Width}x{Height}", newWidth, newHeight);
+
+                        image.Mutate(x => x.Resize(new ResizeOptions
+                        {
+                            Size = new SixLabors.ImageSharp.Size(newWidth, newHeight),
+                            Mode = ResizeMode.Max,
+                            Sampler = KnownResamplers.Lanczos3 // High quality resampling
+                        }));
+
+                        var resizedStream = new MemoryStream();
+                        await image.SaveAsync(resizedStream, new JpegEncoder { Quality = 85 });
+                        resizedStream.Position = 0;
+                        uploadStream = resizedStream;
+                        
+                        _logger.LogInformation("✅ Resized successfully: {Size} KB", resizedStream.Length / 1024);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("ℹ️ Image already within limits, uploading original");
+                        uploadStream = file.OpenReadStream();
+                    }
+                }
+                else
+                {
+                    uploadStream = file.OpenReadStream();
+                }
+
+                // ✅ UPLOAD TO CLOUDINARY WITHOUT TRANSFORMATION
                 var uploadParams = new ImageUploadParams
                 {
-                    File = new FileDescription(file.FileName, stream),
+                    File = new FileDescription(file.FileName, uploadStream),
                     Folder = $"pm-app/{folder}",
                     PublicId = $"{Guid.NewGuid()}",
-                    Transformation = new Transformation()
-                        .Width(500)
-                        .Height(500)
-                        .Crop("fill")
-                        .Gravity("face")
-                        .Quality("auto")
-                        .FetchFormat("auto")
+                    // ❌ REMOVE TRANSFORMATION - Let image keep original dimensions
+                    // Transformation = new Transformation()
+                    //     .Width(500).Height(500).Crop("fill")
                 };
 
                 var uploadResult = await _cloudinary.UploadAsync(uploadParams);
 
+                // Cleanup stream if it was resized
+                if (resize && uploadStream != file.OpenReadStream())
+                {
+                    await uploadStream.DisposeAsync();
+                }
+
                 if (uploadResult.StatusCode == System.Net.HttpStatusCode.OK)
                 {
-                    _logger.LogInformation("Image uploaded successfully to Cloudinary: {PublicId}", uploadResult.PublicId);
+                    _logger.LogInformation("✅ Image uploaded successfully: {PublicId} ({Width}x{Height})", 
+                        uploadResult.PublicId, uploadResult.Width, uploadResult.Height);
                     return uploadResult.SecureUrl.ToString();
                 }
 
