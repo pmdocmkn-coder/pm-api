@@ -84,6 +84,18 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "nec.signal.view"));
             options.AddPolicy("NecSignalDelete", policy =>
                 policy.RequireClaim("Permission", "nec.signal.delete"));
+
+
+            options.AddPolicy("NecSignalView", policy =>
+                policy.RequireClaim("Permission", "nec.signal.view"));
+            options.AddPolicy("NecSignalDelete", policy =>
+                policy.RequireClaim("Permission", "nec.signal.delete"));
+
+            // SWR Signal policies
+            options.AddPolicy("SwrSignalView", policy =>
+                policy.RequireClaim("Permission", "swr.signal.view"));
+            options.AddPolicy("SwrSignalDelete", policy =>
+                policy.RequireClaim("Permission", "swr.signal.delete"));
         
 
         }

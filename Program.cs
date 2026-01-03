@@ -176,6 +176,7 @@ builder.Services.AddScoped<IActivityLogService, ActivityLogService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
+
 // ===== Validators =====
 builder.Services.AddValidatorsFromAssemblyContaining<CreateUserDtoValidator>();
 builder.Services.AddScoped<IValidator<RegisterDto>, RegisterDtoValidator>();
@@ -184,6 +185,8 @@ builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
 
 // ===== Signal NEC ===== 
 builder.Services.AddScoped<INecSignalService, NecSignalService>();
+// ===== SWR Radio ===== 
+builder.Services.AddScoped<ISwrSignalService, SwrSignalService>();
 
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(options =>

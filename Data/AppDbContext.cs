@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Pm.Enums;
 using Pm.Models;
 using Pm.Models.NEC;
+using Pm.Models.SWR;
 
 namespace Pm.Data
 {
@@ -25,6 +26,10 @@ namespace Pm.Data
         public DbSet<Tower> Towers { get; set; }
         public DbSet<NecLink> NecLinks { get; set; }
         public DbSet<NecRslHistory> NecRslHistories { get; set; }
+
+        public DbSet<SwrSite> SwrSites { get; set; } = null!;
+        public DbSet<SwrChannel> SwrChannels { get; set; } = null!;
+        public DbSet<SwrHistory> SwrHistories { get; set; } = null!;
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -412,6 +417,86 @@ namespace Pm.Data
                 entity.HasIndex(e => new { e.NecLinkId, e.Date })
                     .IsUnique()
                     .HasDatabaseName("IX_NecRslHistory_LinkDate");
+            });
+
+            // SwrSite
+            modelBuilder.Entity<SwrSite>(entity =>
+            {
+                entity.ToTable("SwrSites");
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                    
+                entity.Property(e => e.Location)
+                    .HasMaxLength(255);
+                    
+                entity.Property(e => e.Type)
+                    .IsRequired()
+                    .HasConversion<string>();
+                
+                entity.HasIndex(e => e.Name).IsUnique();
+                
+                entity.HasMany(e => e.Channels)
+                    .WithOne(c => c.SwrSite)
+                    .HasForeignKey(c => c.SwrSiteId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+            
+            // SwrChannel
+            modelBuilder.Entity<SwrChannel>(entity =>
+            {
+                entity.ToTable("SwrChannels");
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.ChannelName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                    
+                entity.Property(e => e.ExpectedSwrMax)
+                    .HasColumnType("decimal(4,2)")
+                    .HasDefaultValue(1.5m);
+
+                entity.Property(e => e.ExpectedPwrMax)
+                    .HasColumnType("decimal(6,2)")
+                    .IsRequired(false); // nullable
+                
+                entity.HasIndex(e => new { e.SwrSiteId, e.ChannelName }).IsUnique();
+                
+                entity.HasMany(e => e.Histories)
+                    .WithOne(h => h.SwrChannel)
+                    .HasForeignKey(h => h.SwrChannelId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+            
+            // SwrHistory
+            modelBuilder.Entity<SwrHistory>(entity =>
+            {
+                entity.ToTable("SwrHistories");
+                entity.HasKey(e => e.Id);
+                
+                entity.Property(e => e.Date)
+                    .IsRequired()
+                    .HasColumnType("date");
+                    
+                entity.Property(e => e.Fpwr)
+                    .HasColumnType("decimal(6,2)");
+                    
+                entity.Property(e => e.Vswr)
+                    .IsRequired()
+                    .HasColumnType("decimal(4,2)");
+                    
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasConversion<string>();
+                    
+                entity.Property(e => e.CreatedAt)
+                    .IsRequired()
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+                
+                entity.HasIndex(e => new { e.SwrChannelId, e.Date }).IsUnique();
+                entity.HasIndex(e => e.Date);
             });
         }
     }

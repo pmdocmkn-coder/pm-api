@@ -546,6 +546,109 @@ namespace Pm.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("Pm.Models.SWR.SwrChannel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChannelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<decimal?>("ExpectedPwrMax")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<decimal>("ExpectedSwrMax")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(4,2)")
+                        .HasDefaultValue(1.5m);
+
+                    b.Property<int>("SwrSiteId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SwrSiteId", "ChannelName")
+                        .IsUnique();
+
+                    b.ToTable("SwrChannels", (string)null);
+                });
+
+            modelBuilder.Entity("Pm.Models.SWR.SwrHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("Fpwr")
+                        .HasColumnType("decimal(6,2)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("SwrChannelId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Vswr")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("SwrChannelId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("SwrHistories", (string)null);
+                });
+
+            modelBuilder.Entity("Pm.Models.SWR.SwrSite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("SwrSites", (string)null);
+                });
+
             modelBuilder.Entity("Pm.Models.User", b =>
                 {
                     b.Property<int>("UserId")
@@ -688,6 +791,28 @@ namespace Pm.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("Pm.Models.SWR.SwrChannel", b =>
+                {
+                    b.HasOne("Pm.Models.SWR.SwrSite", "SwrSite")
+                        .WithMany("Channels")
+                        .HasForeignKey("SwrSiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SwrSite");
+                });
+
+            modelBuilder.Entity("Pm.Models.SWR.SwrHistory", b =>
+                {
+                    b.HasOne("Pm.Models.SWR.SwrChannel", "SwrChannel")
+                        .WithMany("Histories")
+                        .HasForeignKey("SwrChannelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SwrChannel");
+                });
+
             modelBuilder.Entity("Pm.Models.User", b =>
                 {
                     b.HasOne("Pm.Models.Role", "Role")
@@ -721,6 +846,16 @@ namespace Pm.Migrations
                     b.Navigation("RolePermissions");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("Pm.Models.SWR.SwrChannel", b =>
+                {
+                    b.Navigation("Histories");
+                });
+
+            modelBuilder.Entity("Pm.Models.SWR.SwrSite", b =>
+                {
+                    b.Navigation("Channels");
                 });
 
             modelBuilder.Entity("Pm.Models.User", b =>
