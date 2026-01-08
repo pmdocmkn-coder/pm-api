@@ -20,11 +20,11 @@ namespace Pm.Services
         private readonly AppDbContext _context;
         private readonly IActivityLogService _activityLog;
         private readonly ILogger<SwrSignalService> _logger;
-        
+
         private const decimal GOOD_THRESHOLD = 1.5m; // VSWR < 1.5 = Good, >= 1.5 = Bad
 
         public SwrSignalService(
-            AppDbContext context, 
+            AppDbContext context,
             IActivityLogService activityLog,
             ILogger<SwrSignalService> logger)
         {
@@ -69,7 +69,7 @@ namespace Pm.Services
         }
 
         // ============================================
-        // MONTHLY & YEARLY SUMMARY
+        // MONTHLY & YEARLY SUMMARY REPORTS
         // ============================================
 
         public async Task<SwrMonthlyHistoryResponseDto> GetMonthlyAsync(int year, int month)
@@ -85,7 +85,8 @@ namespace Pm.Services
                 var rawData = await _context.SwrHistories
                     .AsNoTracking()
                     .Where(h => h.Date >= startDate && h.Date < endDate)
-                    .GroupBy(h => new { 
+                    .GroupBy(h => new
+                    {
                         SiteName = h.SwrChannel.SwrSite.Name,
                         SiteType = h.SwrChannel.SwrSite.Type,
                         ChannelName = h.SwrChannel.ChannelName,
@@ -142,7 +143,7 @@ namespace Pm.Services
             try
             {
                 _logger.LogInformation("📊 GetYearlyAsync - Year: {Year}", year);
-                
+
                 var start = new DateTime(year, 1, 1);
                 var end = start.AddYears(1);
 
@@ -184,7 +185,7 @@ namespace Pm.Services
                                         })
                                         .ToList();
 
-                                    var yearlyAvgFpwr = monthlyGroups.Any(mg => mg.AvgFpwr != 0) 
+                                    var yearlyAvgFpwr = monthlyGroups.Any(mg => mg.AvgFpwr != 0)
                                         ? monthlyGroups.Where(mg => mg.AvgFpwr != 0).Average(mg => mg.AvgFpwr)
                                         : (decimal?)null;
 
@@ -222,11 +223,11 @@ namespace Pm.Services
                     .ToList();
 
                 _logger.LogInformation("✅ GetYearlyAsync completed - {Count} sites found", result.Count);
-                
-                return new SwrYearlySummaryDto 
-                { 
-                    Year = year, 
-                    Sites = result 
+
+                return new SwrYearlySummaryDto
+                {
+                    Year = year,
+                    Sites = result
                 };
             }
             catch (Exception ex)
@@ -241,7 +242,7 @@ namespace Pm.Services
             try
             {
                 _logger.LogInformation("📊 GetYearlyPivotAsync - Year: {Year}, Site: {SiteName}", year, siteName);
-                
+
                 var start = new DateTime(year, 1, 1);
                 var end = start.AddYears(1);
 
@@ -272,29 +273,29 @@ namespace Pm.Services
                     .ToListAsync();
 
                 _logger.LogInformation("📊 Raw data count: {Count}", rawData.Count);
-                
+
                 var grouped = rawData
                     .GroupBy(x => new { x.ChannelId, x.ChannelName, x.Site, x.SiteType, x.ExpectedMax })
-                    .Select(g => 
+                    .Select(g =>
                     {
                         var monthlyFpwr = new Dictionary<string, decimal?>();
                         var monthlyVswr = new Dictionary<string, decimal?>();
                         var monthlyNotes = new Dictionary<string, string>();
-                        
+
                         for (int month = 1; month <= 12; month++)
                         {
                             var monthKey = new DateTime(year, month, 1).ToString("MMM-yy", CultureInfo.InvariantCulture);
                             var monthData = g.Where(x => x.Month == month).ToList();
-                            
+
                             if (monthData.Any())
                             {
                                 var validFpwr = monthData.Where(x => x.Fpwr.HasValue).ToList();
-                                monthlyFpwr[monthKey] = validFpwr.Any() 
-                                    ? Math.Round(validFpwr.Average(x => x.Fpwr!.Value), 1) 
+                                monthlyFpwr[monthKey] = validFpwr.Any()
+                                    ? Math.Round(validFpwr.Average(x => x.Fpwr!.Value), 1)
                                     : null;
 
                                 monthlyVswr[monthKey] = Math.Round(monthData.Average(x => x.Vswr), 1);
-                                
+
                                 var note = monthData.FirstOrDefault(x => !string.IsNullOrEmpty(x.Notes))?.Notes;
                                 if (!string.IsNullOrEmpty(note))
                                 {
@@ -324,7 +325,7 @@ namespace Pm.Services
                     .ToList();
 
                 _logger.LogInformation("✅ GetYearlyPivotAsync completed - {Count} channels found", grouped.Count);
-                
+
                 return grouped;
             }
             catch (Exception ex)
@@ -341,7 +342,7 @@ namespace Pm.Services
         public async Task<SwrImportResultDto> ImportFromPivotExcelAsync(IFormFile file, int userId)
         {
             _logger.LogInformation("📤 ImportFromPivotExcelAsync - User: {UserId}, File: {FileName}", userId, file?.FileName);
-            
+
             var result = new SwrImportResultDto();
             var errors = new List<string>();
 
@@ -375,7 +376,7 @@ namespace Pm.Services
 
             var rowCount = ws.Dimension.Rows;
             var colCount = ws.Dimension.Columns;
-            
+
             if (rowCount < 2 || colCount < 3)
             {
                 errors.Add("Format Excel tidak sesuai. Minimal harus ada kolom No, Channel, dan data bulan.");
@@ -389,11 +390,11 @@ namespace Pm.Services
             for (int col = 3; col <= colCount; col++)
             {
                 var headerCell = ws.Cells[1, col].Value;
-                
+
                 if (headerCell == null) continue;
-                
+
                 DateTime monthDate;
-                
+
                 if (headerCell is DateTime dateTimeValue)
                 {
                     monthDate = new DateTime(dateTimeValue.Year, dateTimeValue.Month, 15);
@@ -409,14 +410,14 @@ namespace Pm.Services
                 }
                 else if (headerCell is string stringValue && !string.IsNullOrWhiteSpace(stringValue))
                 {
-                    if (DateTime.TryParseExact(stringValue.Trim(), 
-                        new[] { "MMM-yy", "MMM-yyyy", "MMMM-yy", "M/d/yyyy", "MM/dd/yyyy" }, 
-                        CultureInfo.InvariantCulture, 
-                        DateTimeStyles.None, 
+                    if (DateTime.TryParseExact(stringValue.Trim(),
+                        new[] { "MMM-yy", "MMM-yyyy", "MMMM-yy", "M/d/yyyy", "MM/dd/yyyy" },
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
                         out monthDate))
                     {
                         monthColumns[col] = new DateTime(monthDate.Year, monthDate.Month, 15);
-                        _logger.LogInformation("📅 Found string date at col {Col}: '{Header}' -> {Date}", 
+                        _logger.LogInformation("📅 Found string date at col {Col}: '{Header}' -> {Date}",
                             col, stringValue, monthDate);
                     }
                 }
@@ -444,7 +445,7 @@ namespace Pm.Services
             for (int row = 2; row <= rowCount; row++)
             {
                 var channelNameCell = ws.Cells[row, 2].GetValue<string>()?.Trim();
-                
+
                 if (string.IsNullOrWhiteSpace(channelNameCell))
                 {
                     _logger.LogWarning("⚠️ Row {Row}: Empty channel name, skipping", row);
@@ -463,7 +464,7 @@ namespace Pm.Services
                 foreach (var (colIndex, monthDate) in monthColumns)
                 {
                     totalDataPoints++;
-                    
+
                     // FPWR should be in current column, VSWR in next column
                     var fpwrValue = ws.Cells[row, colIndex].GetValue<double?>();
                     var vswrValue = ws.Cells[row, colIndex + 1].GetValue<double?>();
@@ -503,7 +504,7 @@ namespace Pm.Services
 
                     if (duplicate)
                     {
-                        _logger.LogDebug("⚠️ Duplicate found: {Channel} on {Date}, skipping", 
+                        _logger.LogDebug("⚠️ Duplicate found: {Channel} on {Date}, skipping",
                             channelNameCell, monthDate.ToString("yyyy-MM-dd"));
                         result.FailedRows++;
                         continue;
@@ -529,9 +530,9 @@ namespace Pm.Services
             if (histories.Any())
             {
                 _logger.LogInformation("💾 Saving {Count} history records from pivot...", histories.Count);
-                
+
                 var executionStrategy = _context.Database.CreateExecutionStrategy();
-                
+
                 await executionStrategy.ExecuteAsync(async () =>
                 {
                     using var transaction = await _context.Database.BeginTransactionAsync();
@@ -540,7 +541,7 @@ namespace Pm.Services
                         _context.SwrHistories.AddRange(histories);
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
-                        
+
                         _logger.LogInformation("✅ Successfully saved {Count} history records", histories.Count);
                     }
                     catch (Exception ex)
@@ -583,7 +584,7 @@ namespace Pm.Services
             try
             {
                 _logger.LogInformation("📥 ExportYearlyToExcelAsync - Year: {Year}, Site: {SiteName}", year, siteName);
-                
+
                 var pivot = await GetYearlyPivotAsync(year, siteName);
 
                 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
@@ -625,7 +626,7 @@ namespace Pm.Services
                     for (int m = 1; m <= 12; m++)
                     {
                         var monthKey = new DateTime(year, m, 1).ToString("MMM-yy", CultureInfo.InvariantCulture);
-                        
+
                         if (item.MonthlyFpwr.TryGetValue(monthKey, out decimal? fpwr) && fpwr.HasValue)
                         {
                             ws.Cells[currentRow, col].Value = fpwr.Value;
@@ -634,7 +635,7 @@ namespace Pm.Services
                         if (item.MonthlyVswr.TryGetValue(monthKey, out decimal? vswr) && vswr.HasValue)
                         {
                             ws.Cells[currentRow, col + 1].Value = vswr.Value;
-                            
+
                             // Color coding for VSWR
                             var cell = ws.Cells[currentRow, col + 1];
                             if (vswr.Value >= item.ExpectedSwrMax)
@@ -672,7 +673,7 @@ namespace Pm.Services
                 }
 
                 _logger.LogInformation("✅ ExportYearlyToExcelAsync completed successfully");
-                
+
                 return await package.GetAsByteArrayAsync();
             }
             catch (Exception ex)
@@ -691,7 +692,7 @@ namespace Pm.Services
             try
             {
                 _logger.LogInformation("📊 GetSitesAsync");
-                
+
                 var sites = await _context.SwrSites
                     .AsNoTracking()
                     .Select(s => new SwrSiteListDto
@@ -706,7 +707,7 @@ namespace Pm.Services
                     .ToListAsync();
 
                 _logger.LogInformation("✅ GetSitesAsync completed - {Count} sites found", sites.Count);
-                
+
                 return sites;
             }
             catch (Exception ex)
@@ -733,9 +734,9 @@ namespace Pm.Services
                 };
 
                 _context.SwrSites.Add(site);
-                
+
                 var executionStrategy = _context.Database.CreateExecutionStrategy();
-                
+
                 await executionStrategy.ExecuteAsync(async () =>
                 {
                     using var transaction = await _context.Database.BeginTransactionAsync();
@@ -807,10 +808,10 @@ namespace Pm.Services
                 {
                     var exists = await _context.SwrSites
                         .AnyAsync(s => s.Name == dto.Name.Trim() && s.Id != dto.Id);
-                    
-                    if (exists) 
+
+                    if (exists)
                         throw new ArgumentException("Nama site sudah digunakan.");
-                    
+
                     changes.Add($"Nama: '{site.Name}' → '{dto.Name}'");
                     site.Name = dto.Name.Trim();
                 }
@@ -829,7 +830,7 @@ namespace Pm.Services
                 }
 
                 var executionStrategy = _context.Database.CreateExecutionStrategy();
-                
+
                 return await executionStrategy.ExecuteAsync(async () =>
                 {
                     using var transaction = await _context.Database.BeginTransactionAsync();
@@ -885,7 +886,7 @@ namespace Pm.Services
             _logger.LogInformation("🗑️ DELETE Site - ID: {Id}, User: {UserId}", id, userId);
 
             var strategy = _context.Database.CreateExecutionStrategy();
-            
+
             await strategy.ExecuteAsync(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
@@ -894,7 +895,7 @@ namespace Pm.Services
                     var site = await _context.SwrSites
                         .Include(s => s.Channels)
                         .FirstOrDefaultAsync(s => s.Id == id);
-                    
+
                     if (site == null)
                     {
                         throw new KeyNotFoundException($"Site dengan ID {id} tidak ditemukan");
@@ -907,13 +908,13 @@ namespace Pm.Services
                             "Silakan hapus channel terlebih dahulu."
                         );
                     }
-                    
+
                     _context.SwrSites.Remove(site);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    
+
                     _logger.LogInformation("✅ Site '{Name}' berhasil dihapus", site.Name);
-                    
+
                     await _activityLog.LogAsync(
                         module: "SWR Signal",
                         action: "DELETE",
@@ -936,7 +937,7 @@ namespace Pm.Services
             try
             {
                 _logger.LogInformation("📊 GetChannelsAsync");
-                
+
                 var channels = await _context.SwrChannels
                     .AsNoTracking()
                     .Include(c => c.SwrSite)
@@ -955,7 +956,7 @@ namespace Pm.Services
                     .ToListAsync();
 
                 _logger.LogInformation("✅ GetChannelsAsync completed - {Count} channels found", channels.Count);
-                
+
                 return channels;
             }
             catch (Exception ex)
@@ -972,13 +973,13 @@ namespace Pm.Services
                 _logger.LogInformation("🔄 CREATE Channel - Name: {Name}, User: {UserId}", dto.ChannelName, userId);
 
                 var siteExists = await _context.SwrSites.AnyAsync(s => s.Id == dto.SwrSiteId);
-                if (!siteExists) 
+                if (!siteExists)
                     throw new KeyNotFoundException("Site tidak ditemukan.");
 
                 var exists = await _context.SwrChannels
                     .AnyAsync(c => c.ChannelName == dto.ChannelName.Trim() && c.SwrSiteId == dto.SwrSiteId);
-                
-                if (exists) 
+
+                if (exists)
                     throw new ArgumentException($"Channel '{dto.ChannelName}' sudah ada di site ini.");
 
                 // ✅ UPDATED: Tambahkan ExpectedFpwrMax
@@ -991,7 +992,7 @@ namespace Pm.Services
                 };
 
                 var executionStrategy = _context.Database.CreateExecutionStrategy();
-                
+
                 return await executionStrategy.ExecuteAsync(async () =>
                 {
                     using var transaction = await _context.Database.BeginTransactionAsync();
@@ -999,11 +1000,11 @@ namespace Pm.Services
                     {
                         _context.SwrChannels.Add(channel);
                         await _context.SaveChangesAsync();
-                        
+
                         await _context.Entry(channel).Reference(c => c.SwrSite).LoadAsync();
-                        
+
                         await transaction.CommitAsync();
-                        
+
                         _logger.LogInformation("💾 Channel created successfully - ID: {Id}", channel.Id);
 
                         try
@@ -1058,7 +1059,7 @@ namespace Pm.Services
                     .Include(c => c.SwrSite)
                     .FirstOrDefaultAsync(c => c.Id == dto.Id);
 
-                if (channel == null) 
+                if (channel == null)
                     throw new KeyNotFoundException("Channel tidak ditemukan.");
 
                 var changes = new List<string>();
@@ -1066,13 +1067,13 @@ namespace Pm.Services
                 if (channel.ChannelName != dto.ChannelName.Trim())
                 {
                     var exists = await _context.SwrChannels
-                        .AnyAsync(c => c.ChannelName == dto.ChannelName.Trim() 
-                            && c.SwrSiteId == dto.SwrSiteId 
+                        .AnyAsync(c => c.ChannelName == dto.ChannelName.Trim()
+                            && c.SwrSiteId == dto.SwrSiteId
                             && c.Id != dto.Id);
-                    
+
                     if (exists)
                         throw new ArgumentException($"Channel '{dto.ChannelName}' sudah ada di site ini.");
-                    
+
                     changes.Add($"Nama: '{channel.ChannelName}' → '{dto.ChannelName}'");
                     channel.ChannelName = dto.ChannelName.Trim();
                 }
@@ -1080,9 +1081,9 @@ namespace Pm.Services
                 if (channel.SwrSiteId != dto.SwrSiteId)
                 {
                     var siteExists = await _context.SwrSites.AnyAsync(s => s.Id == dto.SwrSiteId);
-                    if (!siteExists) 
+                    if (!siteExists)
                         throw new KeyNotFoundException("Site tidak ditemukan.");
-                    
+
                     channel.SwrSiteId = dto.SwrSiteId;
                     changes.Add("Site updated");
                 }
@@ -1103,7 +1104,7 @@ namespace Pm.Services
                 if (changes.Count == 0)
                 {
                     _logger.LogInformation("⚠️ No changes detected for Channel ID: {Id}", dto.Id);
-                    
+
                     return new SwrChannelListDto
                     {
                         Id = channel.Id,
@@ -1167,7 +1168,7 @@ namespace Pm.Services
             _logger.LogInformation("🗑️ DELETE Channel - ID: {Id}, User: {UserId}", id, userId);
 
             var strategy = _context.Database.CreateExecutionStrategy();
-            
+
             await strategy.ExecuteAsync(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
@@ -1175,7 +1176,7 @@ namespace Pm.Services
                 {
                     var channel = await _context.SwrChannels
                         .FirstOrDefaultAsync(c => c.Id == id);
-                    
+
                     if (channel == null)
                     {
                         throw new KeyNotFoundException($"Channel dengan ID {id} tidak ditemukan");
@@ -1185,20 +1186,20 @@ namespace Pm.Services
                     var histories = await _context.SwrHistories
                         .Where(h => h.SwrChannelId == id)
                         .ToListAsync();
-                    
+
                     if (histories.Any())
                     {
                         _context.SwrHistories.RemoveRange(histories);
                         _logger.LogInformation("📊 Menghapus {Count} history terkait", histories.Count);
                     }
-                    
+
                     _context.SwrChannels.Remove(channel);
-                    
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    
+
                     _logger.LogInformation("✅ Channel '{Name}' berhasil dihapus dengan {Count} histories", channel.ChannelName, histories.Count);
-                    
+
                     await _activityLog.LogAsync(
                         module: "SWR Signal",
                         action: "DELETE",
@@ -1228,7 +1229,7 @@ namespace Pm.Services
             // Warning log jika melebihi expected
             if (expectedMax.HasValue && fpwr.Value > expectedMax.Value)
             {
-                _logger.LogWarning("⚠️ {Context}: FPWR {Fpwr}W melebihi threshold {Expected}W", 
+                _logger.LogWarning("⚠️ {Context}: FPWR {Fpwr}W melebihi threshold {Expected}W",
                     context, fpwr.Value, expectedMax.Value);
             }
         }
@@ -1305,7 +1306,7 @@ namespace Pm.Services
                 }
 
                 _logger.LogInformation("🔍 Executing query to load {Count} entities...", query.PageSize);
-                
+
                 List<SwrHistory> entities;
                 try
                 {
@@ -1313,23 +1314,23 @@ namespace Pm.Services
                         .Skip((query.Page - 1) * query.PageSize)
                         .Take(query.PageSize)
                         .ToListAsync();
-                    
+
                     _logger.LogInformation("✅ Successfully loaded {Count} entities", entities.Count);
                 }
                 catch (InvalidCastException castEx)
                 {
                     _logger.LogError(castEx, "❌ InvalidCastException detected");
-                    
+
                     _logger.LogWarning("⚠️ Attempting fallback query without navigation properties...");
-                    
+
                     var simpleQuery = _context.SwrHistories
                         .AsNoTracking()
                         .OrderByDescending(h => h.Date)
                         .Skip((query.Page - 1) * query.PageSize)
                         .Take(query.PageSize);
-                    
+
                     entities = await simpleQuery.ToListAsync();
-                    
+
                     foreach (var entity in entities)
                     {
                         await _context.Entry(entity).Reference(h => h.SwrChannel).LoadAsync();
@@ -1338,7 +1339,7 @@ namespace Pm.Services
                             await _context.Entry(entity.SwrChannel).Reference(c => c.SwrSite).LoadAsync();
                         }
                     }
-                    
+
                     _logger.LogInformation("✅ Fallback successful - loaded {Count} entities", entities.Count);
                 }
 
@@ -1393,7 +1394,7 @@ namespace Pm.Services
                 }
 
                 _logger.LogInformation("✅ GetHistoryByIdAsync completed - Found history for Channel: {ChannelName}", h.SwrChannel.ChannelName);
-                
+
                 return new SwrHistoryItemDto
                 {
                     Id = h.Id,
@@ -1418,7 +1419,7 @@ namespace Pm.Services
         public async Task<SwrHistoryItemDto> CreateHistoryAsync(SwrHistoryCreateDto dto, int userId)
         {
             var status = ParseStatus(dto.Status);
-            
+
             // Validasi: Notes wajib jika status bukan Active
             if (status != SwrOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
             {
@@ -1597,7 +1598,7 @@ namespace Pm.Services
             var history = await _context.SwrHistories
                 .Include(h => h.SwrChannel)
                 .FirstOrDefaultAsync(h => h.Id == id);
-            
+
             if (history == null)
             {
                 throw new KeyNotFoundException($"History dengan ID {id} tidak ditemukan");
@@ -1607,9 +1608,9 @@ namespace Pm.Services
             {
                 _context.SwrHistories.Remove(history);
                 await _context.SaveChangesAsync();
-                
+
                 _logger.LogInformation("✅ History ID {Id} berhasil dihapus", id);
-                
+
                 await _activityLog.LogAsync(
                     module: "SWR Signal",
                     action: "DELETE",

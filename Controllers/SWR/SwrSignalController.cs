@@ -29,7 +29,7 @@ namespace Pm.Controllers
         {
             get
             {
-                var claim = User.FindFirst("UserId")?.Value 
+                var claim = User.FindFirst("UserId")?.Value
                            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
                 if (!int.TryParse(claim, out int id))
@@ -102,14 +102,14 @@ namespace Pm.Controllers
             try
             {
                 _logger.LogInformation("📤 ImportPivotExcel endpoint hit!");
-                _logger.LogInformation("📤 File: {FileName}, Size: {Size}", 
+                _logger.LogInformation("📤 File: {FileName}, Size: {Size}",
                     request?.ExcelFile?.FileName, request?.ExcelFile?.Length);
-                
+
                 if (request?.ExcelFile == null || request.ExcelFile.Length == 0)
                 {
                     return ApiResponse.BadRequest("Import", "File tidak boleh kosong");
                 }
-                
+
                 var result = await _service.ImportFromPivotExcelAsync(request.ExcelFile, CurrentUserId);
                 return ApiResponse.Success(result);
             }
@@ -359,14 +359,14 @@ namespace Pm.Controllers
             var validationResults = query.Validate(new ValidationContext(query)).ToList();
             if (validationResults.Any())
             {
-                return ApiResponse.BadRequest("Invalid parameter", 
+                return ApiResponse.BadRequest("Invalid parameter",
                     string.Join("; ", validationResults.Select(v => v.ErrorMessage)));
             }
 
             try
             {
                 var result = await _service.GetHistoriesAsync(query);
-                
+
                 // Kembalikan langsung, ResponseWrapperFilter akan skip wrapping
                 return Ok(result);
             }
