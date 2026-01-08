@@ -35,7 +35,7 @@ builder.Services.AddControllers(options =>
 {
     // ✅ Register ResponseWrapperFilter globally
     options.Filters.Add<ResponseWrapperFilter>();
-    
+
 })
 .AddJsonOptions(options =>
 {
@@ -45,7 +45,7 @@ builder.Services.AddControllers(options =>
 
     // ✅ OPTIONAL: Ignore null values for cleaner response
     options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
-    
+
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
@@ -85,9 +85,9 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     // Priority: Environment Variable > appsettings.json
-    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
+    var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
                         ?? builder.Configuration.GetConnectionString("DefaultConnection");
-    
+
     if (string.IsNullOrEmpty(connectionString))
         throw new InvalidOperationException("Connection string tidak ditemukan.");
 
@@ -116,15 +116,15 @@ builder.WebHost.UseUrls("http://*:5116");
 
 // ===== JWT Authentication =====
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") 
-            ?? jwtSettings["SecretKey"] 
+var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+            ?? jwtSettings["SecretKey"]
             ?? throw new InvalidOperationException("JWT SecretKey tidak ditemukan.");
 
 
-var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER") 
+var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER")
             ?? jwtSettings["Issuer"];
-            
-var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") 
+
+var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE")
             ?? jwtSettings["Audience"];
 
 var key = Encoding.ASCII.GetBytes(secretKey);
@@ -209,8 +209,9 @@ builder.Services.AddCors(options =>
             "http://localhost:3000",
             "http://localhost:5173",
             "https://pmfrontend-git-*.vercel.app",
+            "https://pmdocmkn-web.vercel.app",
             "https://*.vercel.app"
-          
+
         )
         .AllowAnyHeader()
         .AllowAnyMethod()
@@ -226,10 +227,10 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     {
         var logger = context.HttpContext.RequestServices
             .GetRequiredService<ILogger<Program>>();
-        
-        logger.LogWarning("❌ Model validation failed: {@Errors}", 
+
+        logger.LogWarning("❌ Model validation failed: {@Errors}",
             context.ModelState);
-        
+
         return new BadRequestObjectResult(context.ModelState);
     };
 });

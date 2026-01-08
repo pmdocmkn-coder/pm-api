@@ -30,7 +30,7 @@ namespace Pm.Controllers
             get
             {
                 var claim = User.FindFirst("UserId")?.Value
-                           ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
                 if (!int.TryParse(claim, out int id))
                     throw new UnauthorizedAccessException("User ID tidak ditemukan di token.");
