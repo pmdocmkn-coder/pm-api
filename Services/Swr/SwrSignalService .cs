@@ -339,245 +339,234 @@ namespace Pm.Services
         // IMPORT & EXPORT
         // ============================================
 
-        public async Task<SwrImportResultDto> ImportFromPivotExcelAsync(IFormFile file, int userId)
+        // ============================================
+        // IMPORT FROM EXCEL (GROUPED BY SITE FORMAT)
+        // ============================================
+
+        public async Task<SwrImportResultDto> ImportFromExcelAsync(IFormFile file, int userId)
         {
-            _logger.LogInformation("📤 ImportFromPivotExcelAsync - User: {UserId}, File: {FileName}", userId, file?.FileName);
-
             var result = new SwrImportResultDto();
-            var errors = new List<string>();
 
-            if (file == null || file.Length == 0)
-            {
-                errors.Add("File Excel tidak boleh kosong.");
-                result.Errors = errors;
-                result.Message = "Import gagal.";
-                return result;
-            }
-
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (extension != ".xlsx" && extension != ".xls")
-            {
-                errors.Add("Format file harus .xlsx atau .xls");
-                result.Errors = errors;
-                return result;
-            }
-
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-            using var package = new ExcelPackage(file.OpenReadStream());
-            var ws = package.Workbook.Worksheets.FirstOrDefault();
-
-            if (ws == null || ws.Dimension == null)
-            {
-                errors.Add("File Excel kosong atau tidak ada sheet.");
-                result.Errors = errors;
-                return result;
-            }
-
-            var rowCount = ws.Dimension.Rows;
-            var colCount = ws.Dimension.Columns;
-
-            if (rowCount < 2 || colCount < 3)
-            {
-                errors.Add("Format Excel tidak sesuai. Minimal harus ada kolom No, Channel, dan data bulan.");
-                result.Errors = errors;
-                return result;
-            }
-
-            // Parse header untuk ambil bulan-bulan
-            var monthColumns = new Dictionary<int, DateTime>();
-
-            for (int col = 3; col <= colCount; col++)
-            {
-                var headerCell = ws.Cells[1, col].Value;
-
-                if (headerCell == null) continue;
-
-                DateTime monthDate;
-
-                if (headerCell is DateTime dateTimeValue)
-                {
-                    monthDate = new DateTime(dateTimeValue.Year, dateTimeValue.Month, 15);
-                    monthColumns[col] = monthDate;
-                    _logger.LogInformation("📅 Found DateTime column at col {Col} -> {Date}", col, monthDate);
-                }
-                else if (headerCell is double doubleValue)
-                {
-                    var excelDate = DateTime.FromOADate(doubleValue);
-                    monthDate = new DateTime(excelDate.Year, excelDate.Month, 15);
-                    monthColumns[col] = monthDate;
-                    _logger.LogInformation("📅 Found numeric date at col {Col} -> {Date}", col, monthDate);
-                }
-                else if (headerCell is string stringValue && !string.IsNullOrWhiteSpace(stringValue))
-                {
-                    if (DateTime.TryParseExact(stringValue.Trim(),
-                        new[] { "MMM-yy", "MMM-yyyy", "MMMM-yy", "M/d/yyyy", "MM/dd/yyyy" },
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.None,
-                        out monthDate))
-                    {
-                        monthColumns[col] = new DateTime(monthDate.Year, monthDate.Month, 15);
-                        _logger.LogInformation("📅 Found string date at col {Col}: '{Header}' -> {Date}",
-                            col, stringValue, monthDate);
-                    }
-                }
-            }
-
-            if (monthColumns.Count == 0)
-            {
-                errors.Add("Tidak ditemukan kolom bulan yang valid. Pastikan baris 1 berisi tanggal bulan.");
-                result.Errors = errors;
-                return result;
-            }
-
-            _logger.LogInformation("✅ Found {Count} month columns", monthColumns.Count);
-
-            // Load all channels untuk matching
-            var channelsDict = await _context.SwrChannels
-                .AsNoTracking()
-                .Include(c => c.SwrSite)
-                .ToDictionaryAsync(c => c.ChannelName.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
-
-            var histories = new List<SwrHistory>();
-            int totalDataPoints = 0;
-
-            // Process each row (channel)
-            for (int row = 2; row <= rowCount; row++)
-            {
-                var channelNameCell = ws.Cells[row, 2].GetValue<string>()?.Trim();
-
-                if (string.IsNullOrWhiteSpace(channelNameCell))
-                {
-                    _logger.LogWarning("⚠️ Row {Row}: Empty channel name, skipping", row);
-                    continue;
-                }
-
-                if (!channelsDict.TryGetValue(channelNameCell, out var channel))
-                {
-                    errors.Add($"Baris {row}: Channel '{channelNameCell}' tidak ditemukan di database.");
-                    result.FailedRows++;
-                    continue;
-                }
-
-                // Process each month column for this channel
-                // ✅ UPDATED: Both Trunking and Conventional now use VSWR + FPWR pairs
-                foreach (var (colIndex, monthDate) in monthColumns)
-                {
-                    totalDataPoints++;
-
-                    // FPWR should be in current column, VSWR in next column
-                    var fpwrValue = ws.Cells[row, colIndex].GetValue<double?>();
-                    var vswrValue = ws.Cells[row, colIndex + 1].GetValue<double?>();
-
-                    decimal? fpwr = null;
-                    decimal? vswr = null;
-
-                    if (fpwrValue.HasValue) fpwr = (decimal)fpwrValue.Value;
-                    if (vswrValue.HasValue) vswr = (decimal)vswrValue.Value;
-
-                    // Skip if no VSWR data
-                    if (!vswr.HasValue || vswr.Value == 0)
-                    {
-                        _logger.LogDebug("⚠️ Row {Row}, Col {Col}: Empty VSWR, skipping", row, colIndex);
-                        continue;
-                    }
-
-                    // Validate VSWR range
-                    if (vswr.Value < 1.0m || vswr.Value > 3.0m)
-                    {
-                        errors.Add($"Baris {row}, Kolom {colIndex}: VSWR {vswr.Value} di luar range (1.0-3.0)");
-                        result.FailedRows++;
-                        continue;
-                    }
-
-                    // Validate FPWR range if provided
-                    if (fpwr.HasValue && (fpwr.Value < 0 || fpwr.Value > 200))
-                    {
-                        errors.Add($"Baris {row}, Kolom {colIndex}: FPWR {fpwr.Value} di luar range (0-200)");
-                        result.FailedRows++;
-                        continue;
-                    }
-
-                    // Check duplicate
-                    var duplicate = await _context.SwrHistories
-                        .AnyAsync(h => h.SwrChannelId == channel.Id && h.Date.Date == monthDate.Date);
-
-                    if (duplicate)
-                    {
-                        _logger.LogDebug("⚠️ Duplicate found: {Channel} on {Date}, skipping",
-                            channelNameCell, monthDate.ToString("yyyy-MM-dd"));
-                        result.FailedRows++;
-                        continue;
-                    }
-
-                    // Add to list
-                    histories.Add(new SwrHistory
-                    {
-                        SwrChannelId = channel.Id,
-                        Date = monthDate.Date,
-                        Fpwr = fpwr, // Can be null
-                        Vswr = vswr.Value,
-                        Status = SwrOperationalStatus.Active
-                    });
-
-                    result.SuccessfulInserts++;
-                }
-            }
-
-            result.TotalRowsProcessed = totalDataPoints;
-
-            // Save to database
-            if (histories.Any())
-            {
-                _logger.LogInformation("💾 Saving {Count} history records from pivot...", histories.Count);
-
-                var executionStrategy = _context.Database.CreateExecutionStrategy();
-
-                await executionStrategy.ExecuteAsync(async () =>
-                {
-                    using var transaction = await _context.Database.BeginTransactionAsync();
-                    try
-                    {
-                        _context.SwrHistories.AddRange(histories);
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-
-                        _logger.LogInformation("✅ Successfully saved {Count} history records", histories.Count);
-                    }
-                    catch (Exception ex)
-                    {
-                        await transaction.RollbackAsync();
-                        _logger.LogError(ex, "❌ Failed to save history records");
-                        throw;
-                    }
-                });
-            }
-
-            result.Errors = errors.Take(50).ToList();
-            if (errors.Count > 50) result.Errors.Add("... dan lebih banyak error.");
-
-            result.Message = result.FailedRows == 0
-                ? $"Import berhasil! {result.SuccessfulInserts} data points tersimpan."
-                : $"Import selesai dengan {result.FailedRows} data points gagal dari total {result.TotalRowsProcessed}.";
-
-            // Activity Log
             try
             {
-                await _activityLog.LogAsync(
-                    module: "SWR Signal",
-                    entityId: null,
-                    action: result.FailedRows == 0 ? "ImportPivotSuccess" : "ImportPivotPartial",
-                    userId: userId,
-                    description: result.Message
-                );
-            }
-            catch (Exception logEx)
-            {
-                _logger.LogWarning(logEx, "⚠️ ActivityLog failed for pivot import");
-            }
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
-            return result;
+                using var stream = new MemoryStream();
+                await file.CopyToAsync(stream);
+                using var package = new ExcelPackage(stream);
+                var ws = package.Workbook.Worksheets[0];
+
+                if (ws == null || ws.Dimension == null)
+                {
+                    result.Errors.Add("Excel file is empty or invalid");
+                    return result;
+                }
+
+                int currentRow = 1;
+                int maxRow = ws.Dimension.End.Row;
+                string? currentSiteName = null;
+                var monthColumns = new Dictionary<string, (int fpwrCol, int vswrCol)>();
+
+                while (currentRow <= maxRow)
+                {
+                    // ✅ DETECT SITE HEADER (merged cell with site name)
+                    var siteHeaderCell = ws.Cells[currentRow, 1];
+                    if (siteHeaderCell.Merge && !string.IsNullOrWhiteSpace(siteHeaderCell.Text))
+                    {
+                        currentSiteName = siteHeaderCell.Text.Trim();
+                        _logger.LogInformation($"📍 Found site: {currentSiteName}");
+                        currentRow++;
+
+                        // ✅ PARSE MONTH HEADERS (Row after site header)
+                        monthColumns.Clear();
+                        var monthHeaderRow = currentRow;
+
+                        for (int col = 3; col <= ws.Dimension.End.Column; col += 2)
+                        {
+                            var monthCell = ws.Cells[monthHeaderRow, col].Text?.Trim();
+                            if (!string.IsNullOrEmpty(monthCell))
+                            {
+                                // Expected format: "Jan-25", "Feb-25", etc.
+                                monthColumns[monthCell] = (fpwrCol: col, vswrCol: col + 1);
+                                _logger.LogInformation($"  📅 Month: {monthCell} -> FPWR: Col {col}, VSWR: Col {col + 1}");
+                            }
+                        }
+
+                        currentRow += 2; // Skip month header + sub-header (FPWR/VSWR)
+                        continue;
+                    }
+
+                    // ✅ CHECK IF THIS IS AN EMPTY ROW (skip)
+                    var noCell = ws.Cells[currentRow, 1].Text?.Trim();
+                    if (string.IsNullOrEmpty(noCell))
+                    {
+                        currentRow++;
+                        continue;
+                    }
+
+                    // ✅ PARSE DATA ROW
+                    if (currentSiteName != null && int.TryParse(noCell, out _))
+                    {
+                        var channelName = ws.Cells[currentRow, 2].Text?.Trim();
+
+                        if (string.IsNullOrEmpty(channelName))
+                        {
+                            currentRow++;
+                            continue;
+                        }
+
+                        _logger.LogInformation($"  📝 Processing: {currentSiteName} - {channelName}");
+
+                        // Find or create site
+                        var site = await _context.SwrSites
+                            .FirstOrDefaultAsync(s => s.Name == currentSiteName);
+
+                        if (site == null)
+                        {
+                            result.Errors.Add($"Site not found: {currentSiteName}. Please create the site first.");
+                            currentRow++;
+                            continue;
+                        }
+
+                        // Find or create channel
+                        var channel = await _context.SwrChannels
+                            .FirstOrDefaultAsync(c => c.ChannelName == channelName && c.SwrSiteId == site.Id);
+
+                        if (channel == null)
+                        {
+                            channel = new SwrChannel
+                            {
+                                ChannelName = channelName,
+                                SwrSiteId = site.Id,
+                                ExpectedSwrMax = 1.5m,
+                                ExpectedPwrMax = 100m
+                            };
+                            _context.SwrChannels.Add(channel);
+                            await _context.SaveChangesAsync();
+                            result.ChannelsCreated++;
+                        }
+
+                        // ✅ PROCESS EACH MONTH
+                        foreach (var (monthKey, cols) in monthColumns)
+                        {
+                            try
+                            {
+                                // Parse month-year from key (e.g., "Jan-25" -> January 2025)
+                                var parts = monthKey.Split('-');
+                                if (parts.Length != 2) continue;
+
+                                var monthName = parts[0];
+                                var yearShort = parts[1];
+                                var year = 2000 + int.Parse(yearShort);
+                                var monthNumber = DateTime.ParseExact(monthName, "MMM", CultureInfo.InvariantCulture).Month;
+
+                                // Get FPWR and VSWR values
+                                var fpwrText = ws.Cells[currentRow, cols.fpwrCol].Text?.Trim();
+                                var vswrText = ws.Cells[currentRow, cols.vswrCol].Text?.Trim();
+
+                                if (string.IsNullOrEmpty(fpwrText) && string.IsNullOrEmpty(vswrText))
+                                    continue;
+
+                                decimal? fpwr = null;
+                                decimal? vswr = null;
+
+                                if (!string.IsNullOrEmpty(fpwrText) && decimal.TryParse(fpwrText, out var fpwrValue))
+                                    fpwr = fpwrValue;
+
+                                if (!string.IsNullOrEmpty(vswrText) && decimal.TryParse(vswrText, out var vswrValue))
+                                    vswr = vswrValue;
+
+                                if (fpwr == null && vswr == null)
+                                    continue;
+
+                                // ✅ VALIDATION
+                                if (vswr.HasValue && (vswr.Value < 1.0m || vswr.Value > 3.0m))
+                                {
+                                    result.Errors.Add($"Row {currentRow}, {monthKey}: VSWR {vswr.Value} out of range (1.0-3.0)");
+                                    continue;
+                                }
+
+                                if (fpwr.HasValue && (fpwr.Value < 0 || fpwr.Value > 200))
+                                {
+                                    result.Errors.Add($"Row {currentRow}, {monthKey}: FPWR {fpwr.Value} out of range (0-200)");
+                                    continue;
+                                }
+
+                                // Find or create history record
+                                var recordDate = new DateTime(year, monthNumber, 1);
+                                var history = await _context.SwrHistories
+                                    .FirstOrDefaultAsync(h => h.SwrChannelId == channel.Id && h.Date == recordDate);
+
+                                if (history == null)
+                                {
+                                    history = new SwrHistory
+                                    {
+                                        SwrChannelId = channel.Id,
+                                        Date = recordDate,
+                                        Fpwr = fpwr,
+                                        Vswr = vswr ?? 1.0m,
+                                        Status = SwrOperationalStatus.Active,
+                                        CreatedAt = DateTime.UtcNow
+                                    };
+                                    _context.SwrHistories.Add(history);
+                                    result.RecordsCreated++;
+                                }
+                                else
+                                {
+                                    if (fpwr.HasValue)
+                                        history.Fpwr = fpwr;
+
+                                    if (vswr.HasValue)
+                                        history.Vswr = vswr.Value;
+
+                                    // No UpdatedAt field in SwrHistory model
+                                    result.RecordsUpdated++;
+                                }
+
+                                _logger.LogInformation($"    ✅ {monthKey}: FPWR={fpwr}, VSWR={vswr}");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning($"    ⚠️ Failed to parse {monthKey}: {ex.Message}");
+                                result.Errors.Add($"Row {currentRow}, {monthKey}: {ex.Message}");
+                            }
+                        }
+
+                        await _context.SaveChangesAsync();
+                    }
+
+                    currentRow++;
+                }
+
+                // Activity log
+                try
+                {
+                    await _activityLog.LogAsync(
+                        module: "SWR Signal",
+                        entityId: null,
+                        action: "ImportExcel",
+                        userId: userId,
+                        description: $"Import Excel: {result.RecordsCreated} created, {result.RecordsUpdated} updated, {result.ChannelsCreated} channels created"
+                    );
+                }
+                catch (Exception logEx)
+                {
+                    _logger.LogWarning(logEx, "⚠️ ActivityLog failed for import");
+                }
+
+                result.Success = result.Errors.Count == 0;
+                _logger.LogInformation($"✅ Import completed: {result.RecordsCreated} created, {result.RecordsUpdated} updated, {result.ChannelsCreated} channels created, {result.Errors.Count} errors");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error in ImportFromExcelAsync");
+                result.Errors.Add($"Import failed: {ex.Message}");
+                return result;
+            }
         }
+
 
         public async Task<byte[]> ExportYearlyToExcelAsync(int year, string? siteName = null, int? userId = null)
         {
@@ -591,68 +580,155 @@ namespace Pm.Services
                 using var package = new ExcelPackage();
                 var ws = package.Workbook.Worksheets.Add($"SWR History {year}");
 
-                // Header
-                ws.Cells[1, 1].Value = "No";
-                ws.Cells[1, 2].Value = "Site";
-                ws.Cells[1, 3].Value = "Channel";
-                int col = 4;
-                for (int m = 1; m <= 12; m++)
+                int currentRow = 1;
+
+                // ✅ Group data by Site
+                var groupedBySite = pivot.GroupBy(x => x.SiteName).OrderBy(g => g.Key);
+
+                foreach (var siteGroup in groupedBySite)
                 {
-                    var monthName = new DateTime(year, m, 1).ToString("MMM", CultureInfo.InvariantCulture);
-                    ws.Cells[1, col].Value = $"{monthName} FPWR";
-                    ws.Cells[1, col + 1].Value = $"{monthName} VSWR";
-                    col += 2;
-                }
+                    string currentSiteName = siteGroup.Key;
 
-                using (var range = ws.Cells[1, 1, 1, col - 1])
-                {
-                    range.Style.Font.Bold = true;
-                    range.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    range.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(0, 102, 204));
-                    range.Style.Font.Color.SetColor(Color.White);
-                    range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                }
+                    // ✅ SITE HEADER - Row 1: Site Name merged across all columns
+                    int totalCols = 2 + (12 * 2); // No, Name Channel + 12 months * 2 cols
+                    ws.Cells[currentRow, 1, currentRow, totalCols].Merge = true;
+                    ws.Cells[currentRow, 1].Value = currentSiteName;
+                    ws.Cells[currentRow, 1].Style.Font.Bold = true;
+                    ws.Cells[currentRow, 1].Style.Font.Size = 14;
+                    ws.Cells[currentRow, 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
+                    ws.Cells[currentRow, 1].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(70, 130, 180)); // Steel Blue
+                    ws.Cells[currentRow, 1].Style.Font.Color.SetColor(Color.White);
+                    ws.Cells[currentRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                    ws.Cells[currentRow, 1].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+                    currentRow++;
 
-                int currentRow = 2;
-                int no = 1;
+                    // ✅ MONTH HEADER - Row 2: Jan-25, Feb-25, etc.
+                    ws.Cells[currentRow, 1].Value = "No";
+                    ws.Cells[currentRow, 2].Value = "Name Channel";
+                    ws.Cells[currentRow, 1, currentRow + 1, 1].Merge = true; // Merge No vertically
+                    ws.Cells[currentRow, 2, currentRow + 1, 2].Merge = true; // Merge Name Channel vertically
 
-                foreach (var item in pivot)
-                {
-                    ws.Cells[currentRow, 1].Value = no++;
-                    ws.Cells[currentRow, 2].Value = item.SiteName;
-                    ws.Cells[currentRow, 3].Value = item.ChannelName;
-
-                    col = 4;
+                    int col = 3;
                     for (int m = 1; m <= 12; m++)
                     {
-                        var monthKey = new DateTime(year, m, 1).ToString("MMM-yy", CultureInfo.InvariantCulture);
+                        var monthName = new DateTime(year, m, 1).ToString("MMM", CultureInfo.InvariantCulture);
+                        var monthYear = $"{monthName}-{year.ToString().Substring(2)}";
 
-                        if (item.MonthlyFpwr.TryGetValue(monthKey, out decimal? fpwr) && fpwr.HasValue)
-                        {
-                            ws.Cells[currentRow, col].Value = fpwr.Value;
-                        }
-
-                        if (item.MonthlyVswr.TryGetValue(monthKey, out decimal? vswr) && vswr.HasValue)
-                        {
-                            ws.Cells[currentRow, col + 1].Value = vswr.Value;
-
-                            // Color coding for VSWR
-                            var cell = ws.Cells[currentRow, col + 1];
-                            if (vswr.Value >= item.ExpectedSwrMax)
-                            {
-                                cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                                cell.Style.Fill.BackgroundColor.SetColor(Color.Orange);
-                            }
-                        }
+                        ws.Cells[currentRow, col, currentRow, col + 1].Merge = true;
+                        ws.Cells[currentRow, col].Value = monthYear;
+                        ws.Cells[currentRow, col].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
 
                         col += 2;
                     }
 
+                    // Style month header row
+                    using (var range = ws.Cells[currentRow, 1, currentRow, col - 1])
+                    {
+                        range.Style.Font.Bold = true;
+                        range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        range.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(100, 149, 237)); // Cornflower Blue
+                        range.Style.Font.Color.SetColor(Color.White);
+                        range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                        range.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+                    }
+
+                    currentRow++;
+
+                    // ✅ SUB-HEADER - Row 3: FPWR, VSWR
+                    col = 3;
+                    for (int m = 1; m <= 12; m++)
+                    {
+                        ws.Cells[currentRow, col].Value = "FPWR";
+                        ws.Cells[currentRow, col + 1].Value = "VSWR";
+                        col += 2;
+                    }
+
+                    // Style sub-header row
+                    using (var range = ws.Cells[currentRow, 1, currentRow, col - 1])
+                    {
+                        range.Style.Font.Bold = true;
+                        range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        range.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(135, 206, 250)); // Light Sky Blue
+                        range.Style.Font.Color.SetColor(Color.Black);
+                        range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                    }
+
+                    currentRow++;
+
+                    // ✅ DATA ROWS for this site
+                    int no = 1;
+                    foreach (var item in siteGroup)
+                    {
+                        ws.Cells[currentRow, 1].Value = no++;
+                        ws.Cells[currentRow, 2].Value = item.ChannelName;
+
+                        col = 3;
+                        for (int m = 1; m <= 12; m++)
+                        {
+                            var monthKey = new DateTime(year, m, 1).ToString("MMM-yy", CultureInfo.InvariantCulture);
+
+                            // FPWR Column
+                            if (item.MonthlyFpwr.TryGetValue(monthKey, out decimal? fpwr) && fpwr.HasValue)
+                            {
+                                ws.Cells[currentRow, col].Value = fpwr.Value;
+                                ws.Cells[currentRow, col].Style.Numberformat.Format = "0";
+                            }
+
+                            // VSWR Column with color coding
+                            if (item.MonthlyVswr.TryGetValue(monthKey, out decimal? vswr) && vswr.HasValue)
+                            {
+                                var cell = ws.Cells[currentRow, col + 1];
+                                cell.Value = vswr.Value;
+                                cell.Style.Numberformat.Format = "0.0";
+
+                                // Color coding
+                                cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                                if (vswr.Value >= 2.0m)
+                                {
+                                    cell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 99, 71)); // Red
+                                    cell.Style.Font.Color.SetColor(Color.White);
+                                }
+                                else if (vswr.Value >= item.ExpectedSwrMax)
+                                {
+                                    cell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 165, 0)); // Orange
+                                }
+                                else
+                                {
+                                    cell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(144, 238, 144)); // Light Green
+                                }
+                            }
+
+                            col += 2;
+                        }
+
+                        // Borders
+                        using (var range = ws.Cells[currentRow, 1, currentRow, col - 1])
+                        {
+                            range.Style.Border.Top.Style = ExcelBorderStyle.Thin;
+                            range.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
+                            range.Style.Border.Left.Style = ExcelBorderStyle.Thin;
+                            range.Style.Border.Right.Style = ExcelBorderStyle.Thin;
+                        }
+
+                        currentRow++;
+                    }
+
+                    // ✅ Add spacing between sites (1 empty row)
                     currentRow++;
                 }
 
+                // Auto-fit columns
                 ws.Cells.AutoFitColumns();
-                ws.View.FreezePanes(2, 1);
+
+                // Set minimum width
+                for (int c = 3; c <= 26; c++)
+                {
+                    if (ws.Column(c).Width < 7)
+                        ws.Column(c).Width = 7;
+                }
+
+                // Freeze first 2 columns
+                ws.View.FreezePanes(1, 3);
 
                 if (userId.HasValue)
                 {

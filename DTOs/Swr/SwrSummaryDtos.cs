@@ -62,12 +62,55 @@ namespace Pm.DTOs
         public Microsoft.AspNetCore.Http.IFormFile ExcelFile { get; set; } = null!;
     }
 
+    /// <summary>
+    /// ✅ UPDATED: More detailed import result tracking
+    /// </summary>
     public class SwrImportResultDto
     {
-        public int TotalRowsProcessed { get; set; }
-        public int SuccessfulInserts { get; set; }
-        public int FailedRows { get; set; }
+        /// <summary>
+        /// Overall success status of the import operation
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// Number of new signal records created
+        /// </summary>
+        public int RecordsCreated { get; set; }
+
+        /// <summary>
+        /// Number of existing signal records updated
+        /// </summary>
+        public int RecordsUpdated { get; set; }
+
+        /// <summary>
+        /// Number of new channels auto-created during import
+        /// </summary>
+        public int ChannelsCreated { get; set; }
+
+        /// <summary>
+        /// Total rows processed (for reference)
+        /// </summary>
+        public int TotalRowsProcessed => RecordsCreated + RecordsUpdated;
+
+        /// <summary>
+        /// List of error messages encountered during import
+        /// </summary>
         public List<string> Errors { get; set; } = new();
-        public string Message { get; set; } = null!;
+
+        /// <summary>
+        /// Summary message for display
+        /// </summary>
+        public string Message => Success
+            ? $"Import successful: {RecordsCreated} created, {RecordsUpdated} updated, {ChannelsCreated} channels auto-created"
+            : $"Import completed with errors: {RecordsCreated} created, {RecordsUpdated} updated, {Errors.Count} errors";
+    }
+
+    /// <summary>
+    /// DTO for export configuration
+    /// </summary>
+    public class SwrExportRequestDto
+    {
+        public int Year { get; set; }
+        public string? SiteName { get; set; }
     }
 }

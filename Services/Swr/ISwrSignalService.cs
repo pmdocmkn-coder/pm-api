@@ -14,7 +14,7 @@ namespace Pm.Services
         Task<List<SwrYearlyPivotDto>> GetYearlyPivotAsync(int year, string? siteName = null);
 
         // Import & Export
-        Task<SwrImportResultDto> ImportFromPivotExcelAsync(IFormFile file, int userId);
+        Task<SwrImportResultDto> ImportFromExcelAsync(IFormFile file, int userId);
         Task<byte[]> ExportYearlyToExcelAsync(int year, string? siteName = null, int? userId = null);
 
         // CRUD Site

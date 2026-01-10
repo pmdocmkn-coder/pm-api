@@ -110,7 +110,7 @@ namespace Pm.Controllers
                     return ApiResponse.BadRequest("Import", "File tidak boleh kosong");
                 }
 
-                var result = await _service.ImportFromPivotExcelAsync(request.ExcelFile, CurrentUserId);
+                var result = await _service.ImportFromExcelAsync(request.ExcelFile, CurrentUserId);
                 return ApiResponse.Success(result);
             }
             catch (Exception ex)
