@@ -799,9 +799,6 @@ namespace Pm.Services
             {
                 _logger.LogInformation("🔄 CREATE Site - Name: {Name}, User: {UserId}", dto.Name, userId);
 
-                var exists = await _context.SwrSites.AnyAsync(s => s.Name == dto.Name.Trim());
-                if (exists) throw new ArgumentException("Nama site sudah ada.");
-
                 var site = new SwrSite
                 {
                     Name = dto.Name.Trim(),

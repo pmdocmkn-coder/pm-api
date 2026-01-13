@@ -8,7 +8,7 @@ namespace Pm.Enums
 
     public enum SwrOperationalStatus
     {
-        Active,
+        Active ,
         Dismantled,
         Removed,
         Obstacle
