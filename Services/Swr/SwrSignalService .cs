@@ -1505,8 +1505,8 @@ namespace Pm.Services
                 ?? throw new KeyNotFoundException($"Channel dengan ID {dto.SwrChannelId} tidak ditemukan");
 
             // Validasi VSWR
-            if (dto.Vswr < 1.0m || dto.Vswr > 3.0m)
-                throw new ArgumentException("VSWR harus antara 1.0 hingga 3.0");
+            if (dto.Vswr < 1.0m || dto.Vswr > 4.0m)
+                throw new ArgumentException("VSWR harus antara 1.0 hingga 4.0");
 
             // Validasi FPWR untuk Trunking
             if (channel.SwrSite.Type == SwrSiteType.Trunking && dto.Fpwr.HasValue)
