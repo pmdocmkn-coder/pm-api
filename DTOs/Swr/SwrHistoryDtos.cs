@@ -16,10 +16,10 @@ namespace Pm.DTOs
         public decimal? Fpwr { get; set; }
         public decimal Vswr { get; set; }
         public string? Notes { get; set; }
-        
+
         public SwrOperationalStatus Status { get; set; } = SwrOperationalStatus.Active;
         public string StatusString => Status.ToString();
-        
+
         public int No { get; set; }
 
         public static void ApplyListNumbers(List<SwrHistoryItemDto> items, int startIndex)
@@ -35,20 +35,20 @@ namespace Pm.DTOs
     {
         [Required(ErrorMessage = "Channel ID wajib diisi")]
         public int SwrChannelId { get; set; }
-        
+
         [Required(ErrorMessage = "Tanggal wajib diisi")]
         public DateTime Date { get; set; }
-        
+
         // FPWR optional (hanya untuk Trunking)
         [Range(0, 200, ErrorMessage = "FPWR harus antara 0-200")]
         public decimal? Fpwr { get; set; }
-        
+
         [Required(ErrorMessage = "VSWR wajib diisi")]
-        [Range(1.0, 3.0, ErrorMessage = "VSWR harus antara 1.0-3.0")]
+        [Range(1.0, 4.0, ErrorMessage = "VSWR harus antara 1.0-4.0")]
         public decimal Vswr { get; set; }
-        
+
         public string? Notes { get; set; }
-        
+
         public string? Status { get; set; }
     }
 
@@ -56,13 +56,13 @@ namespace Pm.DTOs
     {
         [Range(0, 200, ErrorMessage = "FPWR harus antara 0-200")]
         public decimal? Fpwr { get; set; }
-        
+
         [Required(ErrorMessage = "VSWR wajib diisi")]
-        [Range(1.0, 3.0, ErrorMessage = "VSWR harus antara 1.0-3.0")]
+        [Range(1.0, 4.0, ErrorMessage = "VSWR harus antara 1.0-4.0")]
         public decimal Vswr { get; set; }
-        
+
         public string? Notes { get; set; }
-        
+
         public string? Status { get; set; }
     }
 

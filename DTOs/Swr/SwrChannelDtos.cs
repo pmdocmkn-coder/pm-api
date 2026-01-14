@@ -22,14 +22,14 @@ namespace Pm.DTOs
         [Required(ErrorMessage = "Site ID wajib diisi")]
         public int SwrSiteId { get; set; }
 
-        [Range(1.0, 3.0, ErrorMessage = "Expected SWR Max harus antara 1.0 - 3.0")]
+        [Range(1.0, 4.0, ErrorMessage = "Expected SWR Max harus antara 1.0 - 4.0")]
         public decimal ExpectedSwrMax { get; set; } = 1.5m;
 
         [Range(0, 200, ErrorMessage = "Expected PWR Max harus antara 0 - 200")]
         public decimal? ExpectedPwrMax { get; set; } = 100m;
 
 
-        
+
     }
 
     public class SwrChannelUpdateDto
@@ -44,7 +44,7 @@ namespace Pm.DTOs
         [Required(ErrorMessage = "Site ID wajib diisi")]
         public int SwrSiteId { get; set; }
 
-        [Range(1.0, 3.0, ErrorMessage = "Expected SWR Max harus antara 1.0 - 3.0")]
+        [Range(1.0, 4.0, ErrorMessage = "Expected SWR Max harus antara 1.0 - 4.0")]
         public decimal ExpectedSwrMax { get; set; }
 
         [Range(0, 200, ErrorMessage = "Expected PWR Max harus antara 0 - 200")]

@@ -480,9 +480,9 @@ namespace Pm.Services
                                     continue;
 
                                 // ✅ VALIDATION
-                                if (vswr.HasValue && (vswr.Value < 1.0m || vswr.Value > 3.0m))
+                                if (vswr.HasValue && (vswr.Value < 1.0m || vswr.Value > 4.0m))
                                 {
-                                    result.Errors.Add($"Row {currentRow}, {monthKey}: VSWR {vswr.Value} out of range (1.0-3.0)");
+                                    result.Errors.Add($"Row {currentRow}, {monthKey}: VSWR {vswr.Value} out of range (1.0-4.0)");
                                     continue;
                                 }
 
