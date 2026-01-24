@@ -1493,35 +1493,28 @@ namespace Pm.Services
         {
             var status = ParseStatus(dto.Status);
 
-            // Validasi: Notes wajib jika status bukan Active
-            if (status != SwrOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
-            {
-                throw new ArgumentException("Catatan wajib diisi untuk status non-Active");
-            }
+            // HAPUS validasi wajib untuk notes jika status non-Active
+            // Biarkan notes opsional untuk semua status
 
             var channel = await _context.SwrChannels
                 .Include(c => c.SwrSite)
                 .FirstOrDefaultAsync(c => c.Id == dto.SwrChannelId)
                 ?? throw new KeyNotFoundException($"Channel dengan ID {dto.SwrChannelId} tidak ditemukan");
 
-            // Validasi VSWR
-            if (dto.Vswr < 1.0m || dto.Vswr > 4.0m)
+            // Validasi HANYA JIKA ada nilai (optional validation)
+            if (dto.Vswr.HasValue && (dto.Vswr.Value < 1.0m || dto.Vswr.Value > 4.0m))
                 throw new ArgumentException("VSWR harus antara 1.0 hingga 4.0");
 
-            // Validasi FPWR untuk Trunking
-            if (channel.SwrSite.Type == SwrSiteType.Trunking && dto.Fpwr.HasValue)
-            {
-                if (dto.Fpwr.Value < 0 || dto.Fpwr.Value > 200)
-                    throw new ArgumentException("FPWR harus antara 0 hingga 200");
-            }
+            if (dto.Fpwr.HasValue && (dto.Fpwr.Value < 0 || dto.Fpwr.Value > 200))
+                throw new ArgumentException("FPWR harus antara 0 hingga 200");
 
             var history = new SwrHistory
             {
                 SwrChannelId = dto.SwrChannelId,
                 Date = dto.Date.Date,
-                Fpwr = dto.Fpwr,
-                Vswr = dto.Vswr,
-                Notes = dto.Notes,
+                Fpwr = dto.Fpwr, // Bisa null
+                Vswr = dto.Vswr ?? 0, // Atau null jika diizinkan di model
+                Notes = dto.Notes, // Bisa null
                 Status = status,
                 CreatedAt = DateTime.UtcNow
             };
@@ -1567,33 +1560,22 @@ namespace Pm.Services
 
                 var status = ParseStatus(dto.Status);
 
-                // Validasi: Notes wajib jika status bukan Active
-                if (status != SwrOperationalStatus.Active && string.IsNullOrWhiteSpace(dto.Notes))
-                {
-                    throw new ArgumentException("Catatan wajib diisi untuk status non-Active");
-                }
-
-                // Validasi VSWR
-                if (dto.Vswr < 1.0m || dto.Vswr > 4.0m)
-                    throw new ArgumentException("VSWR harus antara 1.0 hingga 4.0");
-
-                // Validasi FPWR untuk Trunking
-                if (history.SwrChannel.SwrSite.Type == SwrSiteType.Trunking && dto.Fpwr.HasValue)
-                {
-                    if (dto.Fpwr.Value < 0 || dto.Fpwr.Value > 200)
-                        throw new ArgumentException("FPWR harus antara 0 hingga 200");
-                }
-
                 var changes = new List<string>();
 
-                if (history.Fpwr != dto.Fpwr)
+                // UPDATE hanya jika ada value (bisa null)
+                if (dto.Fpwr != history.Fpwr)
                 {
                     changes.Add($"Fpwr: {history.Fpwr?.ToString() ?? "null"} → {dto.Fpwr?.ToString() ?? "null"}");
                     history.Fpwr = dto.Fpwr;
                 }
 
-                if (history.Vswr != dto.Vswr)
+                // UPDATE VSWR hanya jika ada value
+                if (dto.Vswr != history.Vswr)
                 {
+                    // Validasi hanya jika ada nilai
+                    if (dto.Vswr < 1.0m || dto.Vswr > 4.0m)
+                        throw new ArgumentException("VSWR harus antara 1.0 hingga 4.0");
+
                     changes.Add($"Vswr: {history.Vswr} → {dto.Vswr}");
                     history.Vswr = dto.Vswr;
                 }
@@ -1604,7 +1586,7 @@ namespace Pm.Services
                     history.Notes = dto.Notes;
                 }
 
-                if (history.Status != status)
+                if (dto.Status != null && history.Status != status)
                 {
                     changes.Add($"Status: {history.Status} → {status}");
                     history.Status = status;

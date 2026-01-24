@@ -31,6 +31,7 @@ namespace Pm.DTOs
         }
     }
 
+    // Di file SwrHistoryCreateDto (atau update service)
     public class SwrHistoryCreateDto
     {
         [Required(ErrorMessage = "Channel ID wajib diisi")]
@@ -39,17 +40,17 @@ namespace Pm.DTOs
         [Required(ErrorMessage = "Tanggal wajib diisi")]
         public DateTime Date { get; set; }
 
-        // FPWR optional (hanya untuk Trunking)
+        // FPWR optional - TIDAK WAJIB
         [Range(0, 200, ErrorMessage = "FPWR harus antara 0-200")]
         public decimal? Fpwr { get; set; }
 
-        [Required(ErrorMessage = "VSWR wajib diisi")]
+        // VSWR optional - TIDAK WAJIB
         [Range(1.0, 4.0, ErrorMessage = "VSWR harus antara 1.0-4.0")]
-        public decimal Vswr { get; set; }
+        public decimal? Vswr { get; set; } // Ubah dari decimal ke decimal?
 
         public string? Notes { get; set; }
 
-        public string? Status { get; set; }
+        public string? Status { get; set; } = "Active";
     }
 
     public class SwrHistoryUpdateDto
@@ -57,7 +58,6 @@ namespace Pm.DTOs
         [Range(0, 200, ErrorMessage = "FPWR harus antara 0-200")]
         public decimal? Fpwr { get; set; }
 
-        [Required(ErrorMessage = "VSWR wajib diisi")]
         [Range(1.0, 4.0, ErrorMessage = "VSWR harus antara 1.0-4.0")]
         public decimal Vswr { get; set; }
 

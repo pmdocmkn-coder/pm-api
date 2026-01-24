@@ -19,7 +19,7 @@ namespace Pm.DTOs.Common
             {
                 // Kalau AllowedSortFields kosong (default), kita anggap semua sort diperbolehkan
                 // atau bisa langsung reject semua kalau mau ketat
-                if (AllowedSortFields.Length > 0 && 
+                if (AllowedSortFields.Length > 0 &&
                     !AllowedSortFields.Contains(SortBy, StringComparer.OrdinalIgnoreCase))
                 {
                     yield return new ValidationResult(
@@ -28,8 +28,8 @@ namespace Pm.DTOs.Common
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(SortDir) && 
-                !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase) && 
+            if (!string.IsNullOrWhiteSpace(SortDir) &&
+                !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(SortDir, "desc", StringComparison.OrdinalIgnoreCase))
             {
                 yield return new ValidationResult(

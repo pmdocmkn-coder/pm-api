@@ -2,7 +2,7 @@ namespace Pm.DTOs.Common
 {
     public class PagedResultDto<T>
     {
-        public List<T> Data { get; set; } = new();
+        public List<T> Data { get; set; } = [];
         public PaginationMeta Meta { get; set; }
 
         public PagedResultDto(List<T> data, int page, int pageSize, int totalCount)

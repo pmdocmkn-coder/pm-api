@@ -188,6 +188,11 @@ builder.Services.AddScoped<INecSignalService, NecSignalService>();
 // ===== SWR Radio ===== 
 builder.Services.AddScoped<ISwrSignalService, SwrSignalService>();
 
+// ===== Letter Numbering System =====
+builder.Services.AddScoped<IDocumentTypeService, DocumentTypeService>();
+builder.Services.AddScoped<ICompanyService, CompanyService>();
+builder.Services.AddScoped<ILetterNumberService, LetterNumberService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(options =>
 {

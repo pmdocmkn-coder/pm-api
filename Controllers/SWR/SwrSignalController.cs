@@ -357,7 +357,7 @@ namespace Pm.Controllers
         public async Task<IActionResult> GetHistories([FromQuery] SwrHistoryQueryDto query)
         {
             var validationResults = query.Validate(new ValidationContext(query)).ToList();
-            if (validationResults.Any())
+            if (validationResults.Count > 0)
             {
                 return ApiResponse.BadRequest("Invalid parameter",
                     string.Join("; ", validationResults.Select(v => v.ErrorMessage)));
