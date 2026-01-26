@@ -31,17 +31,17 @@ namespace Pm.Controllers.Surat
 
         [HttpGet]
         [Authorize(Policy = "LetterNumberView")]
-        public async Task<IActionResult> GetAll([FromQuery] bool activeOnly = true)
+        public async Task<IActionResult> GetAll([FromQuery] CompanyQueryDto query)
         {
             try
             {
-                var result = await service.GetAllAsync(activeOnly);
-                return ApiResponse.Success(result);
+                var result = await service.GetAllAsync(query);
+                return Ok(result); // Return PagedResultDto directly
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error getting companies");
-                return ApiResponse.InternalServerError("Get Companies gagal: " + ex.Message);
+                return ApiResponse.BadRequest("Get Companies", ex.Message);
             }
         }
 

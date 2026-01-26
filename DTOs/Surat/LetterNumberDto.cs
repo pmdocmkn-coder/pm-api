@@ -66,6 +66,8 @@ namespace Pm.DTOs
         // Expanded properties
         public DocumentTypeListDto? DocumentType { get; set; }
         public CompanyListDto? Company { get; set; }
+        public UserInfoDto? CreatedByUser { get; set; }
+        public UserInfoDto? UpdatedByUser { get; set; }
     }
 
     // ===== LIST (simplified for grid/list views) =====
@@ -79,6 +81,7 @@ namespace Pm.DTOs
         public string Status { get; set; } = string.Empty;
         public string DocumentTypeCode { get; set; } = string.Empty;
         public string CompanyCode { get; set; } = string.Empty;
+        public string? CreatedByName { get; set; }
     }
 
     // ===== QUERY (for filtering/pagination) =====

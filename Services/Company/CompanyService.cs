@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
+using Pm.DTOs.Common;
 using Pm.Models;
 
 namespace Pm.Services
@@ -57,6 +58,19 @@ namespace Pm.Services
 
                 logger.LogInformation("✅ Company created: ID={Id}", company.Id);
 
+                // Load creator user for response
+                var createdByUser = await context.Users
+                    .Where(u => u.UserId == userId)
+                    .Select(u => new UserInfoDto
+                    {
+                        UserId = u.UserId,
+                        Username = u.Username,
+                        FullName = u.FullName,
+                        Email = u.Email,
+                        PhotoUrl = u.PhotoUrl
+                    })
+                    .FirstOrDefaultAsync();
+
                 return new CompanyResponseDto
                 {
                     Id = company.Id,
@@ -65,7 +79,8 @@ namespace Pm.Services
                     Address = company.Address,
                     IsActive = company.IsActive,
                     CreatedAt = company.CreatedAt,
-                    UpdatedAt = company.UpdatedAt
+                    UpdatedAt = company.UpdatedAt,
+                    CreatedByUser = createdByUser
                 };
             }
             catch (Exception ex)
@@ -81,7 +96,11 @@ namespace Pm.Services
             {
                 logger.LogInformation("Updating company: ID={Id}", id);
 
-                var company = await context.Companies.FindAsync(id);
+                var company = await context.Companies
+                    .Include(c => c.CreatedByUser)
+                    .Include(c => c.UpdatedByUser)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+
                 if (company is null)
                 {
                     throw new KeyNotFoundException($"Company with ID {id} not found.");
@@ -121,7 +140,23 @@ namespace Pm.Services
                     Address = company.Address,
                     IsActive = company.IsActive,
                     CreatedAt = company.CreatedAt,
-                    UpdatedAt = company.UpdatedAt
+                    UpdatedAt = company.UpdatedAt,
+                    CreatedByUser = company.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = company.CreatedByUser.UserId,
+                        Username = company.CreatedByUser.Username,
+                        FullName = company.CreatedByUser.FullName,
+                        Email = company.CreatedByUser.Email,
+                        PhotoUrl = company.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = company.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = company.UpdatedByUser.UserId,
+                        Username = company.UpdatedByUser.Username,
+                        FullName = company.UpdatedByUser.FullName,
+                        Email = company.UpdatedByUser.Email,
+                        PhotoUrl = company.UpdatedByUser.PhotoUrl
+                    } : null
                 };
             }
             catch (Exception ex)
@@ -189,6 +224,8 @@ namespace Pm.Services
         {
             var company = await context.Companies
                 .AsNoTracking()
+                .Include(c => c.CreatedByUser)
+                .Include(c => c.UpdatedByUser)
                 .Where(c => c.Id == id)
                 .Select(c => new CompanyResponseDto
                 {
@@ -198,24 +235,54 @@ namespace Pm.Services
                     Address = c.Address,
                     IsActive = c.IsActive,
                     CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt
+                    UpdatedAt = c.UpdatedAt,
+                    CreatedByUser = c.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = c.CreatedByUser.UserId,
+                        Username = c.CreatedByUser.Username,
+                        FullName = c.CreatedByUser.FullName,
+                        Email = c.CreatedByUser.Email,
+                        PhotoUrl = c.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = c.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = c.UpdatedByUser.UserId,
+                        Username = c.UpdatedByUser.Username,
+                        FullName = c.UpdatedByUser.FullName,
+                        Email = c.UpdatedByUser.Email,
+                        PhotoUrl = c.UpdatedByUser.PhotoUrl
+                    } : null
                 })
                 .FirstOrDefaultAsync();
 
             return company;
         }
 
-        public async Task<List<CompanyListDto>> GetAllAsync(bool activeOnly = true)
+        public async Task<PagedResultDto<CompanyListDto>> GetAllAsync(CompanyQueryDto query)
         {
-            var query = context.Companies.AsNoTracking();
+            var baseQuery = context.Companies.AsNoTracking();
 
-            if (activeOnly)
+            // Apply filters
+            if (query.IsActive.HasValue)
             {
-                query = query.Where(c => c.IsActive);
+                baseQuery = baseQuery.Where(c => c.IsActive == query.IsActive.Value);
             }
 
-            var companies = await query
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                baseQuery = baseQuery.Where(c =>
+                    c.Code.Contains(query.Search, StringComparison.OrdinalIgnoreCase) ||
+                    c.Name.Contains(query.Search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Get total count
+            var totalCount = await baseQuery.CountAsync();
+
+            // Apply pagination
+            var companies = await baseQuery
                 .OrderBy(c => c.Code)
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
                 .Select(c => new CompanyListDto
                 {
                     Id = c.Id,
@@ -225,7 +292,7 @@ namespace Pm.Services
                 })
                 .ToListAsync();
 
-            return companies;
+            return new PagedResultDto<CompanyListDto>(companies, query.Page, query.PageSize, totalCount);
         }
     }
 }

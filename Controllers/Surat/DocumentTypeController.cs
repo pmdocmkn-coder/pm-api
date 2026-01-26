@@ -31,17 +31,17 @@ namespace Pm.Controllers
 
         [HttpGet]
         [Authorize(Policy = "LetterNumberView")]
-        public async Task<IActionResult> GetAll([FromQuery] bool activeOnly = true)
+        public async Task<IActionResult> GetAll([FromQuery] DocumentTypeQueryDto query)
         {
             try
             {
-                var result = await service.GetAllAsync(activeOnly);
-                return ApiResponse.Success(result);
+                var result = await service.GetAllAsync(query);
+                return Ok(result); // Return PagedResultDto directly
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error getting document types");
-                return ApiResponse.InternalServerError("Get Document Types gagal: " + ex.Message);
+                return ApiResponse.BadRequest("Get Document Types", ex.Message);
             }
         }
 

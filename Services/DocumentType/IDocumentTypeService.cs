@@ -1,4 +1,5 @@
 using Pm.DTOs;
+using Pm.DTOs.Common;
 
 namespace Pm.Services
 {
@@ -8,6 +9,6 @@ namespace Pm.Services
         Task<DocumentTypeResponseDto> UpdateAsync(int id, DocumentTypeUpdateDto dto, int userId);
         Task DeleteAsync(int id, int userId);
         Task<DocumentTypeResponseDto?> GetByIdAsync(int id);
-        Task<List<DocumentTypeListDto>> GetAllAsync(bool activeOnly = true);
+        Task<PagedResultDto<DocumentTypeListDto>> GetAllAsync(DocumentTypeQueryDto query);
     }
 }

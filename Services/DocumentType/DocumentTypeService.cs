@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
+using Pm.DTOs.Common;
 using Pm.Models;
 
 namespace Pm.Services
@@ -57,6 +58,19 @@ namespace Pm.Services
 
                 logger.LogInformation("✅ Document type created: ID={Id}", documentType.Id);
 
+                // Load creator user for response
+                var createdByUser = await context.Users
+                    .Where(u => u.UserId == userId)
+                    .Select(u => new UserInfoDto
+                    {
+                        UserId = u.UserId,
+                        Username = u.Username,
+                        FullName = u.FullName,
+                        Email = u.Email,
+                        PhotoUrl = u.PhotoUrl
+                    })
+                    .FirstOrDefaultAsync();
+
                 return new DocumentTypeResponseDto
                 {
                     Id = documentType.Id,
@@ -65,7 +79,8 @@ namespace Pm.Services
                     Description = documentType.Description,
                     IsActive = documentType.IsActive,
                     CreatedAt = documentType.CreatedAt,
-                    UpdatedAt = documentType.UpdatedAt
+                    UpdatedAt = documentType.UpdatedAt,
+                    CreatedByUser = createdByUser
                 };
             }
             catch (Exception ex)
@@ -81,7 +96,11 @@ namespace Pm.Services
             {
                 logger.LogInformation("Updating document type: ID={Id}", id);
 
-                var documentType = await context.DocumentTypes.FindAsync(id);
+                var documentType = await context.DocumentTypes
+                    .Include(d => d.CreatedByUser)
+                    .Include(d => d.UpdatedByUser)
+                    .FirstOrDefaultAsync(d => d.Id == id);
+
                 if (documentType is null)
                 {
                     throw new KeyNotFoundException($"Document type with ID {id} not found.");
@@ -121,7 +140,23 @@ namespace Pm.Services
                     Description = documentType.Description,
                     IsActive = documentType.IsActive,
                     CreatedAt = documentType.CreatedAt,
-                    UpdatedAt = documentType.UpdatedAt
+                    UpdatedAt = documentType.UpdatedAt,
+                    CreatedByUser = documentType.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = documentType.CreatedByUser.UserId,
+                        Username = documentType.CreatedByUser.Username,
+                        FullName = documentType.CreatedByUser.FullName,
+                        Email = documentType.CreatedByUser.Email,
+                        PhotoUrl = documentType.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = documentType.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = documentType.UpdatedByUser.UserId,
+                        Username = documentType.UpdatedByUser.Username,
+                        FullName = documentType.UpdatedByUser.FullName,
+                        Email = documentType.UpdatedByUser.Email,
+                        PhotoUrl = documentType.UpdatedByUser.PhotoUrl
+                    } : null
                 };
             }
             catch (Exception ex)
@@ -189,6 +224,8 @@ namespace Pm.Services
         {
             var documentType = await context.DocumentTypes
                 .AsNoTracking()
+                .Include(d => d.CreatedByUser)
+                .Include(d => d.UpdatedByUser)
                 .Where(d => d.Id == id)
                 .Select(d => new DocumentTypeResponseDto
                 {
@@ -198,24 +235,54 @@ namespace Pm.Services
                     Description = d.Description,
                     IsActive = d.IsActive,
                     CreatedAt = d.CreatedAt,
-                    UpdatedAt = d.UpdatedAt
+                    UpdatedAt = d.UpdatedAt,
+                    CreatedByUser = d.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = d.CreatedByUser.UserId,
+                        Username = d.CreatedByUser.Username,
+                        FullName = d.CreatedByUser.FullName,
+                        Email = d.CreatedByUser.Email,
+                        PhotoUrl = d.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = d.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = d.UpdatedByUser.UserId,
+                        Username = d.UpdatedByUser.Username,
+                        FullName = d.UpdatedByUser.FullName,
+                        Email = d.UpdatedByUser.Email,
+                        PhotoUrl = d.UpdatedByUser.PhotoUrl
+                    } : null
                 })
                 .FirstOrDefaultAsync();
 
             return documentType;
         }
 
-        public async Task<List<DocumentTypeListDto>> GetAllAsync(bool activeOnly = true)
+        public async Task<PagedResultDto<DocumentTypeListDto>> GetAllAsync(DocumentTypeQueryDto query)
         {
-            var query = context.DocumentTypes.AsNoTracking();
+            var baseQuery = context.DocumentTypes.AsNoTracking();
 
-            if (activeOnly)
+            // Apply filters
+            if (query.IsActive.HasValue)
             {
-                query = query.Where(d => d.IsActive);
+                baseQuery = baseQuery.Where(d => d.IsActive == query.IsActive.Value);
             }
 
-            var documentTypes = await query
+            if (!string.IsNullOrWhiteSpace(query.Search))
+            {
+                baseQuery = baseQuery.Where(d =>
+                    d.Code.Contains(query.Search, StringComparison.OrdinalIgnoreCase) ||
+                    d.Name.Contains(query.Search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Get total count
+            var totalCount = await baseQuery.CountAsync();
+
+            // Apply pagination
+            var documentTypes = await baseQuery
                 .OrderBy(d => d.Code)
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
                 .Select(d => new DocumentTypeListDto
                 {
                     Id = d.Id,
@@ -225,7 +292,7 @@ namespace Pm.Services
                 })
                 .ToListAsync();
 
-            return documentTypes;
+            return new PagedResultDto<DocumentTypeListDto>(documentTypes, query.Page, query.PageSize, totalCount);
         }
     }
 }

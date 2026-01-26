@@ -81,6 +81,19 @@ namespace Pm.Services
                     await context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
+                    // Load creator user for response
+                    var createdByUser = await context.Users
+                        .Where(u => u.UserId == userId)
+                        .Select(u => new UserInfoDto
+                        {
+                            UserId = u.UserId,
+                            Username = u.Username,
+                            FullName = u.FullName,
+                            Email = u.Email,
+                            PhotoUrl = u.PhotoUrl
+                        })
+                        .FirstOrDefaultAsync();
+
                     // ActivityLog
                     try
                     {
@@ -126,7 +139,8 @@ namespace Pm.Services
                             Code = company.Code,
                             Name = company.Name,
                             IsActive = company.IsActive
-                        }
+                        },
+                        CreatedByUser = createdByUser
                     };
                 }
                 catch
@@ -150,6 +164,7 @@ namespace Pm.Services
                     .AsNoTracking()
                     .Include(l => l.DocumentType)
                     .Include(l => l.Company)
+                    .Include(l => l.CreatedByUser)
                     .AsQueryable();
 
                 // Apply filters
@@ -214,7 +229,8 @@ namespace Pm.Services
                         Recipient = l.Recipient,
                         Status = l.Status.ToString(),
                         DocumentTypeCode = l.DocumentType!.Code,
-                        CompanyCode = l.Company!.Code
+                        CompanyCode = l.Company!.Code,
+                        CreatedByName = l.CreatedByUser != null ? l.CreatedByUser.FullName : null
                     })
                     .ToListAsync();
 
@@ -233,6 +249,8 @@ namespace Pm.Services
                 .AsNoTracking()
                 .Include(l => l.DocumentType)
                 .Include(l => l.Company)
+                .Include(l => l.CreatedByUser)
+                .Include(l => l.UpdatedByUser)
                 .Where(l => l.Id == id)
                 .Select(l => new LetterNumberResponseDto
                 {
@@ -261,7 +279,23 @@ namespace Pm.Services
                         Code = l.Company.Code,
                         Name = l.Company.Name,
                         IsActive = l.Company.IsActive
-                    }
+                    },
+                    CreatedByUser = l.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = l.CreatedByUser.UserId,
+                        Username = l.CreatedByUser.Username,
+                        FullName = l.CreatedByUser.FullName,
+                        Email = l.CreatedByUser.Email,
+                        PhotoUrl = l.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = l.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = l.UpdatedByUser.UserId,
+                        Username = l.UpdatedByUser.Username,
+                        FullName = l.UpdatedByUser.FullName,
+                        Email = l.UpdatedByUser.Email,
+                        PhotoUrl = l.UpdatedByUser.PhotoUrl
+                    } : null
                 })
                 .FirstOrDefaultAsync();
 
@@ -277,6 +311,8 @@ namespace Pm.Services
                 var letterNumber = await context.LetterNumbers
                     .Include(l => l.DocumentType)
                     .Include(l => l.Company)
+                    .Include(l => l.CreatedByUser)
+                    .Include(l => l.UpdatedByUser)
                     .FirstOrDefaultAsync(l => l.Id == id);
 
                 if (letterNumber is null)
@@ -338,7 +374,23 @@ namespace Pm.Services
                         Code = letterNumber.Company!.Code,
                         Name = letterNumber.Company.Name,
                         IsActive = letterNumber.Company.IsActive
-                    }
+                    },
+                    CreatedByUser = letterNumber.CreatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = letterNumber.CreatedByUser.UserId,
+                        Username = letterNumber.CreatedByUser.Username,
+                        FullName = letterNumber.CreatedByUser.FullName,
+                        Email = letterNumber.CreatedByUser.Email,
+                        PhotoUrl = letterNumber.CreatedByUser.PhotoUrl
+                    } : null,
+                    UpdatedByUser = letterNumber.UpdatedByUser != null ? new UserInfoDto
+                    {
+                        UserId = letterNumber.UpdatedByUser.UserId,
+                        Username = letterNumber.UpdatedByUser.Username,
+                        FullName = letterNumber.UpdatedByUser.FullName,
+                        Email = letterNumber.UpdatedByUser.Email,
+                        PhotoUrl = letterNumber.UpdatedByUser.PhotoUrl
+                    } : null
                 };
             }
             catch (Exception ex)
