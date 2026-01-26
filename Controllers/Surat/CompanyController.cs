@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Pm.DTOs;
 using Pm.Helper;
 using Pm.Services;
+using Pm.Services.Company;
 
 namespace Pm.Controllers.Surat
 {
@@ -92,7 +93,7 @@ namespace Pm.Controllers.Surat
         }
 
         [HttpPut("{id}")]
-        [Authorize(Policy = "LetterNumberEdit")]
+        [Authorize(Policy = "LetterNumberUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] CompanyUpdateDto dto)
         {
             if (!ModelState.IsValid)

@@ -585,7 +585,7 @@ namespace Pm.Data
 
                 entity.Property(e => e.FormattedNumber)
                     .IsRequired()
-                    .HasMaxLength(100);
+                    .HasMaxLength(255);
 
                 entity.Property(e => e.SequenceNumber)
                     .IsRequired();

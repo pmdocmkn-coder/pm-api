@@ -37,6 +37,7 @@ namespace Pm.Helper
 
             return new ObjectResult(new
             {
+                message = errorMessages.FirstOrDefault() ?? "Bad Request",
                 data = errors
             })
             {
@@ -46,13 +47,14 @@ namespace Pm.Helper
 
         public static ObjectResult BadRequest(string objectName, string errorMessage)
         {
-            return BadRequest(objectName, new[] { errorMessage });
+            return BadRequest(objectName, [errorMessage]);
         }
 
         public static ObjectResult NotFound(string detailMessage)
         {
             return new ObjectResult(new
             {
+                message = detailMessage,
                 data = new { message = detailMessage }
             })
             {
@@ -64,11 +66,11 @@ namespace Pm.Helper
         {
             return new ObjectResult(new
             {
+                message = details,
                 data = new
                 {
                     details
-                },
-                message = "Terjadi kesalahan internal server"
+                }
             })
             {
                 StatusCode = 500

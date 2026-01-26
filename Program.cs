@@ -6,6 +6,9 @@ using System.Text;
 using FluentValidation;
 using Pm.Data;
 using Pm.Services;
+using Pm.Services.Company;
+using Pm.Services.DocumentType;
+using Pm.Services.Letter;
 using Pm.Helper;
 using Pm.Middleware;
 using Pm.DTOs;
@@ -306,7 +309,6 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseRequestLogging();
 
 

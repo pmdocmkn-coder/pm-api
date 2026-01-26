@@ -1,3 +1,4 @@
+﻿using System;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -11,44 +12,6 @@ namespace Pm.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Create DocumentTypes table
-            migrationBuilder.CreateTable(
-                name: "DocumentTypes",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
-                    Code = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    Description = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    IsActive = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false, defaultValueSql: "UTC_TIMESTAMP()"),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    CreatedBy = table.Column<int>(type: "int", nullable: false),
-                    UpdatedBy = table.Column<int>(type: "int", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DocumentTypes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_DocumentTypes_Users_CreatedBy",
-                        column: x => x.CreatedBy,
-                        principalTable: "Users",
-                        principalColumn: "UserId",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_DocumentTypes_Users_UpdatedBy",
-                        column: x => x.UpdatedBy,
-                        principalTable: "Users",
-                        principalColumn: "UserId",
-                        onDelete: ReferentialAction.Restrict);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            // Create Companies table
             migrationBuilder.CreateTable(
                 name: "Companies",
                 columns: table => new
@@ -62,9 +25,9 @@ namespace Pm.Migrations
                     Address = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     IsActive = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: true),
+                    CreatedBy = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false, defaultValueSql: "UTC_TIMESTAMP()"),
                     UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    CreatedBy = table.Column<int>(type: "int", nullable: false),
                     UpdatedBy = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
@@ -85,7 +48,42 @@ namespace Pm.Migrations
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
-            // Create LetterNumbers table
+            migrationBuilder.CreateTable(
+                name: "DocumentTypes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
+                    Code = table.Column<string>(type: "varchar(50)", maxLength: 50, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    Description = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    IsActive = table.Column<bool>(type: "tinyint(1)", nullable: false, defaultValue: true),
+                    CreatedBy = table.Column<int>(type: "int", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false, defaultValueSql: "UTC_TIMESTAMP()"),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
+                    UpdatedBy = table.Column<int>(type: "int", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_DocumentTypes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_DocumentTypes_Users_CreatedBy",
+                        column: x => x.CreatedBy,
+                        principalTable: "Users",
+                        principalColumn: "UserId",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_DocumentTypes_Users_UpdatedBy",
+                        column: x => x.UpdatedBy,
+                        principalTable: "Users",
+                        principalColumn: "UserId",
+                        onDelete: ReferentialAction.Restrict);
+                })
+                .Annotation("MySql:CharSet", "utf8mb4");
+
             migrationBuilder.CreateTable(
                 name: "LetterNumbers",
                 columns: table => new
@@ -95,6 +93,8 @@ namespace Pm.Migrations
                     FormattedNumber = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     SequenceNumber = table.Column<int>(type: "int", nullable: false),
+                    DocumentTypeId = table.Column<int>(type: "int", nullable: false),
+                    CompanyId = table.Column<int>(type: "int", nullable: false),
                     Year = table.Column<int>(type: "int", nullable: false),
                     Month = table.Column<int>(type: "int", nullable: false),
                     LetterDate = table.Column<DateTime>(type: "date", nullable: false),
@@ -104,13 +104,11 @@ namespace Pm.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     AttachmentUrl = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    Status = table.Column<string>(type: "varchar(20)", nullable: false)
+                    Status = table.Column<string>(type: "varchar(255)", nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    CompanyId = table.Column<int>(type: "int", nullable: false),
-                    DocumentTypeId = table.Column<int>(type: "int", nullable: false),
+                    CreatedBy = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false, defaultValueSql: "UTC_TIMESTAMP()"),
                     UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    CreatedBy = table.Column<int>(type: "int", nullable: false),
                     UpdatedBy = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
@@ -143,29 +141,6 @@ namespace Pm.Migrations
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
-            // Create indexes for DocumentTypes
-            migrationBuilder.CreateIndex(
-                name: "IX_DocumentTypes_Code",
-                table: "DocumentTypes",
-                column: "Code",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DocumentTypes_IsActive",
-                table: "DocumentTypes",
-                column: "IsActive");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DocumentTypes_CreatedBy",
-                table: "DocumentTypes",
-                column: "CreatedBy");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DocumentTypes_UpdatedBy",
-                table: "DocumentTypes",
-                column: "UpdatedBy");
-
-            // Create indexes for Companies
             migrationBuilder.CreateIndex(
                 name: "IX_Companies_Code",
                 table: "Companies",
@@ -173,31 +148,45 @@ namespace Pm.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Companies_IsActive",
-                table: "Companies",
-                column: "IsActive");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Companies_CreatedBy",
                 table: "Companies",
                 column: "CreatedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Companies_IsActive",
+                table: "Companies",
+                column: "IsActive");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Companies_UpdatedBy",
                 table: "Companies",
                 column: "UpdatedBy");
 
-            // Create indexes for LetterNumbers
             migrationBuilder.CreateIndex(
-                name: "IX_LetterNumber_UniqueSequence",
-                table: "LetterNumbers",
-                columns: new[] { "CompanyId", "DocumentTypeId", "Year", "SequenceNumber" },
+                name: "IX_DocumentTypes_Code",
+                table: "DocumentTypes",
+                column: "Code",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_LetterNumber_YearMonth",
+                name: "IX_DocumentTypes_CreatedBy",
+                table: "DocumentTypes",
+                column: "CreatedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DocumentTypes_IsActive",
+                table: "DocumentTypes",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DocumentTypes_UpdatedBy",
+                table: "DocumentTypes",
+                column: "UpdatedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LetterNumber_FormattedNumber",
                 table: "LetterNumbers",
-                columns: new[] { "Year", "Month" });
+                column: "FormattedNumber");
 
             migrationBuilder.CreateIndex(
                 name: "IX_LetterNumber_LetterDate",
@@ -210,24 +199,25 @@ namespace Pm.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
-                name: "IX_LetterNumber_FormattedNumber",
+                name: "IX_LetterNumber_UniqueSequence",
                 table: "LetterNumbers",
-                column: "FormattedNumber");
+                columns: new[] { "CompanyId", "DocumentTypeId", "Year", "SequenceNumber" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_LetterNumbers_CompanyId",
+                name: "IX_LetterNumber_YearMonth",
                 table: "LetterNumbers",
-                column: "CompanyId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_LetterNumbers_DocumentTypeId",
-                table: "LetterNumbers",
-                column: "DocumentTypeId");
+                columns: new[] { "Year", "Month" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_LetterNumbers_CreatedBy",
                 table: "LetterNumbers",
                 column: "CreatedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_LetterNumbers_DocumentTypeId",
+                table: "LetterNumbers",
+                column: "DocumentTypeId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_LetterNumbers_UpdatedBy",
@@ -238,9 +228,14 @@ namespace Pm.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "LetterNumbers");
-            migrationBuilder.DropTable(name: "Companies");
-            migrationBuilder.DropTable(name: "DocumentTypes");
+            migrationBuilder.DropTable(
+                name: "LetterNumbers");
+
+            migrationBuilder.DropTable(
+                name: "Companies");
+
+            migrationBuilder.DropTable(
+                name: "DocumentTypes");
         }
     }
 }

@@ -1,7 +1,7 @@
 using Pm.DTOs;
 using Pm.DTOs.Common;
 
-namespace Pm.Services
+namespace Pm.Services.Letter
 {
     public interface ILetterNumberService
     {
