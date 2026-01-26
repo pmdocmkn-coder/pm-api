@@ -286,6 +286,7 @@ public class DocumentTypeService(
                 Id = d.Id,
                 Code = d.Code,
                 Name = d.Name,
+                Description = d.Description,
                 IsActive = d.IsActive
             })
             .ToListAsync();

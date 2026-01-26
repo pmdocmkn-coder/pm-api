@@ -45,11 +45,10 @@ public class LetterNumberService(
                 using var transaction = await context.Database.BeginTransactionAsync();
                 try
                 {
-                    // Get max sequence number for this combination (Company + Year)
-                    // Sequence continues across all document types and resets only when year changes
+                    // Get max sequence number for the year (across all companies and document types)
+                    // Sequence is global and resets only when year changes
                     var maxSequence = await context.LetterNumbers
-                        .Where(l => l.CompanyId == dto.CompanyId
-                                 && l.Year == year)
+                        .Where(l => l.Year == year)
                         .OrderByDescending(l => l.SequenceNumber)
                         .Select(l => (int?)l.SequenceNumber)
                         .FirstOrDefaultAsync() ?? 0;
@@ -133,6 +132,7 @@ public class LetterNumberService(
                             Id = documentType.Id,
                             Code = documentType.Code,
                             Name = documentType.Name,
+                            Description = documentType.Description,
                             IsActive = documentType.IsActive
                         },
                         Company = new CompanyListDto
@@ -279,6 +279,7 @@ public class LetterNumberService(
                 Id = l.DocumentType.Id,
                 Code = l.DocumentType.Code,
                 Name = l.DocumentType.Name,
+                Description = l.DocumentType.Description,
                 IsActive = l.DocumentType.IsActive
             } : null,
             Company = l.Company != null ? new CompanyListDto
@@ -367,6 +368,7 @@ public class LetterNumberService(
                     Id = letterNumber.DocumentType!.Id,
                     Code = letterNumber.DocumentType!.Code,
                     Name = letterNumber.DocumentType.Name,
+                    Description = letterNumber.DocumentType.Description,
                     IsActive = letterNumber.DocumentType.IsActive
                 },
                 Company = new CompanyListDto
