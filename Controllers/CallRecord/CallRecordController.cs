@@ -464,5 +464,39 @@ namespace Pm.Controllers
                 return ApiResponse.BadRequest("message", ex.Message);
             }
         }
+
+        /// <summary>
+        /// Rebuild FleetStatistics from raw data (clears and requires re-import)
+        /// </summary>
+        [Authorize(Policy = "CanRebuildFleetStatistics")]
+        [HttpPost("fleet-statistics/rebuild")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> RebuildFleetStatistics(
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            try
+            {
+                _logger.LogInformation("🔄 Admin requested FleetStatistics rebuild for date range {Start} to {End}",
+                    startDate?.ToString("yyyy-MM-dd") ?? "ALL",
+                    endDate?.ToString("yyyy-MM-dd") ?? "ALL");
+
+                var result = await _callRecordService.RebuildFleetStatisticsAsync(startDate, endDate);
+
+                return ApiResponse.Success(new
+                {
+                    Message = "FleetStatistics table cleared. Please re-import CSV files to rebuild data.",
+                    DateRange = startDate.HasValue || endDate.HasValue
+                        ? $"{startDate?.ToString("yyyy-MM-dd") ?? "start"} to {endDate?.ToString("yyyy-MM-dd") ?? "end"}"
+                        : "All dates"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error rebuilding FleetStatistics");
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
+        }
     }
 }

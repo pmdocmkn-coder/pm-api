@@ -53,6 +53,8 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "callrecord.delete"));
             options.AddPolicy("CanDeleteAllData", policy =>
                 policy.RequireClaim("Permission", "delete.all-data"));
+            options.AddPolicy("CanRebuildFleetStatistics", policy =>
+                policy.RequireClaim("Permission", "callrecord.rebuild-fleet-stats"));
 
 
             // Setting

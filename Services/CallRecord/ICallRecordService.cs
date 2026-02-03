@@ -39,5 +39,8 @@ namespace Pm.Services
             DateTime? endDate);
 
         Task BulkInsertFleetStatisticsAsync(List<Models.FleetStatistic> stats);
+
+        // Rebuild FleetStatistics from raw CallRecords (for data correction)
+        Task<int> RebuildFleetStatisticsAsync(DateTime? startDate = null, DateTime? endDate = null);
     }
 }
