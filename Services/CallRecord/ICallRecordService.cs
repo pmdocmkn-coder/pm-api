@@ -17,7 +17,27 @@ namespace Pm.Services
 
         Task ResetAllDataAsync();
 
-         Task<FleetStatisticsDto> GetFleetStatisticsAsync(DateTime date, int top = 10, FleetStatisticType? type = null);
+        // Fleet Statistics - Updated signature
+        Task<FleetStatisticsDto> GetFleetStatisticsAsync(
+            DateTime? startDate,
+            DateTime? endDate,
+            int top = 10,
+            FleetStatisticType? type = null,
+            string sortOrder = "DESC",
+            string? callerSearch = null,
+            string? calledSearch = null);
+
+        // New: Get unique callers/called details for a specific fleet
+        Task<List<UniqueCallerDetailDto>> GetUniqueCallersForFleetAsync(
+            string calledFleet,
+            DateTime? startDate,
+            DateTime? endDate);
+
+        Task<List<UniqueCalledDetailDto>> GetUniqueCalledFleetsForCallerAsync(
+            string callerFleet,
+            DateTime? startDate,
+            DateTime? endDate);
+
         Task BulkInsertFleetStatisticsAsync(List<Models.FleetStatistic> stats);
     }
 }

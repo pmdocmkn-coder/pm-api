@@ -17,7 +17,7 @@ namespace Pm.Controllers
 
         public CallRecordController(
             ICallRecordService callRecordService,
-            IExcelExportService excelExportService, 
+            IExcelExportService excelExportService,
             ILogger<CallRecordController> logger)
         {
             _callRecordService = callRecordService;
@@ -73,9 +73,10 @@ namespace Pm.Controllers
                     message += $". Errors: {string.Join("; ", result.Errors)}";
 
                 return ApiResponse.Success(
-                data: new { 
+                data: new
+                {
                     records = result, // ganti nama biar jelas
-                    totalTimeMs = totalStopwatch.ElapsedMilliseconds 
+                    totalTimeMs = totalStopwatch.ElapsedMilliseconds
                 },
                 message: message
             );
@@ -92,7 +93,7 @@ namespace Pm.Controllers
         /// </summary>
         [Authorize(Policy = "CanViewCallRecords")]
         [HttpGet]
-       public async Task<IActionResult> GetCallRecords([FromQuery] CallRecordQueryDto query)
+        public async Task<IActionResult> GetCallRecords([FromQuery] CallRecordQueryDto query)
         {
             try
             {
@@ -134,7 +135,7 @@ namespace Pm.Controllers
         [Authorize(Policy = "CanViewDetailCallRecords")]
         [HttpGet("summary/overall")]
         public async Task<IActionResult> GetOverallSummary(
-            [FromQuery] string startDate, 
+            [FromQuery] string startDate,
             [FromQuery] string endDate)
         {
             if (!DateTime.TryParse(startDate, out var parsedStartDate))
@@ -156,7 +157,7 @@ namespace Pm.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting overall summary from {StartDate} to {EndDate}", 
+                _logger.LogError(ex, "Error getting overall summary from {StartDate} to {EndDate}",
                     startDate, endDate);
                 return ApiResponse.InternalServerError($"Terjadi kesalahan saat mengambil overall summary: {ex.Message}");
             }
@@ -175,9 +176,9 @@ namespace Pm.Controllers
                 var excelBytes = await _excelExportService.ExportDailySummaryToExcelAsync(parsedDate, summary);
 
                 var fileName = $"Daily_Summary_{parsedDate:yyyy-MM-dd}.xlsx";
-                
-                return File(excelBytes, 
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+
+                return File(excelBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     fileName);
             }
             catch (Exception ex)
@@ -334,7 +335,8 @@ namespace Pm.Controllers
                 await _callRecordService.ResetAllDataAsync();
 
                 return ApiResponse.Success(
-                    data: new {
+                    data: new
+                    {
                         warning = "Semua data telah dihapus permanent"
                     },
                     message: "Semua data call records dan summaries berhasil dihapus"
@@ -348,7 +350,7 @@ namespace Pm.Controllers
         }
 
         /// <summary>
-        /// Endpoint untuk mendapatkan Fleet Statistics
+        /// Endpoint untuk mendapatkan Fleet Statistics dengan date range, sorting, dan search
         /// </summary>
         [Authorize(Policy = "CanViewCallRecords")]
         [HttpGet("fleet-statistics")]
@@ -357,27 +359,36 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> GetFleetStatistics(
-            [FromQuery] DateTime? date = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
             [FromQuery] int top = 10,
-            [FromQuery] FleetStatisticType? type = null)
+            [FromQuery] FleetStatisticType? type = null,
+            [FromQuery] string sortOrder = "DESC",
+            [FromQuery] string? callerSearch = null,
+            [FromQuery] string? calledSearch = null)
         {
             try
             {
-                var targetDate = date ?? DateTime.Today;
-                var selectedType = type ?? FleetStatisticType.All;
-                
                 if (top < 1 || top > 100)
                 {
                     return ApiResponse.BadRequest("top", "Parameter 'top' harus antara 1 dan 100");
                 }
 
-                var stats = await _callRecordService.GetFleetStatisticsAsync(targetDate, top, selectedType);
-                
-                if (stats.TopCallers.Count == 0 && stats.TopCalledFleets.Count == 0)
+                // Validate sort order
+                if (sortOrder != "ASC" && sortOrder != "DESC")
                 {
-                    return ApiResponse.NotFound($"Tidak ada data fleet statistics untuk tanggal {targetDate:yyyy-MM-dd}");
+                    return ApiResponse.BadRequest("sortOrder", "Parameter 'sortOrder' harus 'ASC' atau 'DESC'");
                 }
 
+                var stats = await _callRecordService.GetFleetStatisticsAsync(
+                    startDate, endDate, top, type, sortOrder, callerSearch, calledSearch);
+
+                if (stats.TopCallers.Count == 0 && stats.TopCalledFleets.Count == 0)
+                {
+                    return ApiResponse.NotFound($"Tidak ada data fleet statistics untuk tanggal yang dipilih");
+                }
+
+                var selectedType = type ?? FleetStatisticType.All;
                 var message = selectedType switch
                 {
                     FleetStatisticType.Caller => "Top Caller Fleets berhasil dimuat",
@@ -390,6 +401,66 @@ namespace Pm.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting fleet statistics");
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Get unique callers detail for a specific called fleet (for detail popup)
+        /// </summary>
+        [Authorize(Policy = "CanViewCallRecords")]
+        [HttpGet("fleet-statistics/callers/{calledFleet}")]
+        [ProducesResponseType(typeof(List<UniqueCallerDetailDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetUniqueCallersForFleet(
+            [FromRoute] string calledFleet,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            try
+            {
+                var details = await _callRecordService.GetUniqueCallersForFleetAsync(calledFleet, startDate, endDate);
+
+                if (details.Count == 0)
+                {
+                    return ApiResponse.NotFound($"Tidak ada data caller untuk fleet {calledFleet}");
+                }
+
+                return ApiResponse.Success(details, $"Detail {details.Count} unique callers untuk fleet {calledFleet}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unique callers for fleet {Fleet}", calledFleet);
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Get unique called fleets detail for a specific caller (for detail popup)
+        /// </summary>
+        [Authorize(Policy = "CanViewCallRecords")]
+        [HttpGet("fleet-statistics/called/{callerFleet}")]
+        [ProducesResponseType(typeof(List<UniqueCalledDetailDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetUniqueCalledFleetsForCaller(
+            [FromRoute] string callerFleet,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            try
+            {
+                var details = await _callRecordService.GetUniqueCalledFleetsForCallerAsync(callerFleet, startDate, endDate);
+
+                if (details.Count == 0)
+                {
+                    return ApiResponse.NotFound($"Tidak ada data called fleets untuk caller {callerFleet}");
+                }
+
+                return ApiResponse.Success(details, $"Detail {details.Count} unique called fleets untuk caller {callerFleet}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unique called fleets for caller {Fleet}", callerFleet);
                 return ApiResponse.BadRequest("message", ex.Message);
             }
         }

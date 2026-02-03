@@ -17,7 +17,7 @@ namespace Pm.Services
 
         // ✅ UPDATE CONSTRUCTOR
         public CallRecordService(
-            AppDbContext context, 
+            AppDbContext context,
             ILogger<CallRecordService> logger,
             IServiceProvider serviceProvider) // ✅ TAMBAH PARAMETER
         {
@@ -39,7 +39,7 @@ namespace Pm.Services
                     _logger.LogWarning("❌ File already imported: {FileName}", fileName);
                     return response;
                 }
-            
+
                 using var reader = new StreamReader(csvStream, Encoding.UTF8);
                 var allContent = await reader.ReadToEndAsync();
                 var lines = allContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -47,9 +47,9 @@ namespace Pm.Services
                 _logger.LogInformation("🚀 Starting CSV import: {Count} lines from {FileName}", lines.Length, fileName);
 
                 var parseStart = stopwatch.ElapsedMilliseconds;
-                
+
                 var fleetStatsDict = new Dictionary<string, FleetStatistic>();
-                
+
                 var parsedData = lines
                     .AsParallel()
                     .WithDegreeOfParallelism(Environment.ProcessorCount)
@@ -66,7 +66,7 @@ namespace Pm.Services
                         continue;
 
                     var key = $"{record!.CallDate:yyyyMMdd}_{callerFleet}_{calledFleet}";
-                    
+
                     if (fleetStatsDict.ContainsKey(key))
                     {
                         fleetStatsDict[key].CallCount++;
@@ -87,18 +87,18 @@ namespace Pm.Services
                     }
                 }
 
-                _logger.LogInformation("✅ Parsed {Successful}/{Total} records in {Ms}ms", 
+                _logger.LogInformation("✅ Parsed {Successful}/{Total} records in {Ms}ms",
                     records.Count, lines.Length, stopwatch.ElapsedMilliseconds - parseStart);
 
                 if (records.Any())
                 {
                     var insertStart = stopwatch.ElapsedMilliseconds;
-                    
+
                     // ✅ INSERT DATA (synchronous - tunggu sampai selesai)
                     await BulkInsertOptimizedAsync(records);
                     await BulkInsertFleetStatisticsAsync(fleetStatsDict.Values.ToList());
-                    
-                    _logger.LogInformation("💾 Inserted {RecordCount} records and {FleetCount} fleet stats in {Ms}ms", 
+
+                    _logger.LogInformation("💾 Inserted {RecordCount} records and {FleetCount} fleet stats in {Ms}ms",
                         records.Count, fleetStatsDict.Count, stopwatch.ElapsedMilliseconds - insertStart);
                 }
 
@@ -108,7 +108,7 @@ namespace Pm.Services
 
                 stopwatch.Stop();
                 _logger.LogInformation("🎉 Import completed in {Ms}ms", stopwatch.ElapsedMilliseconds);
-                    
+
                 if (records.Any())
                 {
                     var importHistory = new FileImportHistory
@@ -118,7 +118,7 @@ namespace Pm.Services
                         RecordCount = records.Count,
                         Status = "Completed"
                     };
-                    
+
                     await _context.FileImportHistories.AddAsync(importHistory);
                     await _context.SaveChangesAsync();
                 }
@@ -140,10 +140,10 @@ namespace Pm.Services
                     Status = "Failed",
                     ErrorMessage = ex.Message
                 };
-                
+
                 await _context.FileImportHistories.AddAsync(failedHistory);
                 await _context.SaveChangesAsync();
-            
+
                 _logger.LogError(ex, "💥 Import error for {FileName}", fileName);
                 response.Errors.Add($"Import error: {ex.Message}");
                 return response;
@@ -163,9 +163,9 @@ namespace Pm.Services
                     // ✅ Create new scope untuk setiap date
                     using var scope = _serviceProvider.CreateScope();
                     var scopedContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                    
+
                     await GenerateDailySummaryInternalAsync(scopedContext, date);
-                    
+
                     _logger.LogInformation("✅ Summary generated for {Date}", date.ToString("yyyy-MM-dd"));
                 }
                 catch (Exception ex)
@@ -228,9 +228,9 @@ namespace Pm.Services
 
         private (CallRecord? record, string? callerFleet, string? calledFleet, int duration) ParseCsvRowWithFleetData(string line, int rowNumber)
         {
-            if (string.IsNullOrWhiteSpace(line)) 
+            if (string.IsNullOrWhiteSpace(line))
                 return (null, null, null, 0);
-            
+
             try
             {
                 if (line.StartsWith('"') && line.EndsWith('"'))
@@ -244,14 +244,14 @@ namespace Pm.Services
                 var dateStr = parts[0].Trim();
                 if (dateStr.Length != 8 || !int.TryParse(dateStr, out int dateInt))
                     return (null, null, null, 0);
-                    
+
                 var year = dateInt / 10000;
                 var month = (dateInt / 100) % 100;
                 var day = dateInt % 100;
-                
+
                 if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31)
                     return (null, null, null, 0);
-                    
+
                 var callDate = new DateTime(year, month, day);
 
                 // Parse time dari kolom 1
@@ -260,7 +260,7 @@ namespace Pm.Services
 
                 // Parse CALLED FLEET dari kolom 4
                 var calledFleet = parts[4].Trim();
-                
+
                 // Parse CALLER FLEET dari kolom 6
                 var callerFleet = parts[6].Trim();
 
@@ -317,24 +317,24 @@ namespace Pm.Services
             {
                 var values = new StringBuilder();
                 var parameters = new List<object>();
-                
+
                 for (int i = 0; i < batch.Count; i++)
                 {
                     var r = batch[i];
                     if (i > 0) values.Append(",");
-                    
+
                     var baseIndex = i * 4;
-                    values.Append($"(@p{baseIndex},@p{baseIndex+1},@p{baseIndex+2},@p{baseIndex+3})");
-                    
+                    values.Append($"(@p{baseIndex},@p{baseIndex + 1},@p{baseIndex + 2},@p{baseIndex + 3})");
+
                     parameters.Add(r.CallDate);
                     parameters.Add(r.CallTime);
                     parameters.Add(r.CallCloseReason);
                     parameters.Add(r.CreatedAt);
                 }
-                
+
                 var sql = $"INSERT INTO CallRecords (CallDate, CallTime, CallCloseReason, CreatedAt) VALUES {values}";
                 await _context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
-                
+
                 _logger.LogInformation("✅ Batch {BatchIndex} inserted: {Count} records", batchIndex + 1, batch.Count);
             }
             catch (Exception ex)
@@ -343,7 +343,7 @@ namespace Pm.Services
                 throw;
             }
         }
-        
+
         public async Task<byte[]> ExportCallRecordsToCsvAsync(DateTime startDate, DateTime endDate)
         {
             try
@@ -366,7 +366,7 @@ namespace Pm.Services
                     try
                     {
                         var date = record.CallDate.ToString("yyyyMMdd");
-                        
+
                         var time = "000000";
                         if (record.CallTime != default(TimeSpan))
                         {
@@ -439,14 +439,14 @@ namespace Pm.Services
             var sortDir = query.SortDir?.ToLower() ?? "desc";
             dbQuery = (query.SortBy?.ToLower()) switch
             {
-                "calldate" => sortDir == "desc" 
-                    ? dbQuery.OrderByDescending(cr => cr.CallDate) 
+                "calldate" => sortDir == "desc"
+                    ? dbQuery.OrderByDescending(cr => cr.CallDate)
                     : dbQuery.OrderBy(cr => cr.CallDate),
-                "calltime" => sortDir == "desc" 
-                    ? dbQuery.OrderByDescending(cr => cr.CallTime) 
+                "calltime" => sortDir == "desc"
+                    ? dbQuery.OrderByDescending(cr => cr.CallTime)
                     : dbQuery.OrderBy(cr => cr.CallTime),
-                "callclosereason" => sortDir == "desc" 
-                    ? dbQuery.OrderByDescending(cr => cr.CallCloseReason) 
+                "callclosereason" => sortDir == "desc"
+                    ? dbQuery.OrderByDescending(cr => cr.CallCloseReason)
                     : dbQuery.OrderBy(cr => cr.CallCloseReason),
                 _ => dbQuery.OrderByDescending(cr => cr.CallDate).ThenByDescending(cr => cr.CallTime)
             };
@@ -500,7 +500,7 @@ namespace Pm.Services
                 using var scope = _serviceProvider.CreateScope();
                 var scopedContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 await GenerateDailySummaryInternalAsync(scopedContext, date);
-                
+
                 summaries = await _context.CallSummaries
                     .Where(cs => cs.SummaryDate.Date == date.Date)
                     .OrderBy(cs => cs.HourGroup)
@@ -588,7 +588,7 @@ namespace Pm.Services
                     using var scope = _serviceProvider.CreateScope();
                     var scopedContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                     await GenerateDailySummaryInternalAsync(scopedContext, currentDate);
-                    
+
                     currentDate = currentDate.AddDays(1);
                 }
 
@@ -605,26 +605,26 @@ namespace Pm.Services
         public async Task<bool> DeleteCallRecordsAsync(DateTime date)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
-    
+
             try
             {
                 _logger.LogInformation("🗑️ Starting delete operation for date: {Date}", date.ToString("yyyy-MM-dd"));
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var callRecordsDeleted = await _context.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM CallRecords WHERE CallDate = {0}", 
+                    "DELETE FROM CallRecords WHERE CallDate = {0}",
                     date.Date
                 );
 
                 var summariesDeleted = await _context.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM CallSummaries WHERE SummaryDate = {0}", 
+                    "DELETE FROM CallSummaries WHERE SummaryDate = {0}",
                     date.Date
                 );
 
                 await transaction.CommitAsync();
                 stopwatch.Stop();
-                
-                _logger.LogInformation("🎯 Delete completed in {Ms}ms - CallRecords: {CallRecordCount}, Summaries: {SummaryCount}", 
+
+                _logger.LogInformation("🎯 Delete completed in {Ms}ms - CallRecords: {CallRecordCount}, Summaries: {SummaryCount}",
                     stopwatch.ElapsedMilliseconds, callRecordsDeleted, summariesDeleted);
 
                 return true;
@@ -688,24 +688,38 @@ namespace Pm.Services
             }
         }
 
-        public async Task<FleetStatisticsDto> GetFleetStatisticsAsync(DateTime date, int top = 10, FleetStatisticType? type = null)
+        public async Task<FleetStatisticsDto> GetFleetStatisticsAsync(
+            DateTime? startDate,
+            DateTime? endDate,
+            int top = 10,
+            FleetStatisticType? type = null,
+            string sortOrder = "DESC",
+            string? callerSearch = null,
+            string? calledSearch = null)
         {
             try
             {
-                var typeStr = type?.ToString() ?? "All";
-                _logger.LogInformation("📊 Getting fleet statistics for {Date}, Top {Top}, Type {Type}", 
-                    date.ToString("yyyy-MM-dd"), top, typeStr);
+                // Default to today if no dates provided
+                var start = startDate?.Date ?? DateTime.Today;
+                var end = endDate?.Date ?? start;
 
-                var fleetStats = await _context.FleetStatistics
-                    .Where(fs => fs.CallDate.Date == date.Date)
-                    .ToListAsync();
+                var typeStr = type?.ToString() ?? "All";
+                _logger.LogInformation("📊 Getting fleet statistics from {StartDate} to {EndDate}, Top {Top}, Type {Type}, Sort {Sort}",
+                    start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"), top, typeStr, sortOrder);
+
+                // Query fleet stats for date range
+                var fleetStatsQuery = _context.FleetStatistics
+                    .Where(fs => fs.CallDate.Date >= start && fs.CallDate.Date <= end);
+
+                var fleetStats = await fleetStatsQuery.ToListAsync();
 
                 if (!fleetStats.Any())
                 {
-                    _logger.LogWarning("⚠️ No fleet statistics found for {Date}", date.ToString("yyyy-MM-dd"));
+                    _logger.LogWarning("⚠️ No fleet statistics found for date range {Start} to {End}",
+                        start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"));
                     return new FleetStatisticsDto
                     {
-                        Date = date.Date,
+                        Date = start,
                         TopCallers = new List<TopCallerFleetDto>(),
                         TopCalledFleets = new List<TopCalledFleetDto>()
                     };
@@ -714,18 +728,32 @@ namespace Pm.Services
                 var selectedType = type ?? FleetStatisticType.All;
                 List<TopCallerFleetDto> topCallers = new();
                 List<TopCalledFleetDto> topCalledFleets = new();
+                bool isAscending = sortOrder.ToUpperInvariant() == "ASC";
 
                 if (selectedType == FleetStatisticType.All || selectedType == FleetStatisticType.Caller)
                 {
-                    topCallers = fleetStats
+                    var callerQuery = fleetStats
                         .GroupBy(fs => fs.CallerFleet)
                         .Select(g => new
                         {
                             CallerFleet = g.Key,
                             TotalCalls = g.Sum(x => x.CallCount),
-                            TotalDuration = g.Sum(x => x.TotalDuration)
-                        })
-                        .OrderByDescending(x => x.TotalCalls)
+                            TotalDuration = g.Sum(x => x.TotalDuration),
+                            UniqueCalledFleets = g.Select(x => x.CalledFleet).Distinct().Count()
+                        });
+
+                    // Apply search filter
+                    if (!string.IsNullOrWhiteSpace(callerSearch))
+                    {
+                        callerQuery = callerQuery.Where(x => x.CallerFleet.Contains(callerSearch, StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    // Apply sort order
+                    var sortedCallers = isAscending
+                        ? callerQuery.OrderBy(x => x.TotalCalls)
+                        : callerQuery.OrderByDescending(x => x.TotalCalls);
+
+                    topCallers = sortedCallers
                         .Take(top)
                         .Select((x, index) => new TopCallerFleetDto
                         {
@@ -735,14 +763,15 @@ namespace Pm.Services
                             TotalDurationSeconds = x.TotalDuration,
                             TotalDurationFormatted = FormatDuration(x.TotalDuration),
                             AverageDurationSeconds = x.TotalCalls > 0 ? Math.Round((decimal)x.TotalDuration / x.TotalCalls, 2) : 0,
-                            AverageDurationFormatted = FormatDuration(x.TotalCalls > 0 ? x.TotalDuration / x.TotalCalls : 0)
+                            AverageDurationFormatted = FormatDuration(x.TotalCalls > 0 ? x.TotalDuration / x.TotalCalls : 0),
+                            UniqueCalledFleets = x.UniqueCalledFleets
                         })
                         .ToList();
                 }
 
                 if (selectedType == FleetStatisticType.All || selectedType == FleetStatisticType.Called)
                 {
-                    topCalledFleets = fleetStats
+                    var calledQuery = fleetStats
                         .GroupBy(fs => fs.CalledFleet)
                         .Select(g => new
                         {
@@ -750,8 +779,20 @@ namespace Pm.Services
                             TotalCalls = g.Sum(x => x.CallCount),
                             TotalDuration = g.Sum(x => x.TotalDuration),
                             UniqueCallers = g.Select(x => x.CallerFleet).Distinct().Count()
-                        })
-                        .OrderByDescending(x => x.TotalCalls)
+                        });
+
+                    // Apply search filter
+                    if (!string.IsNullOrWhiteSpace(calledSearch))
+                    {
+                        calledQuery = calledQuery.Where(x => x.CalledFleet.Contains(calledSearch, StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    // Apply sort order
+                    var sortedCalled = isAscending
+                        ? calledQuery.OrderBy(x => x.TotalCalls)
+                        : calledQuery.OrderByDescending(x => x.TotalCalls);
+
+                    topCalledFleets = sortedCalled
                         .Take(top)
                         .Select((x, index) => new TopCalledFleetDto
                         {
@@ -774,7 +815,7 @@ namespace Pm.Services
 
                 return new FleetStatisticsDto
                 {
-                    Date = date.Date,
+                    Date = start,
                     TopCallers = topCallers,
                     TopCalledFleets = topCalledFleets,
                     TotalCallsInDay = totalCalls,
@@ -786,7 +827,99 @@ namespace Pm.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error getting fleet statistics for {Date}", date.ToString("yyyy-MM-dd"));
+                _logger.LogError(ex, "❌ Error getting fleet statistics");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Get unique callers for a specific called fleet (for detail popup)
+        /// </summary>
+        public async Task<List<UniqueCallerDetailDto>> GetUniqueCallersForFleetAsync(
+            string calledFleet,
+            DateTime? startDate,
+            DateTime? endDate)
+        {
+            try
+            {
+                var start = startDate?.Date ?? DateTime.Today;
+                var end = endDate?.Date ?? start;
+
+                _logger.LogInformation("📊 Getting unique callers for fleet {Fleet} from {Start} to {End}",
+                    calledFleet, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"));
+
+                var callerDetails = await _context.FleetStatistics
+                    .Where(fs => fs.CalledFleet == calledFleet &&
+                                 fs.CallDate.Date >= start &&
+                                 fs.CallDate.Date <= end)
+                    .GroupBy(fs => fs.CallerFleet)
+                    .Select(g => new UniqueCallerDetailDto
+                    {
+                        CallerFleet = g.Key,
+                        CallCount = g.Sum(x => x.CallCount),
+                        TotalDurationSeconds = g.Sum(x => x.TotalDuration),
+                        TotalDurationFormatted = "" // Will be formatted after
+                    })
+                    .OrderByDescending(x => x.CallCount)
+                    .ToListAsync();
+
+                // Format durations
+                foreach (var detail in callerDetails)
+                {
+                    detail.TotalDurationFormatted = FormatDuration(detail.TotalDurationSeconds);
+                }
+
+                return callerDetails;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error getting unique callers for fleet {Fleet}", calledFleet);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Get unique called fleets for a specific caller (for detail popup)
+        /// </summary>
+        public async Task<List<UniqueCalledDetailDto>> GetUniqueCalledFleetsForCallerAsync(
+            string callerFleet,
+            DateTime? startDate,
+            DateTime? endDate)
+        {
+            try
+            {
+                var start = startDate?.Date ?? DateTime.Today;
+                var end = endDate?.Date ?? start;
+
+                _logger.LogInformation("📊 Getting unique called fleets for caller {Fleet} from {Start} to {End}",
+                    callerFleet, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"));
+
+                var calledDetails = await _context.FleetStatistics
+                    .Where(fs => fs.CallerFleet == callerFleet &&
+                                 fs.CallDate.Date >= start &&
+                                 fs.CallDate.Date <= end)
+                    .GroupBy(fs => fs.CalledFleet)
+                    .Select(g => new UniqueCalledDetailDto
+                    {
+                        CalledFleet = g.Key,
+                        CallCount = g.Sum(x => x.CallCount),
+                        TotalDurationSeconds = g.Sum(x => x.TotalDuration),
+                        TotalDurationFormatted = "" // Will be formatted after
+                    })
+                    .OrderByDescending(x => x.CallCount)
+                    .ToListAsync();
+
+                // Format durations
+                foreach (var detail in calledDetails)
+                {
+                    detail.TotalDurationFormatted = FormatDuration(detail.TotalDurationSeconds);
+                }
+
+                return calledDetails;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error getting unique called fleets for caller {Fleet}", callerFleet);
                 throw;
             }
         }
@@ -804,20 +937,20 @@ namespace Pm.Services
             for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++)
             {
                 var batch = stats.Skip(batchIndex * batchSize).Take(batchSize).ToList();
-                
+
                 try
                 {
                     var values = new StringBuilder();
                     var parameters = new List<object>();
-                    
+
                     for (int i = 0; i < batch.Count; i++)
                     {
                         var s = batch[i];
                         if (i > 0) values.Append(",");
-                        
+
                         var baseIndex = i * 6;
-                        values.Append($"(@p{baseIndex},@p{baseIndex+1},@p{baseIndex+2},@p{baseIndex+3},@p{baseIndex+4},@p{baseIndex+5})");
-                        
+                        values.Append($"(@p{baseIndex},@p{baseIndex + 1},@p{baseIndex + 2},@p{baseIndex + 3},@p{baseIndex + 4},@p{baseIndex + 5})");
+
                         parameters.Add(s.CallDate);
                         parameters.Add(s.CallerFleet);
                         parameters.Add(s.CalledFleet);
@@ -825,11 +958,11 @@ namespace Pm.Services
                         parameters.Add(s.TotalDuration);
                         parameters.Add(s.CreatedAt);
                     }
-                    
+
                     var sql = $"INSERT INTO FleetStatistics (CallDate, CallerFleet, CalledFleet, CallCount, TotalDuration, CreatedAt) VALUES {values}";
                     await _context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
-                    
-                    _logger.LogInformation("✅ Fleet stats batch {BatchIndex}/{TotalBatches} inserted: {Count} records", 
+
+                    _logger.LogInformation("✅ Fleet stats batch {BatchIndex}/{TotalBatches} inserted: {Count} records",
                         batchIndex + 1, totalBatches, batch.Count);
                 }
                 catch (Exception ex)
