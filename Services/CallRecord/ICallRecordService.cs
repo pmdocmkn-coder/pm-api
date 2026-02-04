@@ -24,6 +24,7 @@ namespace Pm.Services
             int top = 10,
             FleetStatisticType? type = null,
             string sortOrder = "DESC",
+            string sortBy = "calls",
             string? callerSearch = null,
             string? calledSearch = null);
 
@@ -39,6 +40,13 @@ namespace Pm.Services
             DateTime? endDate);
 
         Task BulkInsertFleetStatisticsAsync(List<Models.FleetStatistic> stats);
+
+        // DIAGNOSTIC: Analyze fleet duration data for troubleshooting
+        Task<object> DiagnoseFleetDurationAsync(
+            string callerFleet,
+            string calledFleet,
+            DateTime? startDate,
+            DateTime? endDate);
 
         // Rebuild FleetStatistics from raw CallRecords (for data correction)
         Task<int> RebuildFleetStatisticsAsync(DateTime? startDate = null, DateTime? endDate = null);

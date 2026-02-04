@@ -709,6 +709,7 @@ namespace Pm.Services
             int top = 10,
             FleetStatisticType? type = null,
             string sortOrder = "DESC",
+            string sortBy = "calls",
             string? callerSearch = null,
             string? calledSearch = null)
         {
@@ -763,10 +764,20 @@ namespace Pm.Services
                         callerQuery = callerQuery.Where(x => x.CallerFleet.Contains(callerSearch, StringComparison.OrdinalIgnoreCase));
                     }
 
-                    // Apply sort order
-                    var sortedCallers = isAscending
-                        ? callerQuery.OrderBy(x => x.TotalCalls)
-                        : callerQuery.OrderByDescending(x => x.TotalCalls);
+                    // Apply sort order based on sortBy field
+                    IOrderedEnumerable<dynamic> sortedCallers;
+                    if (sortBy.ToLowerInvariant() == "unique")
+                    {
+                        sortedCallers = isAscending
+                            ? callerQuery.OrderBy(x => x.UniqueCalledFleets)
+                            : callerQuery.OrderByDescending(x => x.UniqueCalledFleets);
+                    }
+                    else
+                    {
+                        sortedCallers = isAscending
+                            ? callerQuery.OrderBy(x => x.TotalCalls)
+                            : callerQuery.OrderByDescending(x => x.TotalCalls);
+                    }
 
                     topCallers = sortedCallers
                         .Take(top)
@@ -802,10 +813,20 @@ namespace Pm.Services
                         calledQuery = calledQuery.Where(x => x.CalledFleet.Contains(calledSearch, StringComparison.OrdinalIgnoreCase));
                     }
 
-                    // Apply sort order
-                    var sortedCalled = isAscending
-                        ? calledQuery.OrderBy(x => x.TotalCalls)
-                        : calledQuery.OrderByDescending(x => x.TotalCalls);
+                    // Apply sort order based on sortBy field
+                    IOrderedEnumerable<dynamic> sortedCalled;
+                    if (sortBy.ToLowerInvariant() == "unique")
+                    {
+                        sortedCalled = isAscending
+                            ? calledQuery.OrderBy(x => x.UniqueCallers)
+                            : calledQuery.OrderByDescending(x => x.UniqueCallers);
+                    }
+                    else
+                    {
+                        sortedCalled = isAscending
+                            ? calledQuery.OrderBy(x => x.TotalCalls)
+                            : calledQuery.OrderByDescending(x => x.TotalCalls);
+                    }
 
                     topCalledFleets = sortedCalled
                         .Take(top)
@@ -1018,6 +1039,90 @@ namespace Pm.Services
                 return $"{minutes}m {secs}s";
             else
                 return $"{secs}s";
+        }
+
+        /// <summary>
+        /// DIAGNOSTIC: Compare FleetStatistics with expected values for troubleshooting
+        /// </summary>
+        public async Task<object> DiagnoseFleetDurationAsync(
+            string callerFleet,
+            string calledFleet,
+            DateTime? startDate,
+            DateTime? endDate)
+        {
+            var start = startDate?.Date ?? new DateTime(2020, 1, 1);
+            var end = endDate?.Date ?? DateTime.Today;
+
+            _logger.LogInformation("🔍 DIAGNOSTIC: Analyzing fleet duration for {Caller} -> {Called} from {Start} to {End}",
+                callerFleet, calledFleet, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"));
+
+            // Get from FleetStatistics table
+            var fleetStats = await _context.FleetStatistics
+                .Where(fs => fs.CallerFleet == callerFleet &&
+                             fs.CalledFleet == calledFleet &&
+                             fs.CallDate >= start &&
+                             fs.CallDate <= end)
+                .Select(fs => new
+                {
+                    fs.CallDate,
+                    fs.CallCount,
+                    fs.TotalDuration
+                })
+                .OrderBy(fs => fs.CallDate)
+                .ToListAsync();
+
+            var fleetStatsTotal = fleetStats.Sum(x => x.TotalDuration);
+            var fleetStatsCount = fleetStats.Sum(x => x.CallCount);
+
+            var result = new
+            {
+                CallerFleet = callerFleet,
+                CalledFleet = calledFleet,
+                DateRange = new
+                {
+                    Start = start.ToString("yyyy-MM-dd"),
+                    End = end.ToString("yyyy-MM-dd")
+                },
+                FleetStatistics = new
+                {
+                    TotalRecords = fleetStats.Count,
+                    TotalCallCount = fleetStatsCount,
+                    TotalDurationSeconds = fleetStatsTotal,
+                    TotalDurationFormatted = FormatDuration(fleetStatsTotal),
+                    AverageDurationPerCall = fleetStatsCount > 0
+                        ? Math.Round((decimal)fleetStatsTotal / fleetStatsCount, 2)
+                        : 0,
+                    Details = fleetStats.Select(x => new
+                    {
+                        Date = x.CallDate.ToString("yyyy-MM-dd"),
+                        CallCount = x.CallCount,
+                        TotalDurationSeconds = x.TotalDuration,
+                        TotalDurationFormatted = FormatDuration(x.TotalDuration),
+                        AverageDurationPerCall = x.CallCount > 0
+                            ? Math.Round((decimal)x.TotalDuration / x.CallCount, 2)
+                            : 0
+                    }).ToList()
+                },
+                Analysis = new
+                {
+                    Note = "CallRecords table doesn't store fleet info - data comes from CSV columns 4 (Called Fleet) and 6 (Caller Fleet)",
+                    ExpectedTotalIfManualSum = "Please verify by summing column 13 (ON air duration) from CSV filtered by these fleets",
+                    PossibleIssues = new[]
+                    {
+                        "If TotalDurationSeconds is much smaller than expected: Data corruption from previous import",
+                        "If CallCount doesn't match Excel record count: Missing records during import",
+                        "If average duration per call is abnormally low: TotalDuration not accumulating correctly"
+                    },
+                    Recommendation = fleetStatsTotal < 10000 && fleetStatsCount > 100
+                        ? "⚠️ WARNING: Average duration per call is very low. This suggests data corruption. Recommend re-importing CSV data."
+                        : "✅ Duration values appear reasonable. Verify against CSV to confirm."
+                }
+            };
+
+            _logger.LogInformation("🔍 Diagnostic complete: CallCount={Count}, TotalDuration={Duration}s ({Formatted})",
+                fleetStatsCount, fleetStatsTotal, FormatDuration(fleetStatsTotal));
+
+            return result;
         }
 
         /// <summary>

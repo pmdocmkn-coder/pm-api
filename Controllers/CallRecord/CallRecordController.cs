@@ -364,6 +364,7 @@ namespace Pm.Controllers
             [FromQuery] int top = 10,
             [FromQuery] FleetStatisticType? type = null,
             [FromQuery] string sortOrder = "DESC",
+            [FromQuery] string sortBy = "calls",
             [FromQuery] string? callerSearch = null,
             [FromQuery] string? calledSearch = null)
         {
@@ -380,8 +381,14 @@ namespace Pm.Controllers
                     return ApiResponse.BadRequest("sortOrder", "Parameter 'sortOrder' harus 'ASC' atau 'DESC'");
                 }
 
+                // Validate sortBy parameter
+                if (sortBy != "calls" && sortBy != "unique")
+                {
+                    return ApiResponse.BadRequest("sortBy", "Parameter 'sortBy' harus 'calls' atau 'unique'");
+                }
+
                 var stats = await _callRecordService.GetFleetStatisticsAsync(
-                    startDate, endDate, top, type, sortOrder, callerSearch, calledSearch);
+                    startDate, endDate, top, type, sortOrder, sortBy, callerSearch, calledSearch);
 
                 if (stats.TopCallers.Count == 0 && stats.TopCalledFleets.Count == 0)
                 {
@@ -466,6 +473,32 @@ namespace Pm.Controllers
         }
 
         /// <summary>
+        /// DIAGNOSTIC: Compare FleetStatistics with expected values for troubleshooting
+        /// </summary>
+        [Authorize(Policy = "CanViewCallRecords")]
+        [HttpGet("diagnostic/fleet-duration/{callerFleet}/{calledFleet}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> DiagnoseFleetDuration(
+            [FromRoute] string callerFleet,
+            [FromRoute] string calledFleet,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            try
+            {
+                var result = await _callRecordService.DiagnoseFleetDurationAsync(
+                    callerFleet, calledFleet, startDate, endDate);
+                return ApiResponse.Success(result, "Diagnostic data retrieved successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in diagnostic endpoint for {Caller} -> {Called}",
+                    callerFleet, calledFleet);
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Rebuild FleetStatistics from raw data (clears and requires re-import)
         /// </summary>
         [Authorize(Policy = "CanRebuildFleetStatistics")]
@@ -495,6 +528,38 @@ namespace Pm.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error rebuilding FleetStatistics");
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
+        }
+        /// <summary>
+        /// Reset (Truncate) FleetStatistics table
+        /// </summary>
+        [Authorize(Policy = "CanDeleteAllData")]
+        [HttpDelete("fleet-statistics/reset")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> ResetFleetStatistics([FromQuery] string confirmation)
+        {
+            if (confirmation != "DELETE_ALL_DATA")
+            {
+                return ApiResponse.BadRequest("confirmation", "Konfirmasi tidak valid. Gunakan query parameter: ?confirmation=DELETE_ALL_DATA");
+            }
+
+            try
+            {
+                _logger.LogWarning("⚠️ RESET FLEET STATISTICS - Deleting all fleet statistics data");
+                await _callRecordService.RebuildFleetStatisticsAsync(null, null); // Null dates triggers TRUNCATE
+
+                return ApiResponse.Success(
+                    data: new
+                    {
+                        warning = "Semua data fleet statistics telah dihapus permanent"
+                    },
+                    message: "FleetStatistics table has been successfully reset (truncated)."
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resetting FleetStatistics");
                 return ApiResponse.BadRequest("message", ex.Message);
             }
         }
