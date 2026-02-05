@@ -220,7 +220,38 @@ namespace Pm.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error exporting overall summary to Excel");
+                return ApiResponse.InternalServerError($"Terjadi kesalahan saat export Excel: {ex.Message}");
+            }
+        }
+
+        [Authorize(Policy = "CanExportCallRecordsExcel")]
+        [HttpGet("export/unique-callers/{calledFleet}")]
+        public async Task<IActionResult> ExportUniqueCallersToExcel(
+            [FromRoute] string calledFleet,
+            [FromQuery] string startDate,
+            [FromQuery] string endDate)
+        {
+            if (!DateTime.TryParse(startDate, out var parsedStartDate))
+                return ApiResponse.BadRequest("startDate", "Format startDate tidak valid. Gunakan format YYYY-MM-DD");
+
+            if (!DateTime.TryParse(endDate, out var parsedEndDate))
+                return ApiResponse.BadRequest("endDate", "Format endDate tidak valid. Gunakan format YYYY-MM-DD");
+
+            try
+            {
+                var details = await _callRecordService.GetUniqueCallersForFleetAsync(calledFleet, parsedStartDate, parsedEndDate);
+                var excelBytes = await _excelExportService.ExportUniqueCallersToExcelAsync(
+                    calledFleet, parsedStartDate, parsedEndDate, details);
+
+                var fileName = $"UniqueCallers_{calledFleet}_{parsedStartDate:yyyyMMdd}_to_{parsedEndDate:yyyyMMdd}.xlsx";
+
+                return File(excelBytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting unique callers to Excel");
                 return ApiResponse.InternalServerError($"Terjadi kesalahan saat export Excel: {ex.Message}");
             }
         }

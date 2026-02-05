@@ -196,6 +196,12 @@ builder.Services.AddScoped<IDocumentTypeService, DocumentTypeService>();
 builder.Services.AddScoped<ICompanyService, CompanyService>();
 builder.Services.AddScoped<ILetterNumberService, LetterNumberService>();
 
+// ===== Radio Management =====
+builder.Services.AddScoped<IRadioTrunkingService, RadioTrunkingService>();
+builder.Services.AddScoped<IRadioConventionalService, RadioConventionalService>();
+builder.Services.AddScoped<IRadioGrafirService, RadioGrafirService>();
+builder.Services.AddScoped<IRadioScrapService, RadioScrapService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(options =>
 {

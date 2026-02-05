@@ -103,6 +103,27 @@ namespace Pm.Helper
             options.AddPolicy("LetterNumberDelete", policy =>
                 policy.RequireClaim("Permission", "letter.delete"));
 
+            //Radio
+            options.AddPolicy("RadioView", policy =>
+                policy.RequireClaim("Permission", "radio.view"));
+            options.AddPolicy("RadioCreate", policy =>
+                policy.RequireClaim("Permission", "radio.create"));
+            options.AddPolicy("RadioUpdate", policy =>
+                policy.RequireClaim("Permission", "radio.update"));
+            options.AddPolicy("RadioDelete", policy =>
+                policy.RequireClaim("Permission", "radio.delete"));
+            options.AddPolicy("RadioImport", policy =>
+                policy.RequireClaim("Permission", "radio.import"));
+            options.AddPolicy("RadioExport", policy =>
+                policy.RequireClaim("Permission", "radio.export"));
+            options.AddPolicy("RadioScrapView", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.view"));
+            options.AddPolicy("RadioScrapDelete", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.delete"));
+            options.AddPolicy("RadioScrapUpdate", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.update"));
+            options.AddPolicy("RadioScrapCreate", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.create"));
         }
 
 

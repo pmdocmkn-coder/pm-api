@@ -30,6 +30,14 @@ namespace Pm.Data
         public DbSet<DocumentType> DocumentTypes { get; set; } = null!;
         public DbSet<Company> Companies { get; set; } = null!;
         public DbSet<LetterNumber> LetterNumbers { get; set; } = null!;
+
+        // Radio Management
+        public DbSet<RadioTrunking> RadioTrunkings { get; set; } = null!;
+        public DbSet<RadioTrunkingHistory> RadioTrunkingHistories { get; set; } = null!;
+        public DbSet<RadioConventional> RadioConventionals { get; set; } = null!;
+        public DbSet<RadioConventionalHistory> RadioConventionalHistories { get; set; } = null!;
+        public DbSet<RadioGrafir> RadioGrafirs { get; set; } = null!;
+        public DbSet<RadioScrap> RadioScraps { get; set; } = null!;
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -656,6 +664,156 @@ namespace Pm.Data
                     .WithMany()
                     .HasForeignKey(e => e.UpdatedBy)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===========================================
+            // RADIO MANAGEMENT CONFIGURATION
+            // ===========================================
+
+            // RadioGrafir
+            modelBuilder.Entity<RadioGrafir>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioGrafirs");
+
+                entity.Property(e => e.NoAsset).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SerialNumber).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.TypeRadio).HasMaxLength(100);
+                entity.Property(e => e.Div).HasMaxLength(50);
+                entity.Property(e => e.Dept).HasMaxLength(100);
+                entity.Property(e => e.FleetId).HasMaxLength(50);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50).HasDefaultValue("Active");
+
+                entity.HasIndex(e => e.NoAsset).IsUnique().HasDatabaseName("IX_RadioGrafir_NoAsset");
+                entity.HasIndex(e => e.SerialNumber).IsUnique().HasDatabaseName("IX_RadioGrafir_SerialNumber");
+
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+            });
+
+            // RadioTrunking
+            modelBuilder.Entity<RadioTrunking>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioTrunkings");
+
+                entity.Property(e => e.UnitNumber).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.RadioId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SerialNumber).HasMaxLength(100);
+                entity.Property(e => e.Dept).HasMaxLength(100);
+                entity.Property(e => e.Fleet).HasMaxLength(50);
+                entity.Property(e => e.RadioType).HasMaxLength(100);
+                entity.Property(e => e.JobNumber).HasMaxLength(50);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50).HasDefaultValue("Active");
+                entity.Property(e => e.Initiator).HasMaxLength(100);
+                entity.Property(e => e.Firmware).HasMaxLength(100);
+                entity.Property(e => e.ChannelApply).HasMaxLength(500);
+
+                entity.HasIndex(e => e.RadioId).IsUnique().HasDatabaseName("IX_RadioTrunking_RadioId");
+                entity.HasIndex(e => e.UnitNumber).HasDatabaseName("IX_RadioTrunking_UnitNumber");
+                entity.HasIndex(e => e.SerialNumber).HasDatabaseName("IX_RadioTrunking_SerialNumber");
+
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasOne(e => e.Grafir)
+                    .WithMany(g => g.TrunkingRadios)
+                    .HasForeignKey(e => e.GrafirId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasMany(e => e.Histories)
+                    .WithOne(h => h.RadioTrunking)
+                    .HasForeignKey(h => h.RadioTrunkingId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // RadioTrunkingHistory
+            modelBuilder.Entity<RadioTrunkingHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioTrunkingHistories");
+
+                entity.Property(e => e.ChangeType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.ChangedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.RadioTrunkingId).HasDatabaseName("IX_RadioTrunkingHistory_RadioId");
+                entity.HasIndex(e => e.ChangedAt).HasDatabaseName("IX_RadioTrunkingHistory_ChangedAt");
+            });
+
+            // RadioConventional
+            modelBuilder.Entity<RadioConventional>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioConventionals");
+
+                entity.Property(e => e.UnitNumber).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.RadioId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SerialNumber).HasMaxLength(100);
+                entity.Property(e => e.Dept).HasMaxLength(100);
+                entity.Property(e => e.Fleet).HasMaxLength(50);
+                entity.Property(e => e.RadioType).HasMaxLength(100);
+                entity.Property(e => e.Frequency).HasMaxLength(50);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50).HasDefaultValue("Active");
+
+                entity.HasIndex(e => e.RadioId).IsUnique().HasDatabaseName("IX_RadioConventional_RadioId");
+                entity.HasIndex(e => e.UnitNumber).HasDatabaseName("IX_RadioConventional_UnitNumber");
+
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasOne(e => e.Grafir)
+                    .WithMany(g => g.ConventionalRadios)
+                    .HasForeignKey(e => e.GrafirId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasMany(e => e.Histories)
+                    .WithOne(h => h.RadioConventional)
+                    .HasForeignKey(h => h.RadioConventionalId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // RadioConventionalHistory
+            modelBuilder.Entity<RadioConventionalHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioConventionalHistories");
+
+                entity.Property(e => e.ChangeType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.ChangedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.RadioConventionalId).HasDatabaseName("IX_RadioConventionalHistory_RadioId");
+                entity.HasIndex(e => e.ChangedAt).HasDatabaseName("IX_RadioConventionalHistory_ChangedAt");
+            });
+
+            // RadioScrap
+            modelBuilder.Entity<RadioScrap>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("RadioScraps");
+
+                entity.Property(e => e.ScrapCategory).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.TypeRadio).HasMaxLength(100);
+                entity.Property(e => e.SerialNumber).HasMaxLength(100);
+                entity.Property(e => e.JobNumber).HasMaxLength(50);
+                entity.Property(e => e.DateScrap).IsRequired();
+
+                entity.HasIndex(e => e.ScrapCategory).HasDatabaseName("IX_RadioScrap_Category");
+                entity.HasIndex(e => e.DateScrap).HasDatabaseName("IX_RadioScrap_DateScrap");
+                entity.HasIndex(e => new { e.ScrapCategory, e.DateScrap }).HasDatabaseName("IX_RadioScrap_Category_Date");
+
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasOne(e => e.SourceTrunking)
+                    .WithMany()
+                    .HasForeignKey(e => e.SourceTrunkingId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.SourceConventional)
+                    .WithMany()
+                    .HasForeignKey(e => e.SourceConventionalId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.SourceGrafir)
+                    .WithMany()
+                    .HasForeignKey(e => e.SourceGrafirId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }

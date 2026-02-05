@@ -90,7 +90,7 @@ namespace Pm.Services
             using (var range = worksheet.Cells[row, 1, row, 8])
             {
                 range.Style.Font.Bold = true;
-                 range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                range.Style.Fill.PatternType = ExcelFillStyle.Solid;
                 range.Style.Fill.BackgroundColor.SetColor(Color.LightYellow);
                 range.Style.Border.BorderAround(ExcelBorderStyle.Thin);
             }
@@ -105,7 +105,7 @@ namespace Pm.Services
             using (var range = worksheet.Cells[row, 1, row, 8])
             {
                 range.Style.Font.Bold = true;
-                 range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                range.Style.Fill.PatternType = ExcelFillStyle.Solid;
                 range.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
                 range.Style.Border.BorderAround(ExcelBorderStyle.Thin);
             }
@@ -278,8 +278,8 @@ namespace Pm.Services
         }
 
         public Task<byte[]> ExportMultipleDailySummariesToExcelAsync(
-        DateTime startDate, 
-        DateTime endDate, 
+        DateTime startDate,
+        DateTime endDate,
         OverallSummaryDto overallSummary)
         {
             using var package = new ExcelPackage();
@@ -303,6 +303,66 @@ namespace Pm.Services
             // Tambahkan sheet summary keseluruhan di akhir (optional)
             var summarySheet = package.Workbook.Worksheets.Add("Overall Summary");
             FillOverallSummarySheet(summarySheet, startDate, endDate, overallSummary);
+
+            return Task.FromResult(package.GetAsByteArray());
+        }
+
+        public Task<byte[]> ExportUniqueCallersToExcelAsync(string calledFleet, DateTime startDate, DateTime endDate, List<UniqueCallerDetailDto> details)
+        {
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("Unique Callers");
+
+            int row = 1;
+
+            // Title
+            worksheet.Cells[row, 1].Value = $"Unique Callers for {calledFleet}";
+            worksheet.Cells[row, 1, row, 3].Merge = true;
+            worksheet.Cells[row, 1].Style.Font.Bold = true;
+            worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+            row++;
+
+            // Period
+            worksheet.Cells[row, 1].Value = $"Period: {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}";
+            worksheet.Cells[row, 1, row, 3].Merge = true;
+            worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+            row += 2;
+
+            // Headers
+            worksheet.Cells[row, 1].Value = "Caller Fleet";
+            worksheet.Cells[row, 2].Value = "Total Calls";
+            worksheet.Cells[row, 3].Value = "Total Duration";
+
+            using (var range = worksheet.Cells[row, 1, row, 3])
+            {
+                range.Style.Font.Bold = true;
+                range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                range.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
+                range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                range.Style.Border.BorderAround(ExcelBorderStyle.Thin);
+            }
+            row++;
+
+            // Data
+            foreach (var detail in details)
+            {
+                worksheet.Cells[row, 1].Value = detail.CallerFleet;
+                worksheet.Cells[row, 2].Value = detail.CallCount;
+                worksheet.Cells[row, 3].Value = detail.TotalDurationFormatted;
+
+                worksheet.Cells[row, 2].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+
+                row++;
+            }
+
+            // Formatting
+            worksheet.Cells.AutoFitColumns();
+            using (var range = worksheet.Cells[4, 1, row - 1, 3])
+            {
+                range.Style.Border.Top.Style = ExcelBorderStyle.Thin;
+                range.Style.Border.Left.Style = ExcelBorderStyle.Thin;
+                range.Style.Border.Right.Style = ExcelBorderStyle.Thin;
+                range.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
+            }
 
             return Task.FromResult(package.GetAsByteArray());
         }
