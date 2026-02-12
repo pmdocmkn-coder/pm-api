@@ -21,7 +21,7 @@ namespace Pm.Helper
             if (timeSpan <= TimeSpan.FromDays(365))
                 return $"{timeSpan.Days / 30} bulan yang lalu";
 
-            return $"{timeSpan.Days / 365} tahun yang lalu";
+            return $"{timeSpan.Days / 365} tahun yang laluu";
         }
     }
 }
