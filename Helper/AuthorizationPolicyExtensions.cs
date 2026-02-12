@@ -103,6 +103,26 @@ namespace Pm.Helper
             options.AddPolicy("LetterNumberDelete", policy =>
                 policy.RequireClaim("Permission", "letter.delete"));
 
+            // Gatepass
+            options.AddPolicy("GatepassView", policy =>
+                policy.RequireClaim("Permission", "gatepass.view"));
+            options.AddPolicy("GatepassCreate", policy =>
+                policy.RequireClaim("Permission", "gatepass.create"));
+            options.AddPolicy("GatepassUpdate", policy =>
+                policy.RequireClaim("Permission", "gatepass.update"));
+            options.AddPolicy("GatepassDelete", policy =>
+                policy.RequireClaim("Permission", "gatepass.delete"));
+
+            // Quotation
+            options.AddPolicy("QuotationView", policy =>
+                policy.RequireClaim("Permission", "quotation.view"));
+            options.AddPolicy("QuotationCreate", policy =>
+                policy.RequireClaim("Permission", "quotation.create"));
+            options.AddPolicy("QuotationUpdate", policy =>
+                policy.RequireClaim("Permission", "quotation.update"));
+            options.AddPolicy("QuotationDelete", policy =>
+                policy.RequireClaim("Permission", "quotation.delete"));
+
             //Radio
             options.AddPolicy("RadioView", policy =>
                 policy.RequireClaim("Permission", "radio.view"));

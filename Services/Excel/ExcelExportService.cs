@@ -366,6 +366,53 @@ namespace Pm.Services
 
             return Task.FromResult(package.GetAsByteArray());
         }
+
+        public Task<byte[]> ExportRadioDataToExcelAsync<T>(List<T> data, string sheetName)
+        {
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add(sheetName);
+
+            // Reflection to get properties
+            var properties = typeof(T).GetProperties();
+
+            // Write Headers
+            for (int i = 0; i < properties.Length; i++)
+            {
+                worksheet.Cells[1, i + 1].Value = properties[i].Name;
+            }
+
+            // Format Headers
+            using (var range = worksheet.Cells[1, 1, 1, properties.Length])
+            {
+                range.Style.Font.Bold = true;
+                range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                range.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+                range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+            }
+
+            // Write Data
+            for (int r = 0; r < data.Count; r++)
+            {
+                for (int c = 0; c < properties.Length; c++)
+                {
+                    var value = properties[c].GetValue(data[r]);
+                    // Handle basic formatting if needed, e.g. dates
+                    if (value is DateTime dt)
+                    {
+                        worksheet.Cells[r + 2, c + 1].Value = dt.ToString("yyyy-MM-dd HH:mm");
+                    }
+                    else
+                    {
+                        worksheet.Cells[r + 2, c + 1].Value = value;
+                    }
+                }
+            }
+
+            // Auto fit
+            worksheet.Cells.AutoFitColumns();
+
+            return Task.FromResult(package.GetAsByteArray());
+        }
     }
 }
 

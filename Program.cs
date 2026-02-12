@@ -6,17 +6,14 @@ using System.Text;
 using FluentValidation;
 using Pm.Data;
 using Pm.Services;
-using Pm.Services.Company;
-using Pm.Services.DocumentType;
-using Pm.Services.Letter;
 using Pm.Helper;
 using Pm.Middleware;
 using Pm.DTOs;
 using Pm.Validators;
-using Microsoft.AspNetCore.Http.Features;
 using Pm.DTOs.Auth;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.Features;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -195,6 +192,10 @@ builder.Services.AddScoped<ISwrSignalService, SwrSignalService>();
 builder.Services.AddScoped<IDocumentTypeService, DocumentTypeService>();
 builder.Services.AddScoped<ICompanyService, CompanyService>();
 builder.Services.AddScoped<ILetterNumberService, LetterNumberService>();
+
+// ===== Gatepass & Quotation =====
+builder.Services.AddScoped<IGatepassService, GatepassService>();
+builder.Services.AddScoped<IQuotationService, QuotationService>();
 
 // ===== Radio Management =====
 builder.Services.AddScoped<IRadioTrunkingService, RadioTrunkingService>();

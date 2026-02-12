@@ -1,6 +1,6 @@
 namespace Pm.Enums
 {
-    public enum LetterStatus
+    public enum GatepassStatus
     {
         Draft,
         Sent

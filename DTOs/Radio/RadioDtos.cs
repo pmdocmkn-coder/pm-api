@@ -19,6 +19,7 @@ namespace Pm.DTOs.Radio
         public string? Initiator { get; set; }
         public string? Firmware { get; set; }
         public string? ChannelApply { get; set; }
+        public string? Remarks { get; set; }
         public int? GrafirId { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
@@ -41,6 +42,7 @@ namespace Pm.DTOs.Radio
         public string? Initiator { get; set; }
         public string? Firmware { get; set; }
         public string? ChannelApply { get; set; }
+        public string? Remarks { get; set; }
         public int? GrafirId { get; set; }
     }
 
@@ -58,6 +60,7 @@ namespace Pm.DTOs.Radio
         public string? Initiator { get; set; }
         public string? Firmware { get; set; }
         public string? ChannelApply { get; set; }
+        public string? Remarks { get; set; }
         public int? GrafirId { get; set; }
         public string? Notes { get; set; } // For history tracking
     }

@@ -20,9 +20,8 @@ namespace Pm.DTOs
         [StringLength(500, ErrorMessage = "Subject cannot exceed 500 characters")]
         public required string Subject { get; set; }
 
-        [Required(ErrorMessage = "Recipient is required")]
         [StringLength(200, ErrorMessage = "Recipient cannot exceed 200 characters")]
-        public required string Recipient { get; set; }
+        public string? Recipient { get; set; }
 
         [StringLength(1000, ErrorMessage = "Attachment URL cannot exceed 1000 characters")]
         public string? AttachmentUrl { get; set; }
@@ -37,9 +36,8 @@ namespace Pm.DTOs
         [StringLength(500, ErrorMessage = "Subject cannot exceed 500 characters")]
         public required string Subject { get; set; }
 
-        [Required(ErrorMessage = "Recipient is required")]
         [StringLength(200, ErrorMessage = "Recipient cannot exceed 200 characters")]
-        public required string Recipient { get; set; }
+        public string? Recipient { get; set; }
 
         [StringLength(1000, ErrorMessage = "Attachment URL cannot exceed 1000 characters")]
         public string? AttachmentUrl { get; set; }
@@ -57,7 +55,7 @@ namespace Pm.DTOs
         public int Month { get; set; }
         public DateTime LetterDate { get; set; }
         public string Subject { get; set; } = string.Empty;
-        public string Recipient { get; set; } = string.Empty;
+        public string? Recipient { get; set; }
         public string? AttachmentUrl { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
@@ -77,7 +75,7 @@ namespace Pm.DTOs
         public string FormattedNumber { get; set; } = string.Empty;
         public DateTime LetterDate { get; set; }
         public string Subject { get; set; } = string.Empty;
-        public string Recipient { get; set; } = string.Empty;
+        public string? Recipient { get; set; }
         public string Status { get; set; } = string.Empty;
         public string DocumentTypeCode { get; set; } = string.Empty;
         public string CompanyCode { get; set; } = string.Empty;

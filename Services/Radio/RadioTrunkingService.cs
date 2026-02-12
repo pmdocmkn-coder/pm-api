@@ -13,14 +13,17 @@ namespace Pm.Services
         private readonly AppDbContext _context;
         private readonly ILogger<RadioTrunkingService> _logger;
         private readonly IActivityLogService _activityLog;
+        private readonly IExcelExportService _excelExport;
 
-        public RadioTrunkingService(AppDbContext context, ILogger<RadioTrunkingService> logger, IActivityLogService activityLog)
+        public RadioTrunkingService(AppDbContext context, ILogger<RadioTrunkingService> logger, IActivityLogService activityLog, IExcelExportService excelExport)
         {
             _context = context;
             _logger = logger;
             _activityLog = activityLog;
+            _excelExport = excelExport;
         }
 
+        // ... (existing GetAllAsync method, adding logging) ...
         public async Task<PagedResultDto<RadioTrunkingDto>> GetAllAsync(RadioTrunkingQueryDto query)
         {
             var queryable = _context.RadioTrunkings
@@ -51,6 +54,8 @@ namespace Pm.Services
             queryable = queryable.ApplySorting(query.SortBy ?? "createdAt", query.SortDir ?? "desc");
 
             var totalCount = await queryable.CountAsync();
+            _logger.LogInformation($"GetAllAsync Total Count: {totalCount} for query: {System.Text.Json.JsonSerializer.Serialize(query)}");
+
             var items = await queryable
                 .Skip((query.Page - 1) * query.PageSize)
                 .Take(query.PageSize)
@@ -59,6 +64,8 @@ namespace Pm.Services
 
             return new PagedResultDto<RadioTrunkingDto>(items, query, totalCount);
         }
+
+
 
         public async Task<RadioTrunkingDto?> GetByIdAsync(int id)
         {
@@ -86,6 +93,7 @@ namespace Pm.Services
                 Initiator = dto.Initiator,
                 Firmware = dto.Firmware,
                 ChannelApply = dto.ChannelApply,
+                Remarks = dto.Remarks,
                 GrafirId = dto.GrafirId,
                 CreatedBy = userId
             };
@@ -155,6 +163,7 @@ namespace Pm.Services
             if (dto.Initiator != null) entity.Initiator = dto.Initiator;
             if (dto.Firmware != null) entity.Firmware = dto.Firmware;
             if (dto.ChannelApply != null) entity.ChannelApply = dto.ChannelApply;
+            if (dto.Remarks != null) entity.Remarks = dto.Remarks;
             if (dto.GrafirId.HasValue) entity.GrafirId = dto.GrafirId;
 
             entity.UpdatedAt = DateTime.UtcNow;
@@ -248,8 +257,52 @@ namespace Pm.Services
             var errors = new List<string>();
 
             using var reader = new StreamReader(stream);
+
+            // Read and parse header row
             var headerLine = await reader.ReadLineAsync();
             if (headerLine == null) return (0, 0, ["Empty file"]);
+
+            // Create column mapping (case-insensitive)
+            var headers = headerLine.Split(',').Select(h => h.Trim()).ToArray();
+            var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var normalizedHeader = headers[i]
+                    .Replace(" ", "")
+                    .Replace("_", "")
+                    .ToLower();
+
+                // Map common variations to standard names
+                if (normalizedHeader == "setting" || normalizedHeader == "type") normalizedHeader = "radiotype";
+                if (normalizedHeader == "remark") normalizedHeader = "remarks";
+                if (normalizedHeader == "programdate") normalizedHeader = "dateprogram";
+                if (normalizedHeader == "serial") normalizedHeader = "serialnumber";
+                if (normalizedHeader == "job") normalizedHeader = "jobnumber";
+                if (normalizedHeader == "channel") normalizedHeader = "channelapply";
+
+                columnMap[normalizedHeader] = i;
+            }
+
+            // Helper to get value by column name
+            string? GetValueByName(string[] values, string columnName)
+            {
+                var key = columnName.ToLower();
+                if (columnMap.TryGetValue(key, out int index) && index < values.Length)
+                {
+                    var val = values[index].Trim();
+                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                }
+                return null;
+            }
+
+            DateTime? GetDateByName(string[] values, string columnName)
+            {
+                var val = GetValueByName(values, columnName);
+                if (val != null && DateTime.TryParse(val, out var date))
+                    return date;
+                return null;
+            }
 
             var lineNumber = 1;
             while (!reader.EndOfStream)
@@ -261,26 +314,42 @@ namespace Pm.Services
                 try
                 {
                     var values = line.Split(',');
-                    if (values.Length < 4)
+
+                    // Get values by column name (order doesn't matter!)
+                    var unitNumber = GetValueByName(values, "unitnumber");
+                    var radioId = GetValueByName(values, "radioid");
+
+                    // Auto-generate if both are empty
+                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
                     {
-                        failed++;
-                        errors.Add($"Line {lineNumber}: Not enough columns");
-                        continue;
+                        var guid = Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
+                        unitNumber = $"AUTO-{guid}";
+                        radioId = $"RADIO-{guid}";
+                    }
+                    else if (string.IsNullOrEmpty(unitNumber))
+                    {
+                        unitNumber = radioId!;
+                    }
+                    else if (string.IsNullOrEmpty(radioId))
+                    {
+                        radioId = unitNumber!;
                     }
 
                     var dto = new CreateRadioTrunkingDto
                     {
-                        UnitNumber = values[0].Trim(),
-                        RadioId = values[1].Trim(),
-                        SerialNumber = values.Length > 2 ? values[2].Trim() : null,
-                        Dept = values.Length > 3 ? values[3].Trim() : null,
-                        Fleet = values.Length > 4 ? values[4].Trim() : null,
-                        RadioType = values.Length > 5 ? values[5].Trim() : null,
-                        JobNumber = values.Length > 6 ? values[6].Trim() : null,
-                        Status = values.Length > 7 ? values[7].Trim() : "Active",
-                        Initiator = values.Length > 8 ? values[8].Trim() : null,
-                        Firmware = values.Length > 9 ? values[9].Trim() : null,
-                        ChannelApply = values.Length > 10 ? values[10].Trim() : null
+                        UnitNumber = unitNumber!,
+                        Dept = GetValueByName(values, "dept"),
+                        Fleet = GetValueByName(values, "fleet"),
+                        RadioId = radioId!,
+                        SerialNumber = GetValueByName(values, "serialnumber"),
+                        DateProgram = GetDateByName(values, "dateprogram"),
+                        JobNumber = GetValueByName(values, "jobnumber"),
+                        RadioType = GetValueByName(values, "radiotype"), // Also accepts "Setting", "Type"
+                        Remarks = GetValueByName(values, "remarks"), // Also accepts "Remark"
+                        Firmware = GetValueByName(values, "firmware"),
+                        ChannelApply = GetValueByName(values, "channelapply"),
+                        Initiator = GetValueByName(values, "initiator"),
+                        Status = GetValueByName(values, "status") ?? "Active"
                     };
 
                     await CreateAsync(dto, userId);
@@ -301,7 +370,9 @@ namespace Pm.Services
 
         public async Task<byte[]> ExportCsvAsync(RadioTrunkingQueryDto? query)
         {
-            var queryable = _context.RadioTrunkings.AsNoTracking();
+            var queryable = _context.RadioTrunkings
+                .Include(r => r.Grafir)
+                .AsNoTracking();
 
             if (query != null)
             {
@@ -311,23 +382,35 @@ namespace Pm.Services
                     queryable = queryable.Where(r => r.Dept == query.Dept);
             }
 
-            var data = await queryable.ToListAsync();
+            var data = await queryable.Select(r => MapToDto(r)).ToListAsync();
 
-            var sb = new StringBuilder();
-            sb.AppendLine("UnitNumber,RadioId,SerialNumber,Dept,Fleet,RadioType,JobNumber,Status,Initiator,Firmware,ChannelApply,DateProgram");
-
-            foreach (var item in data)
+            // Create flat projection for Excel
+            var exportData = data.Select(x => new
             {
-                sb.AppendLine($"{item.UnitNumber},{item.RadioId},{item.SerialNumber},{item.Dept},{item.Fleet},{item.RadioType},{item.JobNumber},{item.Status},{item.Initiator},{item.Firmware},{item.ChannelApply},{item.DateProgram:yyyy-MM-dd}");
-            }
+                x.UnitNumber,
+                x.RadioId,
+                x.SerialNumber,
+                x.Dept,
+                x.Fleet,
+                x.RadioType,
+                x.JobNumber,
+                x.Status,
+                x.Initiator,
+                x.Firmware,
+                x.ChannelApply,
+                DateProgram = x.DateProgram?.ToString("yyyy-MM-dd"),
+                GrafirNoAsset = x.GrafirInfo?.NoAsset,
+                GrafirSerial = x.GrafirInfo?.SerialNumber
+            }).ToList();
 
-            return Encoding.UTF8.GetBytes(sb.ToString());
+            return await _excelExport.ExportRadioDataToExcelAsync(exportData, "Radio Trunking");
         }
 
         public byte[] GetImportTemplate()
         {
-            var template = "UnitNumber,RadioId,SerialNumber,Dept,Fleet,RadioType,JobNumber,Status,Initiator,Firmware,ChannelApply\n";
-            template += "LS 513,4101-346,25573915,MEWS,MSD,TP8100,JN001,Active,Admin,v2.1,CH1;CH2\n";
+            var template = "UnitNumber,Dept,Fleet,RadioId,SerialNumber,DateProgram,JobNumber,Setting,Remarks,Firmware,ChannelApply,Initiator,Status\n";
+            template += "LS 513,MEWS,MSD,4101-346,25573915,2024-01-15,JN001,TP8100,No issues,v2.1,CH1;CH2,Admin,Active\n";
+            template += ",,,,,,,,All fields are optional,,,\n";
             return Encoding.UTF8.GetBytes(template);
         }
 
@@ -348,6 +431,7 @@ namespace Pm.Services
                 Initiator = entity.Initiator,
                 Firmware = entity.Firmware,
                 ChannelApply = entity.ChannelApply,
+                Remarks = entity.Remarks,
                 GrafirId = entity.GrafirId,
                 CreatedAt = entity.CreatedAt,
                 UpdatedAt = entity.UpdatedAt,

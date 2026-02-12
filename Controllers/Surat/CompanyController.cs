@@ -3,9 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Pm.DTOs;
 using Pm.Helper;
 using Pm.Services;
-using Pm.Services.Company;
 
-namespace Pm.Controllers.Surat
+namespace Pm.Controllers
 {
     [ApiController]
     [Route("api/companies")]

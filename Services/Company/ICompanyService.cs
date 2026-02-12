@@ -1,7 +1,7 @@
 using Pm.DTOs;
 using Pm.DTOs.Common;
 
-namespace Pm.Services.Company;
+namespace Pm.Services;
 
 public interface ICompanyService
 {

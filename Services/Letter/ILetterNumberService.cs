@@ -1,7 +1,7 @@
 using Pm.DTOs;
 using Pm.DTOs.Common;
 
-namespace Pm.Services.Letter
+namespace Pm.Services
 {
     public interface ILetterNumberService
     {
@@ -9,6 +9,6 @@ namespace Pm.Services.Letter
         Task<PagedResultDto<LetterNumberListDto>> GetLetterNumbersAsync(LetterNumberQueryDto query);
         Task<LetterNumberResponseDto?> GetLetterNumberByIdAsync(int id);
         Task<LetterNumberResponseDto> UpdateLetterNumberAsync(int id, LetterNumberUpdateDto dto, int userId);
-        Task DeleteLetterNumberAsync(int id, int userId);
+        Task DeleteLetterNumberAsync(int id, int userId, string? userRole = null);
     }
 }

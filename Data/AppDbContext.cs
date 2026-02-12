@@ -38,6 +38,12 @@ namespace Pm.Data
         public DbSet<RadioConventionalHistory> RadioConventionalHistories { get; set; } = null!;
         public DbSet<RadioGrafir> RadioGrafirs { get; set; } = null!;
         public DbSet<RadioScrap> RadioScraps { get; set; } = null!;
+
+        // Gatepass & Quotation
+        public DbSet<Gatepass> Gatepasses { get; set; } = null!;
+        public DbSet<GatepassItem> GatepassItems { get; set; } = null!;
+        public DbSet<Quotation> Quotations { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -688,6 +694,175 @@ namespace Pm.Data
                 entity.HasIndex(e => e.SerialNumber).IsUnique().HasDatabaseName("IX_RadioGrafir_SerialNumber");
 
                 entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+            });
+
+            // ===========================================
+            // GATEPASS & QUOTATION CONFIGURATION
+            // ===========================================
+
+            // Gatepass
+            modelBuilder.Entity<Gatepass>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("Gatepasses");
+
+                entity.Property(e => e.FormattedNumber)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.Destination)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.PicName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.PicContact)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.GatepassDate)
+                    .IsRequired()
+                    .HasColumnType("date");
+
+                entity.Property(e => e.SignatureQRCode)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Notes)
+                    .HasColumnType("text");
+
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                // Unique constraint
+                entity.HasIndex(e => new { e.Year, e.SequenceNumber })
+                    .IsUnique()
+                    .HasDatabaseName("IX_Gatepass_UniqueSequence");
+
+                entity.HasIndex(e => e.FormattedNumber)
+                    .HasDatabaseName("IX_Gatepass_FormattedNumber");
+
+                entity.HasIndex(e => new { e.Year, e.Month })
+                    .HasDatabaseName("IX_Gatepass_YearMonth");
+
+                entity.HasIndex(e => e.Status)
+                    .HasDatabaseName("IX_Gatepass_Status");
+
+                // Foreign keys
+                entity.HasOne(e => e.CreatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.UpdatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.UpdatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Child items
+                entity.HasMany(e => e.Items)
+                    .WithOne(i => i.Gatepass)
+                    .HasForeignKey(i => i.GatepassId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // GatepassItem
+            modelBuilder.Entity<GatepassItem>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("GatepassItems");
+
+                entity.Property(e => e.ItemName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Quantity)
+                    .HasDefaultValue(1);
+
+                entity.Property(e => e.Unit)
+                    .HasMaxLength(50)
+                    .HasDefaultValue("unit");
+
+                entity.Property(e => e.Description)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.SerialNumber)
+                    .HasMaxLength(100);
+
+                entity.HasIndex(e => e.GatepassId)
+                    .HasDatabaseName("IX_GatepassItem_GatepassId");
+            });
+
+            // Quotation
+            modelBuilder.Entity<Quotation>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("Quotations");
+
+                entity.Property(e => e.FormattedNumber)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.CustomerName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Description)
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                entity.Property(e => e.QuotationDate)
+                    .IsRequired()
+                    .HasColumnType("date");
+
+                entity.Property(e => e.Notes)
+                    .HasColumnType("text");
+
+                entity.Property(e => e.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                // Unique constraint
+                entity.HasIndex(e => new { e.Year, e.SequenceNumber })
+                    .IsUnique()
+                    .HasDatabaseName("IX_Quotation_UniqueSequence");
+
+                entity.HasIndex(e => e.FormattedNumber)
+                    .HasDatabaseName("IX_Quotation_FormattedNumber");
+
+                entity.HasIndex(e => new { e.Year, e.Month })
+                    .HasDatabaseName("IX_Quotation_YearMonth");
+
+                entity.HasIndex(e => e.Status)
+                    .HasDatabaseName("IX_Quotation_Status");
+
+                entity.HasIndex(e => e.CustomerId)
+                    .HasDatabaseName("IX_Quotation_CustomerId");
+
+                // Foreign keys
+                entity.HasOne(e => e.Customer)
+                    .WithMany()
+                    .HasForeignKey(e => e.CustomerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.CreatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.UpdatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.UpdatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // RadioTrunking

@@ -46,6 +46,9 @@ namespace Pm.Models
         [MaxLength(500)]
         public string? ChannelApply { get; set; }
 
+        [MaxLength(500)]
+        public string? Remarks { get; set; }
+
         // Foreign key to Grafir (optional)
         public int? GrafirId { get; set; }
 

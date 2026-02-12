@@ -9,7 +9,6 @@ namespace Pm.Controllers
 {
     [ApiController]
     [Route("api/radio-trunking")]
-    [Authorize(Policy = "RadioView")]
     public class RadioTrunkingController : ControllerBase
     {
         private readonly IRadioTrunkingService _service;
@@ -21,6 +20,7 @@ namespace Pm.Controllers
 
         private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] RadioTrunkingQueryDto query)
         {
@@ -28,6 +28,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result);
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -44,7 +45,7 @@ namespace Pm.Controllers
             return ApiResponse.Created(result, "Radio Trunking berhasil ditambahkan");
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Authorize(Policy = "RadioUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRadioTrunkingDto dto)
         {
@@ -53,7 +54,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result, "Radio Trunking berhasil diupdate");
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Policy = "RadioDelete")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -62,6 +63,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(null, "Radio Trunking berhasil dihapus");
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}/history")]
         public async Task<IActionResult> GetHistory(int id)
         {
@@ -87,7 +89,7 @@ namespace Pm.Controllers
         public async Task<IActionResult> ExportCsv([FromQuery] RadioTrunkingQueryDto? query)
         {
             var bytes = await _service.ExportCsvAsync(query);
-            return File(bytes, "text/csv", $"radio_trunking_{DateTime.Now:yyyyMMdd}.csv");
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"radio_trunking_{DateTime.Now:yyyyMMdd}.xlsx");
         }
 
         [HttpGet("template")]
@@ -100,7 +102,6 @@ namespace Pm.Controllers
 
     [ApiController]
     [Route("api/radio-conventional")]
-    [Authorize(Policy = "RadioView")]
     public class RadioConventionalController : ControllerBase
     {
         private readonly IRadioConventionalService _service;
@@ -112,6 +113,7 @@ namespace Pm.Controllers
 
         private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] RadioConventionalQueryDto query)
         {
@@ -119,6 +121,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result);
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -135,7 +138,7 @@ namespace Pm.Controllers
             return ApiResponse.Created(result, "Radio Conventional berhasil ditambahkan");
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Authorize(Policy = "RadioUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRadioConventionalDto dto)
         {
@@ -144,7 +147,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result, "Radio Conventional berhasil diupdate");
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Policy = "RadioDelete")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -190,7 +193,6 @@ namespace Pm.Controllers
 
     [ApiController]
     [Route("api/radio-grafir")]
-    [Authorize(Policy = "RadioView")]
     public class RadioGrafirController : ControllerBase
     {
         private readonly IRadioGrafirService _service;
@@ -202,6 +204,7 @@ namespace Pm.Controllers
 
         private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] RadioGrafirQueryDto query)
         {
@@ -209,6 +212,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result);
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -225,7 +229,7 @@ namespace Pm.Controllers
             return ApiResponse.Created(result, "Radio Grafir berhasil ditambahkan");
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Authorize(Policy = "RadioUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRadioGrafirDto dto)
         {
@@ -234,7 +238,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result, "Radio Grafir berhasil diupdate");
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Policy = "RadioDelete")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -243,6 +247,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(null, "Radio Grafir berhasil dihapus");
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}/trunking")]
         public async Task<IActionResult> GetLinkedTrunking(int id)
         {
@@ -250,6 +255,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result);
         }
 
+        [Authorize(Policy = "RadioView")]
         [HttpGet("{id}/conventional")]
         public async Task<IActionResult> GetLinkedConventional(int id)
         {
@@ -299,6 +305,7 @@ namespace Pm.Controllers
 
         private int GetUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
+        [Authorize(Policy = "RadioScrapView")]
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] RadioScrapQueryDto query)
         {
@@ -306,7 +313,8 @@ namespace Pm.Controllers
             return ApiResponse.Success(result);
         }
 
-        [HttpGet("{id}")]
+        [Authorize(Policy = "RadioScrapView")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);
@@ -340,7 +348,7 @@ namespace Pm.Controllers
             return ApiResponse.Created(result, "Radio berhasil di-scrap");
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Authorize(Policy = "RadioScrapUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] CreateRadioScrapDto dto)
         {
@@ -349,7 +357,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(result, "Radio Scrap berhasil diupdate");
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize(Policy = "RadioScrapDelete")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -358,6 +366,7 @@ namespace Pm.Controllers
             return ApiResponse.Success(null, "Radio Scrap berhasil dihapus");
         }
 
+        [Authorize(Policy = "RadioScrapView")]
         [HttpGet("yearly-summary")]
         public async Task<IActionResult> GetYearlySummary([FromQuery] int? year)
         {

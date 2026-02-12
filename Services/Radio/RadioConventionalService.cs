@@ -183,7 +183,41 @@ namespace Pm.Services
             var errors = new List<string>();
 
             using var reader = new StreamReader(stream);
-            await reader.ReadLineAsync(); // Skip header
+
+            // Read and parse header row
+            var headerLine = await reader.ReadLineAsync();
+            if (headerLine == null) return (0, 0, ["Empty file"]);
+
+            // Create column mapping (case-insensitive)
+            var headers = headerLine.Split(',').Select(h => h.Trim()).ToArray();
+            var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var normalizedHeader = headers[i]
+                    .Replace(" ", "")
+                    .Replace("_", "")
+                    .ToLower();
+
+                // Map common variations to standard names
+                if (normalizedHeader == "type" || normalizedHeader == "setting") normalizedHeader = "radiotype";
+                if (normalizedHeader == "serial") normalizedHeader = "serialnumber";
+                if (normalizedHeader == "freq") normalizedHeader = "frequency";
+
+                columnMap[normalizedHeader] = i;
+            }
+
+            // Helper to get value by column name
+            string? GetValueByName(string[] values, string columnName)
+            {
+                var key = columnName.ToLower();
+                if (columnMap.TryGetValue(key, out int index) && index < values.Length)
+                {
+                    var val = values[index].Trim();
+                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                }
+                return null;
+            }
 
             var lineNumber = 1;
             while (!reader.EndOfStream)
@@ -195,16 +229,37 @@ namespace Pm.Services
                 try
                 {
                     var values = line.Split(',');
+
+                    // Get values by column name (order doesn't matter!)
+                    var unitNumber = GetValueByName(values, "unitnumber");
+                    var radioId = GetValueByName(values, "radioid");
+
+                    // Auto-generate if both are empty
+                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
+                    {
+                        var guid = Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
+                        unitNumber = $"AUTO-{guid}";
+                        radioId = $"RADIO-{guid}";
+                    }
+                    else if (string.IsNullOrEmpty(unitNumber))
+                    {
+                        unitNumber = radioId!;
+                    }
+                    else if (string.IsNullOrEmpty(radioId))
+                    {
+                        radioId = unitNumber!;
+                    }
+
                     await CreateAsync(new CreateRadioConventionalDto
                     {
-                        UnitNumber = values[0].Trim(),
-                        RadioId = values[1].Trim(),
-                        SerialNumber = values.Length > 2 ? values[2].Trim() : null,
-                        Dept = values.Length > 3 ? values[3].Trim() : null,
-                        Fleet = values.Length > 4 ? values[4].Trim() : null,
-                        RadioType = values.Length > 5 ? values[5].Trim() : null,
-                        Frequency = values.Length > 6 ? values[6].Trim() : null,
-                        Status = values.Length > 7 ? values[7].Trim() : "Active"
+                        UnitNumber = unitNumber!,
+                        RadioId = radioId!,
+                        SerialNumber = GetValueByName(values, "serialnumber"),
+                        Dept = GetValueByName(values, "dept"),
+                        Fleet = GetValueByName(values, "fleet"),
+                        RadioType = GetValueByName(values, "radiotype"), // Also accepts "Type", "Setting"
+                        Frequency = GetValueByName(values, "frequency"), // Also accepts "Freq"
+                        Status = GetValueByName(values, "status") ?? "Active"
                     }, userId);
                     success++;
                 }

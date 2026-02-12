@@ -1,6 +1,6 @@
 namespace Pm.Enums
 {
-    public enum LetterStatus
+    public enum QuotationStatus
     {
         Draft,
         Sent
