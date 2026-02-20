@@ -78,7 +78,9 @@ namespace Pm.Services
                         Username = u.Username,
                         FullName = u.FullName,
                         Email = u.Email,
-                        PhotoUrl = u.PhotoUrl
+                        PhotoUrl = u.PhotoUrl,
+                        EmployeeId = u.EmployeeId,
+                        Division = u.Division
                     })
                     .FirstOrDefaultAsync();
 
@@ -154,7 +156,9 @@ namespace Pm.Services
                         Username = documentType.CreatedByUser.Username,
                         FullName = documentType.CreatedByUser.FullName,
                         Email = documentType.CreatedByUser.Email,
-                        PhotoUrl = documentType.CreatedByUser.PhotoUrl
+                        PhotoUrl = documentType.CreatedByUser.PhotoUrl,
+                        EmployeeId = documentType.CreatedByUser.EmployeeId,
+                        Division = documentType.CreatedByUser.Division
                     } : null,
                     UpdatedByUser = documentType.UpdatedByUser != null ? new UserInfoDto
                     {
@@ -162,7 +166,9 @@ namespace Pm.Services
                         Username = documentType.UpdatedByUser.Username,
                         FullName = documentType.UpdatedByUser.FullName,
                         Email = documentType.UpdatedByUser.Email,
-                        PhotoUrl = documentType.UpdatedByUser.PhotoUrl
+                        PhotoUrl = documentType.UpdatedByUser.PhotoUrl,
+                        EmployeeId = documentType.UpdatedByUser.EmployeeId,
+                        Division = documentType.UpdatedByUser.Division
                     } : null
                 };
             }
@@ -246,7 +252,9 @@ namespace Pm.Services
                         Username = d.CreatedByUser.Username,
                         FullName = d.CreatedByUser.FullName,
                         Email = d.CreatedByUser.Email,
-                        PhotoUrl = d.CreatedByUser.PhotoUrl
+                        PhotoUrl = d.CreatedByUser.PhotoUrl,
+                        EmployeeId = d.CreatedByUser.EmployeeId,
+                        Division = d.CreatedByUser.Division
                     } : null,
                     UpdatedByUser = d.UpdatedByUser != null ? new UserInfoDto
                     {
@@ -254,7 +262,9 @@ namespace Pm.Services
                         Username = d.UpdatedByUser.Username,
                         FullName = d.UpdatedByUser.FullName,
                         Email = d.UpdatedByUser.Email,
-                        PhotoUrl = d.UpdatedByUser.PhotoUrl
+                        PhotoUrl = d.UpdatedByUser.PhotoUrl,
+                        EmployeeId = d.UpdatedByUser.EmployeeId,
+                        Division = d.UpdatedByUser.Division
                     } : null
                 })
                 .FirstOrDefaultAsync();

@@ -20,7 +20,13 @@ namespace Pm.Models
         public string? Email { get; set; }
 
         [MaxLength(500)]
-        public string? PhotoUrl { get; set; } // Added for profile photo
+        public string? PhotoUrl { get; set; }
+
+        [MaxLength(50)]
+        public string? EmployeeId { get; set; }  // ID Karyawan, e.g. "MKN-001"
+
+        [MaxLength(100)]
+        public string? Division { get; set; }    // Divisi, e.g. "IT", "HR"
 
         public bool IsActive { get; set; } = false;
 

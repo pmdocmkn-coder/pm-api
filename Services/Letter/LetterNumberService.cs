@@ -237,7 +237,9 @@ namespace Pm.Services
                             Username = l.CreatedByUser.Username,
                             FullName = l.CreatedByUser.FullName,
                             Email = l.CreatedByUser.Email,
-                            PhotoUrl = l.CreatedByUser.PhotoUrl
+                            PhotoUrl = l.CreatedByUser.PhotoUrl,
+                            EmployeeId = l.CreatedByUser.EmployeeId,
+                            Division = l.CreatedByUser.Division
                         } : null,
                         UpdatedByUser = l.UpdatedByUser != null ? new UserInfoDto
                         {
@@ -245,7 +247,9 @@ namespace Pm.Services
                             Username = l.UpdatedByUser.Username,
                             FullName = l.UpdatedByUser.FullName,
                             Email = l.UpdatedByUser.Email,
-                            PhotoUrl = l.UpdatedByUser.PhotoUrl
+                            PhotoUrl = l.UpdatedByUser.PhotoUrl,
+                            EmployeeId = l.UpdatedByUser.EmployeeId,
+                            Division = l.UpdatedByUser.Division
                         } : null
                     })
                     .FirstOrDefaultAsync();

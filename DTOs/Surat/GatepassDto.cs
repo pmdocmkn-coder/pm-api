@@ -93,6 +93,10 @@ namespace Pm.DTOs
         // Expanded
         public UserInfoDto? CreatedByUser { get; set; }
         public UserInfoDto? UpdatedByUser { get; set; }
+        public UserInfoDto? SignedByUser { get; set; }
+        public DateTime? SignedAt { get; set; }
+        public string? VerificationToken { get; set; }
+        public bool IsSigned => SignedByUser != null;
         public List<GatepassItemResponseDto> Items { get; set; } = new List<GatepassItemResponseDto>();
     }
 
@@ -118,6 +122,7 @@ namespace Pm.DTOs
         public string Status { get; set; } = string.Empty;
         public string? CreatedByName { get; set; }
         public int ItemCount { get; set; }
+        public bool IsSigned { get; set; }
     }
 
     // ===== QUERY =====

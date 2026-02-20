@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
@@ -11,11 +13,26 @@ namespace Pm.Services
     {
         private readonly AppDbContext _context;
         private readonly ILogger<PermissionService> _logger;
+        private readonly IActivityLogService _activityLog;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public PermissionService(AppDbContext context, ILogger<PermissionService> logger)
+        public PermissionService(
+            AppDbContext context,
+            ILogger<PermissionService> logger,
+            IActivityLogService activityLog,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _logger = logger;
+            _activityLog = activityLog;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("UserId")?.Value
+                ?? _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(userIdClaim, out var id) ? id : 0;
         }
 
         public async Task<List<PermissionDto>> GetAllPermissionsAsync()
@@ -205,6 +222,21 @@ namespace Pm.Services
 
             _logger.LogInformation("Permission created successfully: {PermissionName}", permission.PermissionName);
 
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Permission",
+                    entityId: permission.PermissionId,
+                    action: "Create",
+                    userId: GetCurrentUserId(),
+                    description: $"Created permission: {permission.PermissionName} (Group: {permission.Group})"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return new PermissionDto
             {
                 PermissionId = permission.PermissionId,
@@ -252,6 +284,21 @@ namespace Pm.Services
 
             _logger.LogInformation("Permission updated successfully: {PermissionId}", permissionId);
 
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Permission",
+                    entityId: permissionId,
+                    action: "Update",
+                    userId: GetCurrentUserId(),
+                    description: $"Updated permission: {permission.PermissionName}"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return new PermissionDto
             {
                 PermissionId = permission.PermissionId,
@@ -284,6 +331,22 @@ namespace Pm.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Permission deleted successfully: {PermissionId}", permissionId);
+
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Permission",
+                    entityId: permissionId,
+                    action: "Delete",
+                    userId: GetCurrentUserId(),
+                    description: $"Deleted permission: {permission.PermissionName} (Group: {permission.Group})"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return true;
         }
 

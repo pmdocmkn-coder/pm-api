@@ -8,7 +8,9 @@ namespace Pm.DTOs
         public string Username { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string? Email { get; set; }
-        public string? PhotoUrl { get; set; } // Added for profile photo
+        public string? PhotoUrl { get; set; }
+        public string? EmployeeId { get; set; }
+        public string? Division { get; set; }
         public bool IsActive { get; set; }
         public int RoleId { get; set; }
         public string? RoleName { get; set; }

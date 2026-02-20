@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
@@ -10,11 +12,26 @@ namespace Pm.Services
     {
         private readonly AppDbContext _context;
         private readonly ILogger<UserService> _logger;
+        private readonly IActivityLogService _activityLog;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public UserService(AppDbContext context, ILogger<UserService> logger)
+        public UserService(
+            AppDbContext context,
+            ILogger<UserService> logger,
+            IActivityLogService activityLog,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _logger = logger;
+            _activityLog = activityLog;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("UserId")?.Value
+                ?? _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(userIdClaim, out var id) ? id : 0;
         }
 
         public async Task<PagedResultDto<UserDto>> GetUsersAsync(UserQueryDto queryDto)
@@ -126,6 +143,7 @@ namespace Pm.Services
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
                 FullName = dto.FullName,
                 Email = dto.Email,
+                EmployeeId = dto.EmployeeId,
                 RoleId = dto.RoleId ?? 3, // Default to User role (RoleId = 3)
                 IsActive = false,
                 CreatedAt = DateTime.UtcNow,
@@ -137,17 +155,37 @@ namespace Pm.Services
 
             _logger.LogInformation("User created successfully: {Username}", user.Username);
 
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "User Management",
+                    entityId: user.UserId,
+                    action: "Create",
+                    userId: GetCurrentUserId(),
+                    description: $"Created user: {user.Username} ({user.FullName})"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return await GetUserByIdAsync(user.UserId);
         }
 
         public async Task<bool> UpdateUserAsync(int userId, UpdateUserDto dto)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
             {
                 _logger.LogWarning("User not found for update: {UserId}", userId);
                 return false;
             }
+
+            // Track changes untuk audit log
+            var changes = new List<string>();
 
             // Track changes untuk update
             _context.Entry(user).State = EntityState.Modified;
@@ -159,6 +197,7 @@ namespace Pm.Services
                 {
                     throw new Exception("Username sudah digunakan");
                 }
+                changes.Add($"Username: '{user.Username}' → '{dto.Username}'");
                 user.Username = dto.Username;
             }
 
@@ -169,12 +208,15 @@ namespace Pm.Services
                 {
                     throw new Exception("Email sudah digunakan");
                 }
+                changes.Add($"Email: '{user.Email}' → '{dto.Email}'");
                 user.Email = dto.Email;
             }
 
             // Update other fields if provided
             if (!string.IsNullOrEmpty(dto.FullName))
             {
+                if (dto.FullName != user.FullName)
+                    changes.Add($"FullName: '{user.FullName}' → '{dto.FullName}'");
                 user.FullName = dto.FullName;
             }
 
@@ -186,12 +228,36 @@ namespace Pm.Services
                 {
                     throw new Exception("Role tidak ditemukan");
                 }
+                if (dto.RoleId.Value != user.RoleId)
+                {
+                    var oldRoleName = user.Role?.RoleName ?? user.RoleId.ToString();
+                    var newRole = await _context.Roles.FindAsync(dto.RoleId.Value);
+                    changes.Add($"Role: '{oldRoleName}' → '{newRole?.RoleName ?? dto.RoleId.Value.ToString()}'");
+                }
                 user.RoleId = dto.RoleId.Value;
             }
 
             if (dto.IsActive.HasValue)
             {
+                if (dto.IsActive.Value != user.IsActive)
+                    changes.Add(dto.IsActive.Value ? "Activated user" : "Deactivated user");
                 user.IsActive = dto.IsActive.Value;
+            }
+
+            // Update EmployeeId if provided
+            if (dto.EmployeeId != null)
+            {
+                if (dto.EmployeeId != user.EmployeeId)
+                    changes.Add($"EmployeeId: '{user.EmployeeId}' → '{dto.EmployeeId}'");
+                user.EmployeeId = dto.EmployeeId;
+            }
+
+            // Update Division if provided
+            if (dto.Division != null)
+            {
+                if (dto.Division != user.Division)
+                    changes.Add($"Division: '{user.Division}' → '{dto.Division}'");
+                user.Division = dto.Division;
             }
 
             user.UpdatedAt = DateTime.UtcNow;
@@ -200,6 +266,25 @@ namespace Pm.Services
             {
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("User updated successfully: {UserId}", userId);
+
+                if (changes.Any())
+                {
+                    try
+                    {
+                        await _activityLog.LogAsync(
+                            module: "User Management",
+                            entityId: userId,
+                            action: "Update",
+                            userId: GetCurrentUserId(),
+                            description: $"Updated user {user.Username}: {string.Join(", ", changes)}"
+                        );
+                    }
+                    catch (Exception logEx)
+                    {
+                        _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+                    }
+                }
+
                 return true;
             }
             catch (Exception ex)
@@ -232,6 +317,22 @@ namespace Pm.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("User deleted successfully: {UserId}", userId);
+
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "User Management",
+                    entityId: userId,
+                    action: "Delete",
+                    userId: GetCurrentUserId(),
+                    description: $"Deleted user: {user.Username} ({user.FullName})"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return true;
         }
 
@@ -326,6 +427,8 @@ namespace Pm.Services
                 FullName = user.FullName,
                 Email = user.Email,
                 PhotoUrl = user.PhotoUrl,
+                EmployeeId = user.EmployeeId,
+                Division = user.Division,
                 IsActive = user.IsActive,
                 RoleId = user.RoleId,
                 RoleName = user.Role?.RoleName,

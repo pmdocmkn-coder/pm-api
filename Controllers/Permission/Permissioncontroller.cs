@@ -120,7 +120,7 @@ namespace Pm.Controllers
             }
         }
 
-        [Authorize(Policy = "CanEditPermission")]
+        [Authorize(Policy = "CanDeletePermission")]
         [HttpDelete("{permissionId}")]
         public async Task<IActionResult> DeletePermission(int permissionId)
         {

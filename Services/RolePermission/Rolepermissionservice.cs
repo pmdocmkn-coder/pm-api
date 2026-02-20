@@ -13,15 +13,18 @@ namespace Pm.Services
         private readonly AppDbContext _context;
         private readonly ILogger<RolePermissionService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IActivityLogService _activityLog;
 
         public RolePermissionService(
             AppDbContext context,
             ILogger<RolePermissionService> logger,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IActivityLogService activityLog)
         {
             _context = context;
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
+            _activityLog = activityLog;
         }
 
         private bool IsCurrentUserSuperAdmin()
@@ -46,6 +49,13 @@ namespace Pm.Services
             _logger.LogInformation("RoleId: {RoleId}, RoleName: {RoleName}", roleId, roleName);
 
             return roleId == "1" || roleName == "Super Admin";
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("UserId")?.Value
+                ?? _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(userIdClaim, out var id) ? id : 0;
         }
 
         public async Task<List<RolePermissionDto>> GetAllRolePermissionsAsync()
@@ -243,6 +253,21 @@ namespace Pm.Services
                     await _context.RolePermissions.AddRangeAsync(newPermissions);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
+
+                    try
+                    {
+                        await _activityLog.LogAsync(
+                            module: "Role Permission",
+                            entityId: roleId,
+                            action: "Update",
+                            userId: GetCurrentUserId(),
+                            description: $"Updated permissions for role '{role.RoleName}': {permissionIds.Count} permissions assigned"
+                        );
+                    }
+                    catch (Exception logEx)
+                    {
+                        _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+                    }
 
                     return await GetPermissionsByRoleAsync(roleId);
                 }

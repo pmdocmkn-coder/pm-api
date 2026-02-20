@@ -44,6 +44,9 @@ namespace Pm.Data
         public DbSet<GatepassItem> GatepassItems { get; set; } = null!;
         public DbSet<Quotation> Quotations { get; set; } = null!;
 
+        // Division Master Data
+        public DbSet<Division> Divisions { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -161,8 +164,7 @@ namespace Pm.Data
                 entity.Property(e => e.Description)
                     .HasMaxLength(255);
 
-                entity.Property(e => e.IsActive)
-                    .HasDefaultValue(true);
+                entity.Property(e => e.IsActive);
 
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("UTC_TIMESTAMP()");
@@ -764,6 +766,11 @@ namespace Pm.Data
                     .HasForeignKey(e => e.UpdatedBy)
                     .OnDelete(DeleteBehavior.Restrict);
 
+                entity.HasOne(e => e.SignedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.SignedByUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
                 // Child items
                 entity.HasMany(e => e.Items)
                     .WithOne(i => i.Gatepass)
@@ -988,6 +995,30 @@ namespace Pm.Data
                 entity.HasOne(e => e.SourceGrafir)
                     .WithMany()
                     .HasForeignKey(e => e.SourceGrafirId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // Division
+            modelBuilder.Entity<Division>(entity =>
+            {
+                entity.ToTable("Divisions");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.IsActive).HasDefaultValue(true);
+
+                entity.HasIndex(e => e.Code).IsUnique();
+
+                // Foreign keys
+                entity.HasOne(e => e.CreatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.UpdatedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.UpdatedBy)
                     .OnDelete(DeleteBehavior.SetNull);
             });
         }

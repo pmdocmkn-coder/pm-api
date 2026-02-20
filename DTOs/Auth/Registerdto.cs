@@ -24,5 +24,8 @@ namespace Pm.DTOs.Auth
         [EmailAddress(ErrorMessage = "Format email tidak valid")]
         [StringLength(50, ErrorMessage = "Email maksimal 50 karakter")]
         public string Email { get; set; } = string.Empty;
+
+        [StringLength(50, ErrorMessage = "ID Karyawan maksimal 50 karakter")]
+        public string? EmployeeId { get; set; }
     }
 }

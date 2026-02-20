@@ -6,13 +6,17 @@ namespace Pm.Helper
     {
         public static void AddCustomAuthorizationPolicies(this AuthorizationOptions options)
         {
-            // Permission policies
+            //Permission Management
             options.AddPolicy("CanViewPermissions", policy =>
                 policy.RequireClaim("Permission", "permission.view"));
-            options.AddPolicy("CanEditPermissions", policy =>
-                policy.RequireClaim("Permission", "permission.edit"));
             options.AddPolicy("CanCreatePermission", policy =>
                 policy.RequireClaim("Permission", "permission.create"));
+            options.AddPolicy("CanEditPermissions", policy =>
+                policy.RequireClaim("Permission", "permission.edit"));
+            options.AddPolicy("CanDeletePermission", policy =>
+                policy.RequireClaim("Permission", "permission.delete"));
+
+
 
             // Role policies
             options.AddPolicy("CanViewRoles", policy =>
@@ -144,6 +148,65 @@ namespace Pm.Helper
             policy.RequireClaim("Permission", "radio.scrap.update"));
             options.AddPolicy("RadioScrapCreate", policy =>
             policy.RequireClaim("Permission", "radio.scrap.create"));
+            options.AddPolicy("RadioScrapExport", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.export"));
+            options.AddPolicy("RadioScrapImport", policy =>
+            policy.RequireClaim("Permission", "radio.scrap.import"));
+
+
+            //Divisi
+            options.AddPolicy("DivisiView", policy =>
+                policy.RequireClaim("Permission", "division.view"));
+            options.AddPolicy("DivisiCreate", policy =>
+                policy.RequireClaim("Permission", "division.create"));
+            options.AddPolicy("DivisiUpdate", policy =>
+                policy.RequireClaim("Permission", "division.update"));
+            options.AddPolicy("DivisiDelete", policy =>
+                policy.RequireClaim("Permission", "division.delete"));
+
+            // NEC Signal
+            options.AddPolicy("NecSignalView", policy =>
+                policy.RequireClaim("Permission", "nec.view"));
+            options.AddPolicy("NecSignalCreate", policy =>
+                policy.RequireClaim("Permission", "nec.create"));
+            options.AddPolicy("NecSignalUpdate", policy =>
+                policy.RequireClaim("Permission", "nec.update"));
+            options.AddPolicy("NecSignalDelete", policy =>
+                policy.RequireClaim("Permission", "nec.delete"));
+            options.AddPolicy("NecSignalImport", policy =>
+                policy.RequireClaim("Permission", "nec.import"));
+            options.AddPolicy("NecSignalExport", policy =>
+                policy.RequireClaim("Permission", "nec.export"));
+
+            // SWR Signal
+            options.AddPolicy("SwrSignalView", policy =>
+                policy.RequireClaim("Permission", "swr.view"));
+            options.AddPolicy("SwrSignalCreate", policy =>
+                policy.RequireClaim("Permission", "swr.create"));
+            options.AddPolicy("SwrSignalUpdate", policy =>
+                policy.RequireClaim("Permission", "swr.update"));
+            options.AddPolicy("SwrSignalDelete", policy =>
+                policy.RequireClaim("Permission", "swr.delete"));
+            options.AddPolicy("SwrSignalImport", policy =>
+                policy.RequireClaim("Permission", "swr.import"));
+            options.AddPolicy("SwrSignalExport", policy =>
+                policy.RequireClaim("Permission", "swr.export"));
+
+            // Inspeksi KPC
+            options.AddPolicy("InspeksiView", policy =>
+                policy.RequireClaim("Permission", "inspeksi.view"));
+            options.AddPolicy("InspeksiCreate", policy =>
+                policy.RequireClaim("Permission", "inspeksi.create"));
+            options.AddPolicy("InspeksiUpdate", policy =>
+                policy.RequireClaim("Permission", "inspeksi.update"));
+            options.AddPolicy("InspeksiDelete", policy =>
+                policy.RequireClaim("Permission", "inspeksi.delete"));
+            options.AddPolicy("InspeksiExport", policy =>
+                policy.RequireClaim("Permission", "inspeksi.export"));
+            options.AddPolicy("InspeksiRestore", policy =>
+                policy.RequireClaim("Permission", "inspeksi.restore"));
+
+
         }
 
 

@@ -28,6 +28,12 @@ namespace Pm.DTOs
 
         public string? Notes { get; set; }
         public QuotationStatus Status { get; set; }
+
+        // Optional: can edit customer
+        public int? CustomerId { get; set; }
+
+        // Optional: admin-only date edit
+        public DateTime? QuotationDate { get; set; }
     }
 
     // ===== RESPONSE =====

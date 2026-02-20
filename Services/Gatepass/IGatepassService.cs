@@ -10,5 +10,7 @@ namespace Pm.Services
         Task<GatepassResponseDto?> GetGatepassByIdAsync(int id);
         Task<GatepassResponseDto> UpdateGatepassAsync(int id, GatepassUpdateDto dto, int userId);
         Task DeleteGatepassAsync(int id, int userId, string? userRole = null);
+        Task<GatepassResponseDto> SignGatepassAsync(int id, int userId);
+        Task<GatepassResponseDto?> GetGatepassByVerificationTokenAsync(string token);
     }
 }

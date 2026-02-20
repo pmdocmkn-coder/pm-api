@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.Models;
 using Microsoft.Extensions.Logging;
+using Pm.DTOs;
+using Pm.DTOs.Common;
 
 namespace Pm.Services
 {
@@ -44,7 +46,7 @@ namespace Pm.Services
                 var userExists = await _context.Users
                     .AsNoTracking()
                     .AnyAsync(u => u.UserId == userId);
-                
+
                 if (!userExists)
                 {
                     _logger.LogWarning("⚠️ User {UserId} tidak ditemukan, skip activity log", userId);
@@ -72,7 +74,7 @@ namespace Pm.Services
             {
                 // Log sebagai Warning, bukan Error
                 _logger.LogWarning(dbEx, "⚠️ Database error in ActivityLog (non-critical)");
-                
+
                 if (dbEx.InnerException != null)
                 {
                     var msg = dbEx.InnerException.Message;
@@ -84,6 +86,62 @@ namespace Pm.Services
                 _logger.LogError(ex, "❌ Error in ActivityLogService");
                 // Jangan throw - activity log failure tidak boleh crash app
             }
+        }
+
+        public async Task<PagedResultDto<ActivityLog>> GetActivityLogsAsync(ActivityLogQueryDto dto)
+        {
+            var query = _context.ActivityLogs
+                .Include(a => a.User)
+                 .ThenInclude(u => u.Role)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(dto.Module))
+            {
+                query = query.Where(a => a.Module == dto.Module);
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Action))
+            {
+                query = query.Where(a => a.Action == dto.Action);
+            }
+
+            if (dto.UserId.HasValue)
+            {
+                query = query.Where(a => a.UserId == dto.UserId.Value);
+            }
+
+            if (dto.StartDate.HasValue)
+            {
+                query = query.Where(a => a.Timestamp >= dto.StartDate.Value);
+            }
+
+            if (dto.EndDate.HasValue)
+            {
+                var endDate = dto.EndDate.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(a => a.Timestamp <= endDate);
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Search))
+            {
+                var search = dto.Search.ToLower();
+                query = query.Where(a =>
+                    a.Description.ToLower().Contains(search) ||
+                    a.Module.ToLower().Contains(search) ||
+                    a.Action.ToLower().Contains(search) ||
+                     (a.User != null && a.User.FullName.ToLower().Contains(search))
+                );
+            }
+
+            query = query.OrderByDescending(a => a.Timestamp);
+
+            var totalItems = await query.CountAsync();
+            var items = await query
+                .Skip((dto.Page - 1) * dto.PageSize)
+                .Take(dto.PageSize)
+                .ToListAsync();
+
+            return new PagedResultDto<ActivityLog>(items, dto.Page, dto.PageSize, totalItems);
         }
     }
 }

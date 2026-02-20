@@ -17,5 +17,11 @@ namespace Pm.DTOs
         public int? RoleId { get; set; }
 
         public bool? IsActive { get; set; }
+
+        [StringLength(50, ErrorMessage = "ID Karyawan maksimal 50 karakter")]
+        public string? EmployeeId { get; set; }
+
+        [StringLength(100, ErrorMessage = "Divisi maksimal 100 karakter")]
+        public string? Division { get; set; }
     }
 }

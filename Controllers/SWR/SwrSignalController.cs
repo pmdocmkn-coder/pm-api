@@ -96,7 +96,7 @@ namespace Pm.Controllers
         // ============================================
 
         [HttpPost("import-pivot-excel")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalImport")]
         public async Task<IActionResult> ImportPivotExcel([FromForm] SwrImportRequestDto request)
         {
             try
@@ -121,7 +121,7 @@ namespace Pm.Controllers
         }
 
         [HttpGet("export-yearly-excel")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalExport")]
         public async Task<IActionResult> ExportYearlyExcel(int year, string? site = null)
         {
             try
@@ -158,7 +158,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("sites")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalCreate")]
         public async Task<IActionResult> CreateSite([FromBody] SwrSiteCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -184,7 +184,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("sites")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalUpdate")]
         public async Task<IActionResult> UpdateSite([FromBody] SwrSiteUpdateDto dto)
         {
             if (!ModelState.IsValid)
@@ -261,7 +261,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("channels")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalCreate")]
         public async Task<IActionResult> CreateChannel([FromBody] SwrChannelCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -292,7 +292,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("channels")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalUpdate")]
         public async Task<IActionResult> UpdateChannel([FromBody] SwrChannelUpdateDto dto)
         {
             if (!ModelState.IsValid)
@@ -398,7 +398,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("histories")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalCreate")]
         public async Task<IActionResult> CreateHistory([FromBody] SwrHistoryCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -434,7 +434,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("histories/{id}")]
-        [Authorize(Policy = "SwrSignalView")]
+        [Authorize(Policy = "SwrSignalUpdate")]
         public async Task<IActionResult> UpdateHistory(int id, [FromBody] SwrHistoryUpdateDto dto)
         {
             if (!ModelState.IsValid)

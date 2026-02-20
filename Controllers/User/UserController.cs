@@ -241,7 +241,9 @@ namespace Pm.Controllers
                 (dto.Username == null || dto.Username == existingUser.Username) &&
                 (dto.Email == null || dto.Email == existingUser.Email) &&
                 (dto.RoleId == null || dto.RoleId == existingUser.RoleId) &&
-                (dto.IsActive == null || dto.IsActive == existingUser.IsActive);
+                (dto.IsActive == null || dto.IsActive == existingUser.IsActive) &&
+                (dto.EmployeeId == null || dto.EmployeeId == existingUser.EmployeeId) &&
+                (dto.Division == null || dto.Division == existingUser.Division);
 
             if (isSame)
             {

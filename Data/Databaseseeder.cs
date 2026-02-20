@@ -84,7 +84,86 @@ public static class DatabaseSeeder
                     new() { PermissionId = 33, PermissionName = "letter.view", Description = "View letter numbers", Group = "Letter", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 34, PermissionName = "letter.create", Description = "Generate letter numbers", Group = "Letter", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 35, PermissionName = "letter.update", Description = "Update letter details", Group = "Letter", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionId = 36, PermissionName = "letter.delete", Description = "Delete letter numbers", Group = "Letter", CreatedAt = DateTime.UtcNow }
+                    new() { PermissionId = 36, PermissionName = "letter.delete", Description = "Delete letter numbers", Group = "Letter", CreatedAt = DateTime.UtcNow },
+
+                    // Gatepass
+                    new() { PermissionId = 37, PermissionName = "gatepass.view", Description = "View gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 38, PermissionName = "gatepass.create", Description = "Create gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 39, PermissionName = "gatepass.update", Description = "Update gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 40, PermissionName = "gatepass.delete", Description = "Delete gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+
+                    // Quotation
+                    new() { PermissionId = 41, PermissionName = "quotation.view", Description = "View quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 42, PermissionName = "quotation.create", Description = "Create quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 43, PermissionName = "quotation.update", Description = "Update quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 44, PermissionName = "quotation.delete", Description = "Delete quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+
+                    // Radio
+                    new() { PermissionId = 45, PermissionName = "radio.view", Description = "View radio assets", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 46, PermissionName = "radio.create", Description = "Create radio asset", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 47, PermissionName = "radio.update", Description = "Update radio asset", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 48, PermissionName = "radio.delete", Description = "Delete radio asset", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 49, PermissionName = "radio.import", Description = "Import radio data from CSV", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 50, PermissionName = "radio.export", Description = "Export radio data", Group = "Radio", CreatedAt = DateTime.UtcNow },
+
+                    // Radio Scrap
+                    new() { PermissionId = 51, PermissionName = "radio.scrap.view", Description = "View scrapped radios", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 52, PermissionName = "radio.scrap.create", Description = "Scrap a radio", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 53, PermissionName = "radio.scrap.update", Description = "Update scrap record", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 54, PermissionName = "radio.scrap.delete", Description = "Delete scrap record", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 55, PermissionName = "radio.scrap.export", Description = "Export scrap data", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 56, PermissionName = "radio.scrap.import", Description = "Import scrap data", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+
+                    // Division
+                    new() { PermissionId = 57, PermissionName = "division.view", Description = "View divisions", Group = "Division", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 58, PermissionName = "division.create", Description = "Create division", Group = "Division", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 59, PermissionName = "division.update", Description = "Update division", Group = "Division", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 60, PermissionName = "division.delete", Description = "Delete division", Group = "Division", CreatedAt = DateTime.UtcNow },
+
+                    // Call Record - Fleet Stats
+                    new() { PermissionId = 61, PermissionName = "callrecord.rebuild-fleet-stats", Description = "Rebuild fleet statistics", Group = "CallRecord", CreatedAt = DateTime.UtcNow },
+
+                    // NEC Signal
+                    new() { PermissionId = 62, PermissionName = "nec.view", Description = "View NEC signal data", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 63, PermissionName = "nec.create", Description = "Create NEC signal entries", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 64, PermissionName = "nec.update", Description = "Update NEC signal entries", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 65, PermissionName = "nec.delete", Description = "Delete NEC signal entries", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 66, PermissionName = "nec.import", Description = "Import NEC data from Excel", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 67, PermissionName = "nec.export", Description = "Export NEC data to Excel", Group = "NEC Signal", CreatedAt = DateTime.UtcNow },
+
+                    // SWR Signal
+                    new() { PermissionId = 68, PermissionName = "swr.view", Description = "View SWR signal data", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 69, PermissionName = "swr.create", Description = "Create SWR sites/channels", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 70, PermissionName = "swr.update", Description = "Update SWR sites/channels", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 71, PermissionName = "swr.delete", Description = "Delete SWR sites/channels", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 72, PermissionName = "swr.import", Description = "Import SWR data from Excel", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 73, PermissionName = "swr.export", Description = "Export SWR data", Group = "SWR Signal", CreatedAt = DateTime.UtcNow },
+
+                    // Inspeksi KPC
+                    new() { PermissionId = 74, PermissionName = "inspeksi.view", Description = "View inspeksi KPC data", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 75, PermissionName = "inspeksi.create", Description = "Create inspeksi KPC entries", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 76, PermissionName = "inspeksi.update", Description = "Update inspeksi KPC entries", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 77, PermissionName = "inspeksi.delete", Description = "Delete inspeksi KPC entries", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 78, PermissionName = "inspeksi.export", Description = "Export inspeksi KPC data", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 79, PermissionName = "inspeksi.restore", Description = "Restore deleted inspeksi", Group = "Inspeksi KPC", CreatedAt = DateTime.UtcNow },
+
+                    // Letter (Letter Number, Company, Document Type)
+                    new() { PermissionId = 80, PermissionName = "letter.view", Description = "View surat/letter number data", Group = "Surat", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 81, PermissionName = "letter.create", Description = "Create surat, company, document type", Group = "Surat", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 82, PermissionName = "letter.update", Description = "Update surat, company, document type", Group = "Surat", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 83, PermissionName = "letter.delete", Description = "Delete surat, company, document type", Group = "Surat", CreatedAt = DateTime.UtcNow },
+
+                    // Quotation
+                    new() { PermissionId = 84, PermissionName = "quotation.view", Description = "View quotation data", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 85, PermissionName = "quotation.create", Description = "Create quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 86, PermissionName = "quotation.update", Description = "Update quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 87, PermissionName = "quotation.delete", Description = "Delete quotation", Group = "Quotation", CreatedAt = DateTime.UtcNow },
+
+                    // Gatepass
+                    new() { PermissionId = 88, PermissionName = "gatepass.view", Description = "View gatepass data", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 89, PermissionName = "gatepass.create", Description = "Create gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 90, PermissionName = "gatepass.update", Description = "Update gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 91, PermissionName = "gatepass.delete", Description = "Delete gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow }
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();

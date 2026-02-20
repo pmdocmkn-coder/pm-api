@@ -152,5 +152,29 @@ namespace Pm.Controllers
                 return ApiResponse.InternalServerError("Delete Gatepass gagal: " + ex.Message);
             }
         }
+
+        [HttpPost("{id}/sign")]
+        [Authorize(Policy = "GatepassUpdate")]
+        public async Task<IActionResult> Sign(int id)
+        {
+            try
+            {
+                var result = await _service.SignGatepassAsync(id, CurrentUserId);
+                return ApiResponse.Success(result, "Gatepass berhasil ditandatangani");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return ApiResponse.NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ApiResponse.BadRequest("Sign Gatepass", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error signing gatepass: {Id}", id);
+                return ApiResponse.InternalServerError("Sign Gatepass gagal: " + ex.Message);
+            }
+        }
     }
 }

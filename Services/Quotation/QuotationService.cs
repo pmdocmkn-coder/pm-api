@@ -230,7 +230,9 @@ namespace Pm.Services
                             Username = q.CreatedByUser.Username,
                             FullName = q.CreatedByUser.FullName,
                             Email = q.CreatedByUser.Email,
-                            PhotoUrl = q.CreatedByUser.PhotoUrl
+                            PhotoUrl = q.CreatedByUser.PhotoUrl,
+                            EmployeeId = q.CreatedByUser.EmployeeId,
+                            Division = q.CreatedByUser.Division
                         } : null,
                         UpdatedByUser = q.UpdatedByUser != null ? new UserInfoDto
                         {
@@ -238,7 +240,9 @@ namespace Pm.Services
                             Username = q.UpdatedByUser.Username,
                             FullName = q.UpdatedByUser.FullName,
                             Email = q.UpdatedByUser.Email,
-                            PhotoUrl = q.UpdatedByUser.PhotoUrl
+                            PhotoUrl = q.UpdatedByUser.PhotoUrl,
+                            EmployeeId = q.UpdatedByUser.EmployeeId,
+                            Division = q.UpdatedByUser.Division
                         } : null
                     })
                     .FirstOrDefaultAsync();
@@ -260,12 +264,30 @@ namespace Pm.Services
 
                 _logger.LogInformation("Updating quotation: {FormattedNumber}", quotation.FormattedNumber);
 
-                // Update fields
+                // Update basic fields
                 quotation.Description = dto.Description.Trim();
                 quotation.Notes = dto.Notes?.Trim();
                 quotation.Status = dto.Status;
                 quotation.UpdatedBy = userId;
                 quotation.UpdatedAt = DateTime.UtcNow;
+
+                // Update customer if provided
+                if (dto.CustomerId.HasValue && dto.CustomerId.Value != quotation.CustomerId)
+                {
+                    var customer = await _context.Companies
+                        .Where(c => c.Id == dto.CustomerId.Value && c.IsActive)
+                        .FirstOrDefaultAsync()
+                        ?? throw new ArgumentException($"Customer with ID {dto.CustomerId.Value} not found or inactive");
+
+                    quotation.CustomerId = customer.Id;
+                    quotation.CustomerName = customer.Name;
+                }
+
+                // Update date if provided
+                if (dto.QuotationDate.HasValue)
+                {
+                    quotation.QuotationDate = dto.QuotationDate.Value.Date;
+                }
 
                 await _context.SaveChangesAsync();
 

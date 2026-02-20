@@ -71,7 +71,8 @@ namespace Pm.Controllers
                 Password = dto.Password,
                 FullName = dto.FullName.Trim(),
                 Email = dto.Email.Trim(),
-                RoleId = 3
+                RoleId = 3,
+                EmployeeId = dto.EmployeeId?.Trim()
             };
 
             var user = await _userService.CreateUserAsync(createUserDto);

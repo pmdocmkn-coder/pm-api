@@ -7,5 +7,7 @@ namespace Pm.DTOs.Common
         public string FullName { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? PhotoUrl { get; set; }
+        public string? EmployeeId { get; set; }
+        public string? Division { get; set; }
     }
 }

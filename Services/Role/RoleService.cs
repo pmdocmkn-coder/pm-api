@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
@@ -11,11 +13,26 @@ namespace Pm.Services
     {
         private readonly AppDbContext _context;
         private readonly ILogger<RoleService> _logger;
+        private readonly IActivityLogService _activityLog;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public RoleService(AppDbContext context, ILogger<RoleService> logger)
+        public RoleService(
+            AppDbContext context,
+            ILogger<RoleService> logger,
+            IActivityLogService activityLog,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _logger = logger;
+            _activityLog = activityLog;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst("UserId")?.Value
+                ?? _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(userIdClaim, out var id) ? id : 0;
         }
 
         public async Task<List<RoleDto>> GetAllRolesAsync()
@@ -43,7 +60,7 @@ namespace Pm.Services
         {
             var role = await _context.Roles
                 .Include(r => r.Users)
-                .Include(r => r.RolePermissions) 
+                .Include(r => r.RolePermissions)
                 .FirstOrDefaultAsync(r => r.RoleId == roleId);
 
             if (role == null)
@@ -108,6 +125,21 @@ namespace Pm.Services
 
             _logger.LogInformation("Role created successfully: {RoleName}", role.RoleName);
 
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Role Management",
+                    entityId: role.RoleId,
+                    action: "Create",
+                    userId: GetCurrentUserId(),
+                    description: $"Created role: {role.RoleName}"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return new RoleDto
             {
                 RoleId = role.RoleId,
@@ -167,6 +199,21 @@ namespace Pm.Services
 
             _logger.LogInformation("Role updated successfully: {RoleId}", roleId);
 
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Role Management",
+                    entityId: roleId,
+                    action: "Update",
+                    userId: GetCurrentUserId(),
+                    description: $"Updated role: {role.RoleName}"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return new RoleDto
             {
                 RoleId = role.RoleId,
@@ -207,6 +254,22 @@ namespace Pm.Services
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Role deleted successfully: {RoleId}", roleId);
+
+            try
+            {
+                await _activityLog.LogAsync(
+                    module: "Role Management",
+                    entityId: roleId,
+                    action: "Delete",
+                    userId: GetCurrentUserId(),
+                    description: $"Deleted role: {role.RoleName}"
+                );
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "⚠️ ActivityLog failed (non-critical)");
+            }
+
             return true;
         }
 

@@ -16,6 +16,12 @@ namespace Pm.Models
         public string? SignatureQRCode { get; set; } // QR code data for verification
         public string? Notes { get; set; }
         public GatepassStatus Status { get; set; } = GatepassStatus.Draft;
+
+        // Digital Signature
+        public int? SignedByUserId { get; set; }
+        public DateTime? SignedAt { get; set; }
+        public string? VerificationToken { get; set; }  // GUID for verification URL
+
         public int CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
@@ -24,6 +30,7 @@ namespace Pm.Models
         // Navigation properties
         public User? CreatedByUser { get; set; }
         public User? UpdatedByUser { get; set; }
+        public User? SignedByUser { get; set; }
         public ICollection<GatepassItem> Items { get; set; } = new List<GatepassItem>();
     }
 }

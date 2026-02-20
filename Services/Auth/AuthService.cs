@@ -53,20 +53,20 @@ namespace Pm.Services
 
             // ✅ GUNAKAN DateTimeOffset untuk TRUE UTC
             var trueUtcTime = DateTimeOffset.UtcNow.DateTime;
-            
+
             _logger.LogInformation("🕐 Server Local Time: {Local}", DateTime.Now);
             _logger.LogInformation("🕐 TRUE UTC Time: {Utc}", trueUtcTime);
             _logger.LogInformation("🕐 Server Timezone: {Tz}", TimeZoneInfo.Local.Id);
-            
+
             user.LastLogin = trueUtcTime;
             user.UpdatedAt = trueUtcTime;
-            
+
             _context.Entry(user).State = EntityState.Modified;
-            
+
             try
             {
                 var rowsAffected = await _context.SaveChangesAsync();
-                _logger.LogInformation("✅ LastLogin saved to DB - UTC: {LastLogin} (Rows: {Rows})", 
+                _logger.LogInformation("✅ LastLogin saved to DB - UTC: {LastLogin} (Rows: {Rows})",
                     user.LastLogin, rowsAffected);
             }
             catch (Exception ex)
@@ -85,6 +85,8 @@ namespace Pm.Services
                     FullName = user.FullName,
                     Email = user.Email,
                     PhotoUrl = user.PhotoUrl,
+                    EmployeeId = user.EmployeeId,
+                    Division = user.Division,
                     IsActive = user.IsActive,
                     RoleId = user.RoleId,
                     RoleName = user.Role?.RoleName,
@@ -155,7 +157,7 @@ namespace Pm.Services
 
         public async Task UpdateLastLoginAsync(int userId)
         {
-            
+
             var user = await _context.Users.FindAsync(userId);
             if (user != null)
             {

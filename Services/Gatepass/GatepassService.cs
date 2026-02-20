@@ -190,7 +190,8 @@ namespace Pm.Services
                         PicName = g.PicName,
                         Status = g.Status.ToString(),
                         CreatedByName = g.CreatedByUser != null ? g.CreatedByUser.FullName : null,
-                        ItemCount = g.Items.Count
+                        ItemCount = g.Items.Count,
+                        IsSigned = g.SignedByUserId != null
                     })
                     .ToListAsync();
 
@@ -211,6 +212,7 @@ namespace Pm.Services
                     .Include(g => g.Items)
                     .Include(g => g.CreatedByUser)
                     .Include(g => g.UpdatedByUser)
+                    .Include(g => g.SignedByUser)
                     .Where(g => g.Id == id)
                     .Select(g => new GatepassResponseDto
                     {
@@ -234,7 +236,9 @@ namespace Pm.Services
                             Username = g.CreatedByUser.Username,
                             FullName = g.CreatedByUser.FullName,
                             Email = g.CreatedByUser.Email,
-                            PhotoUrl = g.CreatedByUser.PhotoUrl
+                            PhotoUrl = g.CreatedByUser.PhotoUrl,
+                            EmployeeId = g.CreatedByUser.EmployeeId,
+                            Division = g.CreatedByUser.Division
                         } : null,
                         UpdatedByUser = g.UpdatedByUser != null ? new UserInfoDto
                         {
@@ -242,8 +246,22 @@ namespace Pm.Services
                             Username = g.UpdatedByUser.Username,
                             FullName = g.UpdatedByUser.FullName,
                             Email = g.UpdatedByUser.Email,
-                            PhotoUrl = g.UpdatedByUser.PhotoUrl
+                            PhotoUrl = g.UpdatedByUser.PhotoUrl,
+                            EmployeeId = g.UpdatedByUser.EmployeeId,
+                            Division = g.UpdatedByUser.Division
                         } : null,
+                        SignedByUser = g.SignedByUser != null ? new UserInfoDto
+                        {
+                            UserId = g.SignedByUser.UserId,
+                            Username = g.SignedByUser.Username,
+                            FullName = g.SignedByUser.FullName,
+                            Email = g.SignedByUser.Email,
+                            PhotoUrl = g.SignedByUser.PhotoUrl,
+                            EmployeeId = g.SignedByUser.EmployeeId,
+                            Division = g.SignedByUser.Division
+                        } : null,
+                        SignedAt = g.SignedAt,
+                        VerificationToken = g.VerificationToken,
                         Items = g.Items.Select(i => new GatepassItemResponseDto
                         {
                             Id = i.Id,
@@ -367,6 +385,90 @@ namespace Pm.Services
                 _logger.LogError(ex, "Error deleting gatepass");
                 throw;
             }
+        }
+
+        public async Task<GatepassResponseDto> SignGatepassAsync(int id, int userId)
+        {
+            var gatepass = await _context.Gatepasses
+                .Include(g => g.Items)
+                .FirstOrDefaultAsync(g => g.Id == id)
+                ?? throw new KeyNotFoundException($"Gatepass with ID {id} not found");
+
+            if (gatepass.SignedByUserId != null)
+                throw new InvalidOperationException("Gatepass sudah ditandatangani");
+
+            // Generate verification token
+            gatepass.SignedByUserId = userId;
+            gatepass.SignedAt = DateTime.UtcNow;
+            gatepass.VerificationToken = Guid.NewGuid().ToString("N"); // 32 char hex
+            gatepass.Status = GatepassStatus.Sent; // Auto-update status to Sent
+            gatepass.UpdatedBy = userId;
+            gatepass.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Log activity
+            try
+            {
+                await _activityLog.LogAsync("Gatepass", id, "Sign", userId,
+                    $"Signed gatepass: {gatepass.FormattedNumber}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to write activity log for gatepass signing");
+            }
+
+            _logger.LogInformation("Gatepass signed: {FormattedNumber} by user {UserId}", gatepass.FormattedNumber, userId);
+
+            return await GetGatepassByIdAsync(id) ?? throw new Exception("Failed to retrieve signed gatepass");
+        }
+
+        public async Task<GatepassResponseDto?> GetGatepassByVerificationTokenAsync(string token)
+        {
+            var gatepass = await _context.Gatepasses
+                .Include(g => g.Items)
+                .Include(g => g.CreatedByUser)
+                .Include(g => g.SignedByUser)
+                .Where(g => g.VerificationToken == token)
+                .Select(g => new GatepassResponseDto
+                {
+                    Id = g.Id,
+                    FormattedNumber = g.FormattedNumber,
+                    SequenceNumber = g.SequenceNumber,
+                    Year = g.Year,
+                    Month = g.Month,
+                    Destination = g.Destination,
+                    PicName = g.PicName,
+                    PicContact = g.PicContact,
+                    GatepassDate = g.GatepassDate,
+                    Notes = g.Notes,
+                    Status = g.Status.ToString(),
+                    CreatedAt = g.CreatedAt,
+                    SignedAt = g.SignedAt,
+                    VerificationToken = g.VerificationToken,
+                    SignedByUser = g.SignedByUser != null ? new UserInfoDto
+                    {
+                        UserId = g.SignedByUser.UserId,
+                        Username = g.SignedByUser.Username,
+                        FullName = g.SignedByUser.FullName,
+                        Email = g.SignedByUser.Email,
+                        PhotoUrl = g.SignedByUser.PhotoUrl,
+                        EmployeeId = g.SignedByUser.EmployeeId,
+                        Division = g.SignedByUser.Division
+                    } : null,
+                    Items = g.Items.Select(i => new GatepassItemResponseDto
+                    {
+                        Id = i.Id,
+                        ItemName = i.ItemName,
+                        Quantity = i.Quantity,
+                        Unit = i.Unit,
+                        Description = i.Description,
+                        SerialNumber = i.SerialNumber
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            return gatepass;
         }
     }
 }

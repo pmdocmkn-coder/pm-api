@@ -29,7 +29,7 @@ namespace Pm.Controllers
         {
             get
             {
-                var claim = User.FindFirst("UserId")?.Value 
+                var claim = User.FindFirst("UserId")?.Value
                            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
                 if (!int.TryParse(claim, out int id))
@@ -89,26 +89,26 @@ namespace Pm.Controllers
                 _logger.LogError(ex, "Error getting yearly pivot for {Year}, Tower: {Tower}", year, tower);
                 return ApiResponse.BadRequest("Parameter", ex.Message);
             }
-}
+        }
 
         // ============================================
         // IMPORT & EXPORT
         // ============================================
         [HttpPost("import-pivot-excel")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalImport")]
         public async Task<IActionResult> ImportPivotExcel([FromForm] NecSignalImportRequestDto request)
         {
             try
             {
                 _logger.LogInformation("📤 ImportPivotExcel endpoint hit!");
-                _logger.LogInformation("📤 File: {FileName}, Size: {Size}", 
+                _logger.LogInformation("📤 File: {FileName}, Size: {Size}",
                     request?.ExcelFile?.FileName, request?.ExcelFile?.Length);
-                
+
                 if (request?.ExcelFile == null || request.ExcelFile.Length == 0)
                 {
                     return ApiResponse.BadRequest("Import", "File tidak boleh kosong");
                 }
-                
+
                 var result = await _service.ImportFromPivotExcelAsync(request.ExcelFile, CurrentUserId);
                 return ApiResponse.Success(result);
             }
@@ -119,7 +119,7 @@ namespace Pm.Controllers
             }
         }
         [HttpGet("export-yearly-excel")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalExport")]
         public async Task<IActionResult> ExportYearlyExcel(int year, string? tower = null)
         {
             try
@@ -156,7 +156,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("towers")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalCreate")]
         public async Task<IActionResult> CreateTower([FromBody] TowerCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -182,7 +182,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("towers")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalUpdate")]
         public async Task<IActionResult> UpdateTower([FromBody] TowerUpdateDto dto)
         {
             if (!ModelState.IsValid)
@@ -259,7 +259,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("links")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalCreate")]
         public async Task<IActionResult> CreateLink([FromBody] NecLinkCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -290,7 +290,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("links")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalUpdate")]
         public async Task<IActionResult> UpdateLink([FromBody] NecLinkUpdateDto dto)
         {
             if (!ModelState.IsValid)
@@ -358,14 +358,14 @@ namespace Pm.Controllers
             var validationResults = query.Validate(new ValidationContext(query)).ToList();
             if (validationResults.Any())
             {
-                return ApiResponse.BadRequest("Invalid parameter", 
+                return ApiResponse.BadRequest("Invalid parameter",
                     string.Join("; ", validationResults.Select(v => v.ErrorMessage)));
             }
 
             try
             {
                 var result = await _service.GetHistoriesAsync(query);
-                
+
                 // ✅ Kembalikan langsung, ResponseWrapperFilter akan skip wrapping
                 return Ok(result);
             }
@@ -397,7 +397,7 @@ namespace Pm.Controllers
         }
 
         [HttpPost("histories")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalCreate")]
         public async Task<IActionResult> CreateHistory([FromBody] NecRslHistoryCreateDto dto)
         {
             if (!ModelState.IsValid)
@@ -433,7 +433,7 @@ namespace Pm.Controllers
         }
 
         [HttpPut("histories/{id}")]
-        [Authorize(Policy = "NecSignalView")]
+        [Authorize(Policy = "NecSignalUpdate")]
         public async Task<IActionResult> UpdateHistory(int id, [FromBody] NecRslHistoryUpdateDto dto)
         {
             if (!ModelState.IsValid)
@@ -484,6 +484,6 @@ namespace Pm.Controllers
             }
         }
 
-        
+
     }
 }

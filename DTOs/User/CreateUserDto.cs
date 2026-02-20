@@ -23,5 +23,7 @@ namespace Pm.DTOs
         [Required(ErrorMessage = "Role wajib dipilih")]
         public int? RoleId { get; set; }
 
+        [StringLength(50, ErrorMessage = "ID Karyawan maksimal 50 karakter")]
+        public string? EmployeeId { get; set; }
     }
 }

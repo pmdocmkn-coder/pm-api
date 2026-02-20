@@ -14,6 +14,7 @@ using Pm.DTOs.Auth;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -136,7 +137,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = true;
     options.SaveToken = true;
 
     options.TokenValidationParameters = new TokenValidationParameters
@@ -197,6 +198,9 @@ builder.Services.AddScoped<ILetterNumberService, LetterNumberService>();
 builder.Services.AddScoped<IGatepassService, GatepassService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
 
+// ===== Division Master Data =====
+builder.Services.AddScoped<IDivisionService, DivisionService>();
+
 // ===== Radio Management =====
 builder.Services.AddScoped<IRadioTrunkingService, RadioTrunkingService>();
 builder.Services.AddScoped<IRadioConventionalService, RadioConventionalService>();
@@ -204,12 +208,7 @@ builder.Services.AddScoped<IRadioGrafirService, RadioGrafirService>();
 builder.Services.AddScoped<IRadioScrapService, RadioScrapService>();
 
 // ===== Cloudinary =====
-builder.Services.Configure<CloudinarySettings>(options =>
-{
-    options.CloudName = builder.Configuration["Cloudinary:CloudName"] ?? "dz3rhkitn";
-    options.ApiKey = builder.Configuration["Cloudinary:ApiKey"] ?? "565287517278285";
-    options.ApiSecret = builder.Configuration["Cloudinary:ApiSecret"] ?? "VB7L7av5BE-Fi6bmyxWJziW2a5M";
-});
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
 builder.Services.AddHttpContextAccessor();
 
@@ -233,6 +232,8 @@ builder.Services.AddCors(options =>
         .AllowCredentials();
     });
 });
+
+
 
 
 // Enable detailed model binding errors
@@ -280,12 +281,14 @@ else
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1"));
 }
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto
+});
+
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
+app.UseHttpsRedirection();
 
 if (app.Environment.IsDevelopment())
 {
