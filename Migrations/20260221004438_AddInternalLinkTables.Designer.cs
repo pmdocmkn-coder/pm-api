@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
@@ -11,9 +12,11 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260221004438_AddInternalLinkTables")]
+    partial class AddInternalLinkTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -656,9 +659,6 @@ namespace Pm.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
-                    b.Property<int>("Direction")
-                        .HasColumnType("int");
-
                     b.Property<string>("IpAddress")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
@@ -668,17 +668,10 @@ namespace Pm.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("LinkGroup")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
                     b.Property<string>("LinkName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
-
-                    b.Property<decimal?>("RslNearEnd")
-                        .HasColumnType("decimal(10,2)");
 
                     b.Property<string>("ServiceType")
                         .IsRequired()
@@ -722,9 +715,6 @@ namespace Pm.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
-                    b.Property<decimal?>("RslNearEnd")
-                        .HasColumnType("decimal(10,2)");
-
                     b.Property<string>("ScreenshotBase64")
                         .HasColumnType("longtext");
 
@@ -732,8 +722,8 @@ namespace Pm.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(50)");
 
-                    b.Property<int?>("Uptime")
-                        .HasColumnType("int");
+                    b.Property<decimal?>("Uptime")
+                        .HasColumnType("decimal(5,2)");
 
                     b.HasKey("Id");
 

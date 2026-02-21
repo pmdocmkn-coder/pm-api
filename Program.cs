@@ -186,6 +186,7 @@ builder.Services.AddScoped<IValidator<UpdateUserDto>, UpdateUserDtoValidator>();
 
 // ===== Signal NEC ===== 
 builder.Services.AddScoped<INecSignalService, NecSignalService>();
+builder.Services.AddScoped<IInternalLinkService, InternalLinkService>();
 // ===== SWR Radio ===== 
 builder.Services.AddScoped<ISwrSignalService, SwrSignalService>();
 

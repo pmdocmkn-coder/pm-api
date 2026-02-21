@@ -206,6 +206,16 @@ namespace Pm.Helper
             options.AddPolicy("InspeksiRestore", policy =>
                 policy.RequireClaim("Permission", "inspeksi.restore"));
 
+            // Internal Link
+            options.AddPolicy("InternalLinkView", policy =>
+                policy.RequireClaim("Permission", "internal.link.view"));
+            options.AddPolicy("InternalLinkCreate", policy =>
+                policy.RequireClaim("Permission", "internal.link.create"));
+            options.AddPolicy("InternalLinkUpdate", policy =>
+                policy.RequireClaim("Permission", "internal.link.update"));
+            options.AddPolicy("InternalLinkDelete", policy =>
+                policy.RequireClaim("Permission", "internal.link.delete"));
+
 
         }
 

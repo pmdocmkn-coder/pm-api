@@ -3,6 +3,7 @@ using Pm.Enums;
 using Pm.Models;
 using Pm.Models.NEC;
 using Pm.Models.SWR;
+using Pm.Models.InternalLink;
 
 namespace Pm.Data
 {
@@ -46,6 +47,10 @@ namespace Pm.Data
 
         // Division Master Data
         public DbSet<Division> Divisions { get; set; } = null!;
+
+        // Internal Link
+        public DbSet<InternalLink> InternalLinks { get; set; } = null!;
+        public DbSet<InternalLinkHistory> InternalLinkHistories { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1020,6 +1025,93 @@ namespace Pm.Data
                     .WithMany()
                     .HasForeignKey(e => e.UpdatedBy)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ===========================================
+            // INTERNAL LINK CONFIGURATION
+            // ===========================================
+
+            modelBuilder.Entity<InternalLink>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("InternalLinks");
+
+                entity.Property(e => e.LinkName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.IpAddress)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.Device)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Type)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.UsedFrequency)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.RslNearEnd)
+                    .HasColumnType("decimal(10,2)")
+                    .IsRequired(false);
+
+                entity.Property(e => e.ServiceType)
+                    .HasConversion<string>()
+                    .IsRequired()
+                    .HasColumnType("varchar(50)");
+
+                entity.Property(e => e.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.LinkName)
+                    .HasDatabaseName("IX_InternalLink_LinkName");
+
+                entity.HasMany(e => e.Histories)
+                    .WithOne(h => h.InternalLink)
+                    .HasForeignKey(h => h.InternalLinkId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<InternalLinkHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("InternalLinkHistories");
+
+                entity.Property(e => e.Date)
+                    .IsRequired();
+
+                entity.Property(e => e.RslNearEnd)
+                    .HasColumnType("decimal(10,2)")
+                    .IsRequired(false);
+
+                entity.Property(e => e.Uptime)
+                    .IsRequired(false);
+
+                entity.Property(e => e.Notes)
+                    .IsRequired(false)
+                    .HasColumnType("text");
+
+                entity.Property(e => e.ScreenshotBase64)
+                    .IsRequired(false)
+                    .HasColumnType("longtext");
+
+                entity.Property(e => e.Status)
+                    .HasConversion<string>()
+                    .IsRequired()
+                    .HasColumnType("varchar(50)");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.Date)
+                    .HasDatabaseName("IX_InternalLinkHistory_Date");
+
+                entity.HasIndex(e => new { e.InternalLinkId, e.Date })
+                    .HasDatabaseName("IX_InternalLinkHistory_LinkDate");
             });
         }
     }
