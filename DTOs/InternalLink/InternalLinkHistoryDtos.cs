@@ -51,6 +51,7 @@ namespace Pm.DTOs.InternalLink
 
     public class InternalLinkHistoryUpdateDto
     {
+        public DateTime? Date { get; set; }
         public decimal? RslNearEnd { get; set; }
         public int? Uptime { get; set; }
         public string? Notes { get; set; }

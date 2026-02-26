@@ -444,6 +444,11 @@ namespace Pm.Services
             history.Notes = dto.Notes;
             history.Status = status;
 
+            if (dto.Date.HasValue)
+            {
+                history.Date = dto.Date.Value.Date;
+            }
+
             // Handle screenshot update
             if (dto.RemoveScreenshot == true)
             {
