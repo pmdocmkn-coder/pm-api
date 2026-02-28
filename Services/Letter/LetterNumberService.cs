@@ -67,10 +67,13 @@ namespace Pm.Services
                         }
 
                         // Generate formatted number: {seq:D2}/MKN-{companyCode}/{docTypeCode}/{romanMonth}/{year}
+                        // If company is MKN, it should be {seq:D2}/MKN/{docTypeCode}/{romanMonth}/{year}
                         _logger.LogInformation("Generating formatted number for seq={Sequence}, company={CompanyCode}, type={TypeCode}",
                             newSequence, company.Code, documentType.Code);
                         var romanMonth = RomanNumeralHelper.ToRoman(month);
-                        var formattedNumber = $"{newSequence:D2}/MKN-{company.Code}/{documentType.Code}/{romanMonth}/{year}";
+
+                        var companyPart = company.Code.Equals("MKN", StringComparison.OrdinalIgnoreCase) ? "MKN" : $"MKN-{company.Code}";
+                        var formattedNumber = $"{newSequence:D2}/{companyPart}/{documentType.Code}/{romanMonth}/{year}";
 
                         var letterNumber = new LetterNumber
                         {
