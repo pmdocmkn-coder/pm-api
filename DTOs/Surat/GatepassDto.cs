@@ -43,6 +43,8 @@ namespace Pm.DTOs
         [StringLength(50, ErrorMessage = "PIC Contact cannot exceed 50 characters")]
         public string? PicContact { get; set; }
 
+        public DateTime? GatepassDate { get; set; }
+
         public string? SignatureQRCode { get; set; }
         public string? Notes { get; set; }
         public GatepassStatus Status { get; set; }
@@ -119,6 +121,7 @@ namespace Pm.DTOs
         public DateTime GatepassDate { get; set; }
         public string Destination { get; set; } = string.Empty;
         public string PicName { get; set; } = string.Empty;
+        public string? PicContact { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? CreatedByName { get; set; }
         public int ItemCount { get; set; }

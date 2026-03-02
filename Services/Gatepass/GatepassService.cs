@@ -188,6 +188,7 @@ namespace Pm.Services
                         GatepassDate = g.GatepassDate,
                         Destination = g.Destination,
                         PicName = g.PicName,
+                        PicContact = g.PicContact,
                         Status = g.Status.ToString(),
                         CreatedByName = g.CreatedByUser != null ? g.CreatedByUser.FullName : null,
                         ItemCount = g.Items.Count,
@@ -296,6 +297,8 @@ namespace Pm.Services
                 gatepass.Destination = dto.Destination.Trim();
                 gatepass.PicName = dto.PicName.Trim();
                 gatepass.PicContact = dto.PicContact?.Trim();
+                if (dto.GatepassDate.HasValue)
+                    gatepass.GatepassDate = dto.GatepassDate.Value.Date;
                 gatepass.SignatureQRCode = dto.SignatureQRCode?.Trim();
                 gatepass.Notes = dto.Notes?.Trim();
                 gatepass.Status = dto.Status;
