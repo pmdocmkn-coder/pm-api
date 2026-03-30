@@ -51,8 +51,6 @@ namespace Pm.Services
                 var fleetStatsDict = new Dictionary<string, FleetStatistic>();
 
                 var parsedData = lines
-                    .AsParallel()
-                    .WithDegreeOfParallelism(Environment.ProcessorCount)
                     .Select((line, idx) => ParseCsvRowWithFleetData(line, idx + 1))
                     .Where(r => r.record != null)
                     .ToList();
