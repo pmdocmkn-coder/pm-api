@@ -41,52 +41,56 @@ namespace Pm.Services
                 }
 
                 using var reader = new StreamReader(csvStream, Encoding.UTF8);
-                var allContent = await reader.ReadToEndAsync();
-                var lines = allContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
-                _logger.LogInformation("🚀 Starting CSV import: {Count} lines from {FileName}", lines.Length, fileName);
+                _logger.LogInformation("🚀 Starting CSV import from {FileName}", fileName);
 
                 var parseStart = stopwatch.ElapsedMilliseconds;
 
                 var fleetStatsDict = new Dictionary<string, FleetStatistic>();
+                var records = new List<CallRecord>();
+                int totalLines = 0;
 
-                var parsedData = lines
-                    .Select((line, idx) => ParseCsvRowWithFleetData(line, idx + 1))
-                    .Where(r => r.record != null)
-                    .ToList();
-
-                var records = parsedData.Select(p => p.record!).ToList();
-
-                // Build fleet statistics
-                foreach (var (record, callerFleet, calledFleet, duration) in parsedData.Where(p => p.record != null))
+                while (await reader.ReadLineAsync() is string line)
                 {
-                    if (string.IsNullOrEmpty(callerFleet) || string.IsNullOrEmpty(calledFleet))
+                    if (string.IsNullOrWhiteSpace(line))
                         continue;
+                        
+                    totalLines++;
 
-                    var key = $"{record!.CallDate:yyyyMMdd}_{callerFleet}_{calledFleet}";
+                    var (record, callerFleet, calledFleet, duration) = ParseCsvRowWithFleetData(line, totalLines);
+                    
+                    if (record != null)
+                    {
+                        records.Add(record);
 
-                    if (fleetStatsDict.ContainsKey(key))
-                    {
-                        fleetStatsDict[key].CallCount++;
-                        fleetStatsDict[key].TotalDuration += duration;
-                        fleetStatsDict[key].UpdatedAt = DateTime.UtcNow;
-                    }
-                    else
-                    {
-                        fleetStatsDict[key] = new FleetStatistic
+                        if (!string.IsNullOrEmpty(callerFleet) && !string.IsNullOrEmpty(calledFleet))
                         {
-                            CallDate = record.CallDate.Date,
-                            CallerFleet = callerFleet,
-                            CalledFleet = calledFleet,
-                            CallCount = 1,
-                            TotalDuration = duration,
-                            CreatedAt = DateTime.UtcNow
-                        };
+                            var key = $"{record.CallDate:yyyyMMdd}_{callerFleet}_{calledFleet}";
+
+                            if (fleetStatsDict.ContainsKey(key))
+                            {
+                                fleetStatsDict[key].CallCount++;
+                                fleetStatsDict[key].TotalDuration += duration;
+                                fleetStatsDict[key].UpdatedAt = DateTime.UtcNow;
+                            }
+                            else
+                            {
+                                fleetStatsDict[key] = new FleetStatistic
+                                {
+                                    CallDate = record.CallDate.Date,
+                                    CallerFleet = callerFleet,
+                                    CalledFleet = calledFleet,
+                                    CallCount = 1,
+                                    TotalDuration = duration,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                            }
+                        }
                     }
                 }
 
                 _logger.LogInformation("✅ Parsed {Successful}/{Total} records in {Ms}ms",
-                    records.Count, lines.Length, stopwatch.ElapsedMilliseconds - parseStart);
+                    records.Count, totalLines, stopwatch.ElapsedMilliseconds - parseStart);
 
                 if (records.Any())
                 {
@@ -101,8 +105,8 @@ namespace Pm.Services
                 }
 
                 response.SuccessfulRecords = records.Count;
-                response.TotalRecords = lines.Length;
-                response.FailedRecords = lines.Length - records.Count;
+                response.TotalRecords = totalLines;
+                response.FailedRecords = totalLines - records.Count;
 
                 stopwatch.Stop();
                 _logger.LogInformation("🎉 Import completed in {Ms}ms", stopwatch.ElapsedMilliseconds);
