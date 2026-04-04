@@ -63,6 +63,15 @@ namespace Pm.Controllers
             return ApiResponse.Success(null, "Radio Trunking berhasil dihapus");
         }
 
+        [HttpDelete("clear")]
+        [Authorize(Policy = "RadioDelete")]
+        public async Task<IActionResult> ClearAll()
+        {
+            var userId = GetUserId();
+            var deletedCount = await _service.ClearAllAsync(userId);
+            return ApiResponse.Success(new { deletedCount }, $"Berhasil menghapus seluruh {deletedCount} data Trunking.");
+        }
+
         [Authorize(Policy = "RadioView")]
         [HttpGet("{id}/history")]
         public async Task<IActionResult> GetHistory(int id)
@@ -156,6 +165,15 @@ namespace Pm.Controllers
             return ApiResponse.Success(null, "Radio Conventional berhasil dihapus");
         }
 
+        [HttpDelete("clear")]
+        [Authorize(Policy = "RadioDelete")]
+        public async Task<IActionResult> ClearAll()
+        {
+            var userId = GetUserId();
+            var deletedCount = await _service.ClearAllAsync(userId);
+            return ApiResponse.Success(new { deletedCount }, $"Berhasil menghapus seluruh {deletedCount} data Conventional.");
+        }
+
         [HttpGet("{id}/history")]
         public async Task<IActionResult> GetHistory(int id)
         {
@@ -245,6 +263,15 @@ namespace Pm.Controllers
             var success = await _service.DeleteAsync(id);
             if (!success) return ApiResponse.NotFound("Radio Grafir tidak ditemukan");
             return ApiResponse.Success(null, "Radio Grafir berhasil dihapus");
+        }
+
+        [HttpDelete("clear")]
+        [Authorize(Policy = "RadioDelete")]
+        public async Task<IActionResult> ClearAll()
+        {
+            var userId = GetUserId();
+            var deletedCount = await _service.ClearAllAsync(userId);
+            return ApiResponse.Success(new { deletedCount }, $"Berhasil menghapus seluruh {deletedCount} data Grafir.");
         }
 
         [Authorize(Policy = "RadioView")]

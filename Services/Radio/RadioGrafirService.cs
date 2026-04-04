@@ -5,6 +5,7 @@ using Pm.DTOs.Radio;
 using Pm.Helper;
 using Pm.Models;
 using System.Text;
+using OfficeOpenXml;
 
 namespace Pm.Services
 {
@@ -202,40 +203,152 @@ namespace Pm.Services
             var failed = 0;
             var errors = new List<string>();
 
-            using var reader = new StreamReader(stream);
-            await reader.ReadLineAsync();
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(stream);
 
-            var lineNumber = 1;
-            while (!reader.EndOfStream)
+            foreach (var worksheet in package.Workbook.Worksheets)
             {
-                lineNumber++;
-                var line = await reader.ReadLineAsync();
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                int rowCount = worksheet.Dimension?.Rows ?? 0;
+                int colCount = worksheet.Dimension?.Columns ?? 0;
+                if (rowCount == 0) continue;
 
+                int headerRow = 0;
+                var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                for (int r = 1; r <= Math.Min(10, rowCount); r++)
+                {
+                    var rowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                    for (int c = 1; c <= colCount; c++)
+                    {
+                        var cellText = worksheet.Cells[r, c].Text?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
+                        if (string.IsNullOrEmpty(cellText)) continue;
+
+                        if (cellText == "noasset" || cellText == "asset") rowMap.TryAdd("noasset", c);
+                        else if (cellText == "serialnumber" || cellText == "serial" || cellText == "sn") rowMap.TryAdd("serialnumber", c);
+                        else if (cellText == "typeradio" || cellText == "type") rowMap.TryAdd("typeradio", c);
+                        else if (cellText == "div" || cellText == "division") rowMap.TryAdd("div", c);
+                        else if (cellText == "dept" || cellText == "department") rowMap.TryAdd("dept", c);
+                        else if (cellText == "fleetid" || cellText == "fleet") rowMap.TryAdd("fleetid", c);
+                        else if (cellText == "tanggal" || cellText == "date") rowMap.TryAdd("tanggal", c);
+                        else if (cellText == "status") rowMap.TryAdd("status", c);
+                    }
+
+                    if ((rowMap.ContainsKey("noasset") || rowMap.ContainsKey("serialnumber")) && rowMap.Count >= 3)
+                    {
+                        columnMap = rowMap;
+                        headerRow = r;
+                        break;
+                    }
+                }
+
+                if (headerRow == 0) continue;
+
+                string? GetValue(int r, string key)
+                {
+                    if (columnMap.TryGetValue(key, out int colIndex))
+                    {
+                        var val = worksheet.Cells[r, colIndex].Text?.Trim();
+                        return string.IsNullOrWhiteSpace(val) ? null : val;
+                    }
+                    return null;
+                }
+
+                DateTime? GetDate(int r, string key)
+                {
+                    var val = GetValue(r, key);
+                    if (string.IsNullOrEmpty(val)) return null;
+
+                    if (double.TryParse(val, out double dateNum) && dateNum > 10000)
+                    {
+                        try { return DateTime.FromOADate(dateNum); } catch { }
+                    }
+
+                    val = val.Replace("Januari", "January", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Februari", "February", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Maret", "March", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Mei", "May", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Juni", "June", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Juli", "July", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Agustus", "August", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Oktober", "October", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Nopember", "November", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Desember", "December", StringComparison.OrdinalIgnoreCase);
+
+                    if (DateTime.TryParse(val, out var parsed)) return parsed;
+                    return null;
+                }
+
+                // Pre-load all existing RadioGrafirs into memory for fast lookup
+                var allExisting = await _context.RadioGrafirs.ToListAsync();
+                var existingByNoAsset = allExisting
+                    .Where(rt => !string.IsNullOrEmpty(rt.NoAsset))
+                    .GroupBy(rt => rt.NoAsset!)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                for (int r = headerRow + 1; r <= rowCount; r++)
+                {
+                    var noAsset = GetValue(r, "noasset");
+                    var serialNumber = GetValue(r, "serialnumber");
+
+                    if (string.IsNullOrEmpty(noAsset) && string.IsNullOrEmpty(serialNumber)) continue;
+                    if (string.IsNullOrEmpty(noAsset) && !string.IsNullOrEmpty(serialNumber)) noAsset = serialNumber;
+
+                    try
+                    {
+                        if (existingByNoAsset.TryGetValue(noAsset!, out var existing))
+                        {
+                            if (serialNumber != null) existing.SerialNumber = serialNumber;
+                            if (GetValue(r, "typeradio") is string tr) existing.TypeRadio = tr;
+                            if (GetValue(r, "div") is string div) existing.Div = div;
+                            if (GetValue(r, "dept") is string dept) existing.Dept = dept;
+                            if (GetValue(r, "fleetid") is string fid) existing.FleetId = fid;
+                            if (GetDate(r, "tanggal") is DateTime tgl) existing.Tanggal = tgl;
+                            existing.Status = GetValue(r, "status") ?? existing.Status ?? "Active";
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            existing.UpdatedBy = userId;
+                        }
+                        else
+                        {
+                            var entity = new RadioGrafir
+                            {
+                                NoAsset = noAsset!,
+                                SerialNumber = serialNumber ?? noAsset!,
+                                TypeRadio = GetValue(r, "typeradio"),
+                                Div = GetValue(r, "div"),
+                                Dept = GetValue(r, "dept"),
+                                FleetId = GetValue(r, "fleetid"),
+                                Tanggal = GetDate(r, "tanggal"),
+                                Status = GetValue(r, "status") ?? "Active",
+                                CreatedBy = userId,
+                                UpdatedBy = userId
+                            };
+                            _context.RadioGrafirs.Add(entity);
+                            existingByNoAsset[noAsset!] = entity;
+                        }
+                        success++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        errors.Add($"Sheet '{worksheet.Name}' Baris {r}: {ex.InnerException?.Message ?? ex.Message}");
+                    }
+                }
+
+                // Batch save per sheet
                 try
                 {
-                    var values = line.Split(',');
-                    await CreateAsync(new CreateRadioGrafirDto
-                    {
-                        NoAsset = values[0].Trim(),
-                        SerialNumber = values[1].Trim(),
-                        TypeRadio = values.Length > 2 ? values[2].Trim() : null,
-                        Div = values.Length > 3 ? values[3].Trim() : null,
-                        Dept = values.Length > 4 ? values[4].Trim() : null,
-                        FleetId = values.Length > 5 ? values[5].Trim() : null
-                    }, userId);
-                    success++;
+                    await _context.SaveChangesAsync();
                 }
                 catch (Exception ex)
                 {
-                    failed++;
-                    errors.Add($"Line {lineNumber}: {ex.Message}");
+                    _context.ChangeTracker.Clear();
+                    errors.Add($"Sheet '{worksheet.Name}' batch save error: {ex.InnerException?.Message ?? ex.Message}");
                 }
             }
 
-            // Audit Log for Import
-            await _activityLog.LogAsync("Radio Grafir", null, "Import", userId, $"Imported {success} success, {failed} failed");
-
+            _context.ChangeTracker.Clear();
+            await _activityLog.LogAsync("Radio Grafir", null, "Import", userId, $"Imported {success} data (Failed: {failed})");
             return (success, failed, errors);
         }
 
@@ -252,6 +365,12 @@ namespace Pm.Services
         public byte[] GetImportTemplate()
         {
             return Encoding.UTF8.GetBytes("NoAsset,SerialNumber,TypeRadio,Div,Dept,FleetId\nRTH0441S,25573915,TP8100,MSD,MEWS,4101-346\n");
+        }
+
+        public async Task<int> ClearAllAsync(int userId)
+        {
+            await _activityLog.LogAsync("Radio Grafir", 0, "Delete", userId, "Cleared ALL Radio Grafir data");
+            return await _context.RadioGrafirs.ExecuteDeleteAsync();
         }
     }
 }

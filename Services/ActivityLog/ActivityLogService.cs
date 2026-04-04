@@ -78,7 +78,7 @@ namespace Pm.Services
                 if (dbEx.InnerException != null)
                 {
                     var msg = dbEx.InnerException.Message;
-                    _logger.LogWarning("🔍 FK constraint failed for UserId={UserId}", userId);
+                    _logger.LogWarning("🔍 Inner DB Exception: {Message} for UserId={UserId}", msg, userId);
                 }
             }
             catch (Exception ex)

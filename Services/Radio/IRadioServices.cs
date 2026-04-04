@@ -10,6 +10,7 @@ namespace Pm.Services
         Task<RadioTrunkingDto> CreateAsync(CreateRadioTrunkingDto dto, int userId);
         Task<RadioTrunkingDto?> UpdateAsync(int id, UpdateRadioTrunkingDto dto, int userId);
         Task<bool> DeleteAsync(int id);
+        Task<int> ClearAllAsync(int userId);
         Task<List<RadioHistoryDto>> GetHistoryAsync(int radioId);
 
         // Import/Export
@@ -25,6 +26,7 @@ namespace Pm.Services
         Task<RadioConventionalDto> CreateAsync(CreateRadioConventionalDto dto, int userId);
         Task<RadioConventionalDto?> UpdateAsync(int id, UpdateRadioConventionalDto dto, int userId);
         Task<bool> DeleteAsync(int id);
+        Task<int> ClearAllAsync(int userId);
         Task<List<RadioHistoryDto>> GetHistoryAsync(int radioId);
 
         // Import/Export
@@ -40,6 +42,7 @@ namespace Pm.Services
         Task<RadioGrafirDto> CreateAsync(CreateRadioGrafirDto dto, int userId);
         Task<RadioGrafirDto?> UpdateAsync(int id, UpdateRadioGrafirDto dto, int userId);
         Task<bool> DeleteAsync(int id);
+        Task<int> ClearAllAsync(int userId);
         Task<List<RadioTrunkingDto>> GetLinkedTrunkingAsync(int grafirId);
         Task<List<RadioConventionalDto>> GetLinkedConventionalAsync(int grafirId);
 

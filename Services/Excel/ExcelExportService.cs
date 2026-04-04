@@ -316,14 +316,14 @@ namespace Pm.Services
 
             // Title
             worksheet.Cells[row, 1].Value = $"Unique Callers for {calledFleet}";
-            worksheet.Cells[row, 1, row, 3].Merge = true;
+            worksheet.Cells[row, 1, row, 6].Merge = true;
             worksheet.Cells[row, 1].Style.Font.Bold = true;
             worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
             row++;
 
             // Period
             worksheet.Cells[row, 1].Value = $"Period: {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}";
-            worksheet.Cells[row, 1, row, 3].Merge = true;
+            worksheet.Cells[row, 1, row, 6].Merge = true;
             worksheet.Cells[row, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
             row += 2;
 
@@ -331,12 +331,23 @@ namespace Pm.Services
             worksheet.Cells[row, 1].Value = "Caller Fleet";
             worksheet.Cells[row, 2].Value = "Total Calls";
             worksheet.Cells[row, 3].Value = "Total Duration";
+            worksheet.Cells[row, 4].Value = "In Time";
+            worksheet.Cells[row, 5].Value = "User";
+            worksheet.Cells[row, 6].Value = "S/N";
 
-            using (var range = worksheet.Cells[row, 1, row, 3])
+            using (var range = worksheet.Cells[row, 1, row, 4])
             {
                 range.Style.Font.Bold = true;
                 range.Style.Fill.PatternType = ExcelFillStyle.Solid;
                 range.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
+                range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                range.Style.Border.BorderAround(ExcelBorderStyle.Thin);
+            }
+            using (var range = worksheet.Cells[row, 5, row, 6])
+            {
+                range.Style.Font.Bold = true;
+                range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                range.Style.Fill.BackgroundColor.SetColor(Color.LightGreen);
                 range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
                 range.Style.Border.BorderAround(ExcelBorderStyle.Thin);
             }
@@ -348,15 +359,22 @@ namespace Pm.Services
                 worksheet.Cells[row, 1].Value = detail.CallerFleet;
                 worksheet.Cells[row, 2].Value = detail.CallCount;
                 worksheet.Cells[row, 3].Value = detail.TotalDurationFormatted;
+                
+                var t = TimeSpan.FromSeconds(detail.TotalDurationSeconds);
+                worksheet.Cells[row, 4].Value = $"{(int)t.TotalHours}:{t.Minutes:D2}:{t.Seconds:D2}";
+                
+                worksheet.Cells[row, 5].Value = ""; // Empty space for User
+                worksheet.Cells[row, 6].Value = ""; // Empty space for S/N
 
                 worksheet.Cells[row, 2].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                worksheet.Cells[row, 4].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
 
                 row++;
             }
 
             // Formatting
             worksheet.Cells.AutoFitColumns();
-            using (var range = worksheet.Cells[4, 1, row - 1, 3])
+            using (var range = worksheet.Cells[4, 1, row - 1, 6])
             {
                 range.Style.Border.Top.Style = ExcelBorderStyle.Thin;
                 range.Style.Border.Left.Style = ExcelBorderStyle.Thin;

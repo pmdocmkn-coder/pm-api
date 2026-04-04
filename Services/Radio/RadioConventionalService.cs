@@ -5,6 +5,7 @@ using Pm.DTOs.Radio;
 using Pm.Helper;
 using Pm.Models;
 using System.Text;
+using OfficeOpenXml;
 
 namespace Pm.Services
 {
@@ -137,7 +138,6 @@ namespace Pm.Services
             entity.UpdatedBy = userId;
 
             await _context.SaveChangesAsync();
-            await _context.SaveChangesAsync();
 
             await _activityLog.LogAsync("Radio Conventional", id, "Update", userId, $"Updated Radio Conventional {entity.UnitNumber}");
 
@@ -182,97 +182,130 @@ namespace Pm.Services
             var failed = 0;
             var errors = new List<string>();
 
-            using var reader = new StreamReader(stream);
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(stream);
 
-            // Read and parse header row
-            var headerLine = await reader.ReadLineAsync();
-            if (headerLine == null) return (0, 0, ["Empty file"]);
-
-            // Create column mapping (case-insensitive)
-            var headers = headerLine.Split(',').Select(h => h.Trim()).ToArray();
-            var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < headers.Length; i++)
+            foreach (var worksheet in package.Workbook.Worksheets)
             {
-                var normalizedHeader = headers[i]
-                    .Replace(" ", "")
-                    .Replace("_", "")
-                    .ToLower();
+                int rowCount = worksheet.Dimension?.Rows ?? 0;
+                int colCount = worksheet.Dimension?.Columns ?? 0;
+                if (rowCount == 0) continue;
 
-                // Map common variations to standard names
-                if (normalizedHeader == "type" || normalizedHeader == "setting") normalizedHeader = "radiotype";
-                if (normalizedHeader == "serial") normalizedHeader = "serialnumber";
-                if (normalizedHeader == "freq") normalizedHeader = "frequency";
+                // 1. Find Header Row
+                int headerRow = 0;
+                var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                columnMap[normalizedHeader] = i;
-            }
-
-            // Helper to get value by column name
-            string? GetValueByName(string[] values, string columnName)
-            {
-                var key = columnName.ToLower();
-                if (columnMap.TryGetValue(key, out int index) && index < values.Length)
+                for (int r = 1; r <= Math.Min(10, rowCount); r++)
                 {
-                    var val = values[index].Trim();
-                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                    var rowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                    for (int c = 1; c <= colCount; c++)
+                    {
+                        var cellText = worksheet.Cells[r, c].Text?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
+                        if (string.IsNullOrEmpty(cellText)) continue;
+
+                        if (cellText == "unitnumber" || cellText == "unit") rowMap.TryAdd("unitnumber", c);
+                        else if (cellText == "radioid" || cellText == "id") rowMap.TryAdd("radioid", c);
+                        else if (cellText == "serialnumber" || cellText == "serial" || cellText == "sn") rowMap.TryAdd("serialnumber", c);
+                        else if (cellText == "dept" || cellText == "department") rowMap.TryAdd("dept", c);
+                        else if (cellText == "fleet") rowMap.TryAdd("fleet", c);
+                        else if (cellText == "radiotype" || cellText == "type") rowMap.TryAdd("radiotype", c);
+                        else if (cellText == "frequency" || cellText == "freq") rowMap.TryAdd("frequency", c);
+                        else if (cellText == "status") rowMap.TryAdd("status", c);
+                    }
+
+                    if ((rowMap.ContainsKey("unitnumber") || rowMap.ContainsKey("radioid")) && rowMap.Count >= 3)
+                    {
+                        columnMap = rowMap;
+                        headerRow = r;
+                        break;
+                    }
                 }
-                return null;
-            }
 
-            var lineNumber = 1;
-            while (!reader.EndOfStream)
-            {
-                lineNumber++;
-                var line = await reader.ReadLineAsync();
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (headerRow == 0) continue; // Skip non-data sheets
 
+                string? GetValue(int r, string key)
+                {
+                    if (columnMap.TryGetValue(key, out int colIndex))
+                    {
+                        var val = worksheet.Cells[r, colIndex].Text?.Trim();
+                        return string.IsNullOrWhiteSpace(val) ? null : val;
+                    }
+                    return null;
+                }
+
+                // Pre-load all existing RadioConventionals into memory for fast lookup
+                var allExisting = await _context.RadioConventionals.ToListAsync();
+                var existingByRadioId = allExisting
+                    .Where(rt => !string.IsNullOrEmpty(rt.RadioId))
+                    .GroupBy(rt => rt.RadioId!)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                // Process rows — direct entity manipulation
+                for (int r = headerRow + 1; r <= rowCount; r++)
+                {
+                    var unitNumber = GetValue(r, "unitnumber");
+                    var radioId = GetValue(r, "radioid");
+
+                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId)) continue;
+                    if (string.IsNullOrEmpty(unitNumber) && !string.IsNullOrEmpty(radioId)) unitNumber = radioId;
+                    if (string.IsNullOrEmpty(radioId) && !string.IsNullOrEmpty(unitNumber)) radioId = unitNumber;
+
+                    try
+                    {
+                        if (existingByRadioId.TryGetValue(radioId!, out var existing))
+                        {
+                            existing.UnitNumber = unitNumber!;
+                            if (GetValue(r, "dept") is string dept) existing.Dept = dept;
+                            if (GetValue(r, "fleet") is string fleet) existing.Fleet = fleet;
+                            if (GetValue(r, "serialnumber") is string sn) existing.SerialNumber = sn;
+                            if (GetValue(r, "radiotype") is string rt2) existing.RadioType = rt2;
+                            if (GetValue(r, "frequency") is string freq) existing.Frequency = freq;
+                            existing.Status = GetValue(r, "status") ?? existing.Status ?? "Active";
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            existing.UpdatedBy = userId;
+                        }
+                        else
+                        {
+                            var entity = new RadioConventional
+                            {
+                                UnitNumber = unitNumber!,
+                                RadioId = radioId!,
+                                Dept = GetValue(r, "dept"),
+                                Fleet = GetValue(r, "fleet"),
+                                SerialNumber = GetValue(r, "serialnumber"),
+                                RadioType = GetValue(r, "radiotype"),
+                                Frequency = GetValue(r, "frequency"),
+                                Status = GetValue(r, "status") ?? "Active",
+                                CreatedBy = userId,
+                                UpdatedBy = userId
+                            };
+                            _context.RadioConventionals.Add(entity);
+                            existingByRadioId[radioId!] = entity;
+                        }
+                        success++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        errors.Add($"Sheet '{worksheet.Name}' Baris {r}: {ex.InnerException?.Message ?? ex.Message}");
+                    }
+                }
+
+                // Batch save per sheet
                 try
                 {
-                    var values = line.Split(',');
-
-                    // Get values by column name (order doesn't matter!)
-                    var unitNumber = GetValueByName(values, "unitnumber");
-                    var radioId = GetValueByName(values, "radioid");
-
-                    // Auto-generate if both are empty
-                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
-                    {
-                        var guid = Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-                        unitNumber = $"AUTO-{guid}";
-                        radioId = $"RADIO-{guid}";
-                    }
-                    else if (string.IsNullOrEmpty(unitNumber))
-                    {
-                        unitNumber = radioId!;
-                    }
-                    else if (string.IsNullOrEmpty(radioId))
-                    {
-                        radioId = unitNumber!;
-                    }
-
-                    await CreateAsync(new CreateRadioConventionalDto
-                    {
-                        UnitNumber = unitNumber!,
-                        RadioId = radioId!,
-                        SerialNumber = GetValueByName(values, "serialnumber"),
-                        Dept = GetValueByName(values, "dept"),
-                        Fleet = GetValueByName(values, "fleet"),
-                        RadioType = GetValueByName(values, "radiotype"), // Also accepts "Type", "Setting"
-                        Frequency = GetValueByName(values, "frequency"), // Also accepts "Freq"
-                        Status = GetValueByName(values, "status") ?? "Active"
-                    }, userId);
-                    success++;
+                    await _context.SaveChangesAsync();
                 }
                 catch (Exception ex)
                 {
-                    failed++;
-                    errors.Add($"Line {lineNumber}: {ex.Message}");
+                    _context.ChangeTracker.Clear();
+                    errors.Add($"Sheet '{worksheet.Name}' batch save error: {ex.InnerException?.Message ?? ex.Message}");
                 }
             }
 
-            // Audit Log for Import
-            await _activityLog.LogAsync("Radio Conventional", null, "Import", userId, $"Imported {success} success, {failed} failed");
-
+            _context.ChangeTracker.Clear();
+            await _activityLog.LogAsync("Radio Conventional", null, "Import", userId, $"Imported {success} data (Failed: {failed})");
             return (success, failed, errors);
         }
 
@@ -314,5 +347,12 @@ namespace Pm.Services
                 Div = entity.Grafir.Div
             } : null
         };
+
+        public async Task<int> ClearAllAsync(int userId)
+        {
+            await _activityLog.LogAsync("Radio Conventional", 0, "Delete", userId, "Cleared ALL Radio Conventional data");
+            await _context.RadioConventionalHistories.ExecuteDeleteAsync();
+            return await _context.RadioConventionals.ExecuteDeleteAsync();
+        }
     }
 }

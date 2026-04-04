@@ -5,6 +5,7 @@ using Pm.DTOs.Radio;
 using Pm.Helper;
 using Pm.Models;
 using System.Text;
+using OfficeOpenXml;
 
 namespace Pm.Services
 {
@@ -180,7 +181,6 @@ namespace Pm.Services
             }
 
             await _context.SaveChangesAsync();
-            await _context.SaveChangesAsync();
 
             await _activityLog.LogAsync("Radio Trunking", id, "Update", userId, $"Updated Radio Trunking {entity.UnitNumber}");
 
@@ -194,13 +194,6 @@ namespace Pm.Services
 
             _context.RadioTrunkings.Remove(entity);
             await _context.SaveChangesAsync();
-
-            // Note: Since we don't have userId in DeleteAsync currently, we can't log who did it properly unless we change the signature or get it somehow. 
-            // However, the controller calls Delete(id), and doesn't pass userId. 
-            // I will skip logging here or I need to change the interface. 
-            // Wait, I can't change the interface easily without breaking other things or I need to update the controller too.
-            // The user approved plan said "Inject IActivityLogService".
-            // Implementation detail: Controller uses GetUserId(). 
             // I should overload or change DeleteAsync to accept userId.
             // But let's check the controller. Controller calls `_service.DeleteAsync(id)`.
             // Controller `Delete` method has `GetUserId()`.
@@ -256,115 +249,221 @@ namespace Pm.Services
             var failed = 0;
             var errors = new List<string>();
 
-            using var reader = new StreamReader(stream);
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(stream);
 
-            // Read and parse header row
-            var headerLine = await reader.ReadLineAsync();
-            if (headerLine == null) return (0, 0, ["Empty file"]);
-
-            // Create column mapping (case-insensitive)
-            var headers = headerLine.Split(',').Select(h => h.Trim()).ToArray();
-            var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < headers.Length; i++)
+            foreach (var worksheet in package.Workbook.Worksheets)
             {
-                var normalizedHeader = headers[i]
-                    .Replace(" ", "")
-                    .Replace("_", "")
-                    .ToLower();
+                int rowCount = worksheet.Dimension?.Rows ?? 0;
+                int colCount = worksheet.Dimension?.Columns ?? 0;
+                if (rowCount == 0) continue;
 
-                // Map common variations to standard names
-                if (normalizedHeader == "setting" || normalizedHeader == "type") normalizedHeader = "radiotype";
-                if (normalizedHeader == "remark") normalizedHeader = "remarks";
-                if (normalizedHeader == "programdate") normalizedHeader = "dateprogram";
-                if (normalizedHeader == "serial") normalizedHeader = "serialnumber";
-                if (normalizedHeader == "job") normalizedHeader = "jobnumber";
-                if (normalizedHeader == "channel") normalizedHeader = "channelapply";
+                // 1. Find Header Row (Scan first 10 rows for known header keywords)
+                int headerRow = 0;
+                var columnMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                columnMap[normalizedHeader] = i;
-            }
-
-            // Helper to get value by column name
-            string? GetValueByName(string[] values, string columnName)
-            {
-                var key = columnName.ToLower();
-                if (columnMap.TryGetValue(key, out int index) && index < values.Length)
+                for (int r = 1; r <= Math.Min(10, rowCount); r++)
                 {
-                    var val = values[index].Trim();
-                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                    // Fresh scan per row - don't let title rows pollute the map
+                    var rowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    
+                    for (int c = 1; c <= colCount; c++)
+                    {
+                        var cellText = worksheet.Cells[r, c].Text?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
+                        if (string.IsNullOrEmpty(cellText)) continue;
+
+                        // Exact match only - prevents title rows like "REGISTER RADIO TAIT FLEET 1" from matching
+                        if (cellText == "unitnumber" || cellText == "unit") rowMap.TryAdd("unitnumber", c);
+                        else if (cellText == "radioid" || cellText == "id") rowMap.TryAdd("radioid", c);
+                        else if (cellText == "serialnumber" || cellText == "serial" || cellText == "sn") rowMap.TryAdd("serialnumber", c);
+                        else if (cellText == "dept" || cellText == "department" || cellText == "deptartment") rowMap.TryAdd("dept", c);
+                        else if (cellText == "fleet") rowMap.TryAdd("fleet", c);
+                        else if (cellText == "radiotype" || cellText == "type") rowMap.TryAdd("radiotype", c);
+                        else if (cellText == "dateprogram" || cellText == "programdate") rowMap.TryAdd("dateprogram", c);
+                        else if (cellText == "jobnumber") rowMap.TryAdd("jobnumber", c);
+                        else if (cellText == "remarks" || cellText == "remark") rowMap.TryAdd("remarks", c);
+                        else if (cellText == "firmware") rowMap.TryAdd("firmware", c);
+                        else if (cellText == "channelapply" || cellText == "channel") rowMap.TryAdd("channelapply", c);
+                        else if (cellText == "status") rowMap.TryAdd("status", c);
+                        else if (cellText == "initiator" || cellText == "inisiator") rowMap.TryAdd("initiator", c);
+                        else if (cellText == "setting") rowMap.TryAdd("setting", c);
+                        // "No.", "No" column is ignored on purpose
+                        // "job" alone (Fleet 3) maps to setting/status — NOT jobnumber
+                    }
+
+                    // Only accept this row as header if it has at LEAST unitnumber or radioid
+                    // AND has at least 3 recognized columns (to prevent false positives from title rows)
+                    if ((rowMap.ContainsKey("unitnumber") || rowMap.ContainsKey("radioid")) && rowMap.Count >= 3)
+                    {
+                        columnMap = rowMap;
+                        headerRow = r;
+                        break;
+                    }
                 }
-                return null;
-            }
 
-            DateTime? GetDateByName(string[] values, string columnName)
-            {
-                var val = GetValueByName(values, columnName);
-                if (val != null && DateTime.TryParse(val, out var date))
-                    return date;
-                return null;
-            }
+                if (headerRow == 0)
+                {
+                    errors.Add($"Worksheet '{worksheet.Name}' dilewati karena tidak mendeteksi header (Unit Number / Radio ID).");
+                    continue; // Skip sheet if it does not look like data
+                }
 
-            var lineNumber = 1;
-            while (!reader.EndOfStream)
-            {
-                lineNumber++;
-                var line = await reader.ReadLineAsync();
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                // Helper to extract value
+                string? GetValue(int r, string key)
+                {
+                    if (columnMap.TryGetValue(key, out int colIndex))
+                    {
+                        var val = worksheet.Cells[r, colIndex].Text?.Trim();
+                        return string.IsNullOrWhiteSpace(val) ? null : val;
+                    }
+                    return null;
+                }
 
+                // Robust Date Parser
+                DateTime? GetDate(int r, string key)
+                {
+                    var val = GetValue(r, key);
+                    if (string.IsNullOrEmpty(val)) return null;
+
+                    // Evaluate Excel internal date format
+                    if (double.TryParse(val, out double dateNum) && dateNum > 10000)
+                    {
+                        try { return DateTime.FromOADate(dateNum); } catch { }
+                    }
+
+                    // Convert Indonesian months to English format
+                    val = val.Replace("Januari", "January", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Februari", "February", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Maret", "March", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Mei", "May", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Juni", "June", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Juli", "July", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Agustus", "August", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Oktober", "October", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Nopember", "November", StringComparison.OrdinalIgnoreCase)
+                             .Replace("Desember", "December", StringComparison.OrdinalIgnoreCase);
+
+                    if (DateTime.TryParse(val, out var parsed)) return parsed;
+                    
+                    return null;
+                }
+
+                // Helper to format Firmware
+                string? FormatFirmware(string? fw)
+                {
+                    if (string.IsNullOrWhiteSpace(fw)) return null;
+                    fw = fw.Trim();
+                    // Already has dots? Return as-is
+                    if (fw.Contains(".")) return fw;
+                    
+                    // Auto-format pure digit firmware strings
+                    if (fw.All(char.IsDigit))
+                    {
+                        if (fw.Length == 6)  // "304817" → "30.48.17"
+                            return $"{fw.Substring(0, 2)}.{fw.Substring(2, 2)}.{fw.Substring(4, 2)}";
+                        if (fw.Length == 7)  // "3048611" → "30.48.611"
+                            return $"{fw.Substring(0, 2)}.{fw.Substring(2, 2)}.{fw.Substring(4, 3)}";
+                        if (fw.Length == 5)  // "30481" → "30.48.1"
+                            return $"{fw.Substring(0, 2)}.{fw.Substring(2, 2)}.{fw.Substring(4, 1)}";
+                    }
+                    return fw;
+                }
+
+                // Pre-load all existing RadioTrunkings into memory for fast lookup
+                var allExisting = await _context.RadioTrunkings.ToListAsync();
+                var existingByRadioId = allExisting
+                    .Where(rt => !string.IsNullOrEmpty(rt.RadioId))
+                    .GroupBy(rt => rt.RadioId!)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                // Process Data rows — direct entity manipulation, NO individual SaveChanges
+                for (int r = headerRow + 1; r <= rowCount; r++)
+                {
+                    var unitNumber = GetValue(r, "unitnumber");
+                    var radioId = GetValue(r, "radioid");
+
+                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
+                        continue;
+
+                    // Auto gen missing
+                    if (string.IsNullOrEmpty(unitNumber) && !string.IsNullOrEmpty(radioId)) unitNumber = radioId;
+                    if (string.IsNullOrEmpty(radioId) && !string.IsNullOrEmpty(unitNumber)) radioId = unitNumber;
+
+                    try
+                    {
+                        var rawFirmware = GetValue(r, "firmware");
+                        var formattedFirmware = FormatFirmware(rawFirmware);
+                        var remarks = GetValue(r, "remarks");
+                        var setting = GetValue(r, "setting"); // "Setting" column from Fleet 1&2
+                        // If no explicit remarks but there's a setting value, use it as remarks
+                        if (string.IsNullOrEmpty(remarks) && !string.IsNullOrEmpty(setting)) remarks = setting;
+
+                        if (existingByRadioId.TryGetValue(radioId!, out var existing))
+                        {
+                            // UPDATE directly on entity
+                            existing.UnitNumber = unitNumber!;
+                            if (GetValue(r, "dept") is string dept) existing.Dept = dept;
+                            if (GetValue(r, "fleet") is string fleet) existing.Fleet = fleet;
+                            if (GetValue(r, "serialnumber") is string sn) existing.SerialNumber = sn;
+                            if (GetDate(r, "dateprogram") is DateTime dp) existing.DateProgram = dp;
+                            if (GetValue(r, "jobnumber") is string jn) existing.JobNumber = jn;
+                            if (GetValue(r, "radiotype") is string rt2) existing.RadioType = rt2;
+                            if (remarks != null) existing.Remarks = remarks;
+                            if (formattedFirmware != null) existing.Firmware = formattedFirmware;
+                            if (GetValue(r, "channelapply") is string ca) existing.ChannelApply = ca;
+                            if (GetValue(r, "initiator") is string init) existing.Initiator = init;
+                            existing.Status = GetValue(r, "status") ?? existing.Status ?? "Active";
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            existing.UpdatedBy = userId;
+                        }
+                        else
+                        {
+                            // CREATE new entity directly
+                            var entity = new RadioTrunking
+                            {
+                                UnitNumber = unitNumber!,
+                                RadioId = radioId!,
+                                Dept = GetValue(r, "dept"),
+                                Fleet = GetValue(r, "fleet"),
+                                SerialNumber = GetValue(r, "serialnumber"),
+                                DateProgram = GetDate(r, "dateprogram"),
+                                JobNumber = GetValue(r, "jobnumber"),
+                                RadioType = GetValue(r, "radiotype"),
+                                Remarks = remarks,
+                                Firmware = formattedFirmware,
+                                ChannelApply = GetValue(r, "channelapply"),
+                                Initiator = GetValue(r, "initiator"),
+                                Status = GetValue(r, "status") ?? "Active",
+                                CreatedBy = userId,
+                                UpdatedBy = userId
+                            };
+                            _context.RadioTrunkings.Add(entity);
+                            // Also add to lookup so next rows with same RadioId are treated as update
+                            existingByRadioId[radioId!] = entity;
+                        }
+                        success++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        errors.Add($"Sheet '{worksheet.Name}' Baris {r}: {ex.InnerException?.Message ?? ex.Message}");
+                    }
+                }
+
+                // Batch save per sheet — ONE database round-trip instead of hundreds
                 try
                 {
-                    var values = line.Split(',');
-
-                    // Get values by column name (order doesn't matter!)
-                    var unitNumber = GetValueByName(values, "unitnumber");
-                    var radioId = GetValueByName(values, "radioid");
-
-                    // Auto-generate if both are empty
-                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
-                    {
-                        var guid = Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-                        unitNumber = $"AUTO-{guid}";
-                        radioId = $"RADIO-{guid}";
-                    }
-                    else if (string.IsNullOrEmpty(unitNumber))
-                    {
-                        unitNumber = radioId!;
-                    }
-                    else if (string.IsNullOrEmpty(radioId))
-                    {
-                        radioId = unitNumber!;
-                    }
-
-                    var dto = new CreateRadioTrunkingDto
-                    {
-                        UnitNumber = unitNumber!,
-                        Dept = GetValueByName(values, "dept"),
-                        Fleet = GetValueByName(values, "fleet"),
-                        RadioId = radioId!,
-                        SerialNumber = GetValueByName(values, "serialnumber"),
-                        DateProgram = GetDateByName(values, "dateprogram"),
-                        JobNumber = GetValueByName(values, "jobnumber"),
-                        RadioType = GetValueByName(values, "radiotype"), // Also accepts "Setting", "Type"
-                        Remarks = GetValueByName(values, "remarks"), // Also accepts "Remark"
-                        Firmware = GetValueByName(values, "firmware"),
-                        ChannelApply = GetValueByName(values, "channelapply"),
-                        Initiator = GetValueByName(values, "initiator"),
-                        Status = GetValueByName(values, "status") ?? "Active"
-                    };
-
-                    await CreateAsync(dto, userId);
-                    success++;
+                    await _context.SaveChangesAsync();
                 }
                 catch (Exception ex)
                 {
-                    failed++;
-                    errors.Add($"Line {lineNumber}: {ex.Message}");
+                    _context.ChangeTracker.Clear();
+                    errors.Add($"Sheet '{worksheet.Name}' batch save error: {ex.InnerException?.Message ?? ex.Message}");
                 }
             }
 
-            // Audit Log for Import
-            await _activityLog.LogAsync("Radio Trunking", null, "Import", userId, $"Imported {success} success, {failed} failed");
-
+            // Pastikan ChangeTracker bersih dari poisonous entity apapun sebelum log sukses/selesai
+            _context.ChangeTracker.Clear();
+            await _activityLog.LogAsync("Radio Trunking", null, "Import", userId, $"Imported {success} data (Failed: {failed})");
             return (success, failed, errors);
         }
 
@@ -444,6 +543,13 @@ namespace Pm.Services
                     Div = entity.Grafir.Div
                 } : null
             };
+        }
+
+        public async Task<int> ClearAllAsync(int userId)
+        {
+            await _activityLog.LogAsync("Radio Trunking", 0, "Delete", userId, "Cleared ALL Radio Trunking data");
+            await _context.RadioTrunkingHistories.ExecuteDeleteAsync();
+            return await _context.RadioTrunkings.ExecuteDeleteAsync();
         }
     }
 }
