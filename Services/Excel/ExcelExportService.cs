@@ -331,7 +331,7 @@ namespace Pm.Services
             worksheet.Cells[row, 1].Value = "Caller Fleet";
             worksheet.Cells[row, 2].Value = "Total Calls";
             worksheet.Cells[row, 3].Value = "Total Duration";
-            worksheet.Cells[row, 4].Value = "In Time";
+            worksheet.Cells[row, 4].Value = "Time";
             worksheet.Cells[row, 5].Value = "User";
             worksheet.Cells[row, 6].Value = "S/N";
 
