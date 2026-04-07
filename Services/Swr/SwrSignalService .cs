@@ -568,13 +568,32 @@ namespace Pm.Services
         }
 
 
-        public async Task<byte[]> ExportYearlyToExcelAsync(int year, string? siteName = null, int? userId = null)
+        public async Task<byte[]> ExportYearlyToExcelAsync(int year, List<string>? sites = null, string? type = null, string? search = null, int? userId = null)
         {
             try
             {
-                _logger.LogInformation("📥 ExportYearlyToExcelAsync - Year: {Year}, Site: {SiteName}", year, siteName);
+                _logger.LogInformation("📥 ExportYearlyToExcelAsync - Year: {Year}", year);
 
-                var pivot = await GetYearlyPivotAsync(year, siteName);
+                var pivot = await GetYearlyPivotAsync(year, null);
+
+                // Apply filters identically to frontend
+                if (sites != null && sites.Any())
+                {
+                    pivot = pivot.Where(p => sites.Contains(p.SiteName)).ToList();
+                }
+
+                if (!string.IsNullOrEmpty(type) && !type.Equals("all", StringComparison.OrdinalIgnoreCase))
+                {
+                    pivot = pivot.Where(p => p.SiteType.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                if (!string.IsNullOrEmpty(search))
+                {
+                    var searchTerm = search.ToLower();
+                    pivot = pivot.Where(p => 
+                        p.ChannelName.ToLower().Contains(searchTerm) || 
+                        p.SiteName.ToLower().Contains(searchTerm)).ToList();
+                }
 
                 ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
                 using var package = new ExcelPackage();
@@ -739,7 +758,7 @@ namespace Pm.Services
                             entityId: null,
                             action: "ExportExcel",
                             userId: userId.Value,
-                            description: $"Export SWR History tahun {year} {(siteName == null ? "" : $"Site: {siteName}")}"
+                            description: $"Export SWR History tahun {year} {(sites != null && sites.Any() ? $"Sites: {string.Join(", ", sites)}" : "")}"
                         );
                     }
                     catch (Exception logEx)

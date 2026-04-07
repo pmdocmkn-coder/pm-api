@@ -401,9 +401,9 @@ namespace Pm.Controllers
         {
             try
             {
-                if (top < 1 || top > 100)
+                if (top < 1 || top > 100000)
                 {
-                    return ApiResponse.BadRequest("top", "Parameter 'top' harus antara 1 dan 100");
+                    return ApiResponse.BadRequest("top", "Parameter 'top' harus antara 1 dan 100000");
                 }
 
                 // Validate sort order

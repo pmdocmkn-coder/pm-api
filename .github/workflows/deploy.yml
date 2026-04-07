@@ -75,7 +75,7 @@ jobs:
             echo "=== Isi folder ==="
             ls -la /www/wwwroot/api.mknops.web.id/publish/
 
-      - name: ♻️ Restart systemd service (with sudo fix)
+      - name: ♻️ Restart Application (aaPanel Supervisor)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -84,29 +84,15 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           envs: SSH_PASSWORD=${{ secrets.SSH_PASSWORD }}
           script: |
-            # Method 1: Coba restart service dengan sudo -S (baca password dari stdin)
-            echo "Restarting pm-api service..."
-            echo "$SSH_PASSWORD" | sudo -S systemctl stop pm-api
-
-            # Update ExecStart to use self-contained binary
-            echo "$SSH_PASSWORD" | sudo -S sed -i 's|ExecStart=.*|ExecStart=/www/wwwroot/api.mknops.web.id/publish/Pm|g' /etc/systemd/system/pm-api.service
-            echo "$SSH_PASSWORD" | sudo -S chmod +x /www/wwwroot/api.mknops.web.id/publish/Pm
-            echo "$SSH_PASSWORD" | sudo -S systemctl daemon-reload
-            echo "$SSH_PASSWORD" | sudo -S systemctl start pm-api
-
-            # Method 2: Kalau masih gagal, coba daemon-reload dulu
-            if ! systemctl is-active --quiet pm-api; then
-              echo "Service masih tidak aktif, coba daemon-reload..."
-              echo "$SSH_PASSWORD" | sudo -S systemctl daemon-reload
-              echo "$SSH_PASSWORD" | sudo -S systemctl restart pm-api
-            fi
-
-            echo "✅ Service 'pm-api' di-restart"
-
-            # Cek status service
-            echo "=== Status service ==="
-            echo "$SSH_PASSWORD" | sudo -S systemctl status pm-api --no-pager || true
-
-            # Tampilkan log terakhir
-            echo "=== 10 log terakhir ==="
-            echo "$SSH_PASSWORD" | sudo -S journalctl -u pm-api -n 10 --no-pager || true
+            echo "Restarting application via aaPanel Supervisor..."
+            
+            # Matikan semua proses aplikasi dotnet lama agar otomatis dihidupkan ulang oleh Supervisor
+            echo "$SSH_PASSWORD" | sudo -S killall dotnet || true
+            echo "$SSH_PASSWORD" | sudo -S killall Pm || true
+            
+            echo "✅ Aplikasi berhasil di-kill. Supervisor akan otomatis me-restart dalam 1-2 detik!"
+            
+            # Tampilkan proses saat ini untuk memastikan sudah re-start
+            sleep 3
+            echo "=== Status proses dotnet ==="
+            ps aux | grep dotnet | grep -v grep || true

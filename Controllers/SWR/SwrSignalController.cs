@@ -122,17 +122,17 @@ namespace Pm.Controllers
 
         [HttpGet("export-yearly-excel")]
         [Authorize(Policy = "SwrSignalExport")]
-        public async Task<IActionResult> ExportYearlyExcel(int year, string? site = null)
+        public async Task<IActionResult> ExportYearlyExcel([FromQuery] int year, [FromQuery] List<string>? sites = null, [FromQuery] string? type = null, [FromQuery] string? search = null)
         {
             try
             {
-                var bytes = await _service.ExportYearlyToExcelAsync(year, site, CurrentUserId);
-                var fileName = $"SWR_History_{year}{(site == null ? "" : $"_{site}")}.xlsx";
+                var bytes = await _service.ExportYearlyToExcelAsync(year, sites, type, search, CurrentUserId);
+                var fileName = $"SWR_History_{year}{(sites != null && sites.Any() ? $"_Filtered" : "")}.xlsx";
                 return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error exporting yearly Excel for {Year}, Site: {Site}", year, site);
+                _logger.LogError(ex, "Error exporting yearly Excel for {Year}, Sites count: {SiteCount}", year, sites?.Count ?? 0);
                 return ApiResponse.BadRequest("Export", ex.Message);
             }
         }

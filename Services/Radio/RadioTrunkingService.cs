@@ -269,27 +269,32 @@ namespace Pm.Services
                     
                     for (int c = 1; c <= colCount; c++)
                     {
-                        var cellText = worksheet.Cells[r, c].Text?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
+                        var cellText = worksheet.Cells[r, c].Value?.ToString()?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
                         if (string.IsNullOrEmpty(cellText)) continue;
+
+                        _logger.LogInformation($"[DEBUG] Sheet '{worksheet.Name}' Row {r} Col {c}: '{cellText}'");
 
                         // Exact match only - prevents title rows like "REGISTER RADIO TAIT FLEET 1" from matching
                         if (cellText == "unitnumber" || cellText == "unit") rowMap.TryAdd("unitnumber", c);
-                        else if (cellText == "radioid" || cellText == "id") rowMap.TryAdd("radioid", c);
-                        else if (cellText == "serialnumber" || cellText == "serial" || cellText == "sn") rowMap.TryAdd("serialnumber", c);
+                        else if (cellText == "radioid" || cellText == "id" || cellText == "radio") rowMap.TryAdd("radioid", c);
+                        else if (cellText == "serialnumber" || cellText == "serial" || cellText == "sn" || cellText == "s/n") rowMap.TryAdd("serialnumber", c);
                         else if (cellText == "dept" || cellText == "department" || cellText == "deptartment") rowMap.TryAdd("dept", c);
                         else if (cellText == "fleet") rowMap.TryAdd("fleet", c);
-                        else if (cellText == "radiotype" || cellText == "type") rowMap.TryAdd("radiotype", c);
-                        else if (cellText == "dateprogram" || cellText == "programdate") rowMap.TryAdd("dateprogram", c);
-                        else if (cellText == "jobnumber") rowMap.TryAdd("jobnumber", c);
-                        else if (cellText == "remarks" || cellText == "remark") rowMap.TryAdd("remarks", c);
+                        else if (cellText == "radiotype" || cellText == "type" || cellText == "jenis") rowMap.TryAdd("radiotype", c);
+                        else if (cellText == "dateprogram" || cellText == "programdate" || cellText == "date") rowMap.TryAdd("dateprogram", c);
+                        else if (cellText == "jobnumber" || cellText == "job") rowMap.TryAdd("jobnumber", c);
+                        else if (cellText == "remarks" || cellText == "remark" || cellText == "keterangan") rowMap.TryAdd("remarks", c);
                         else if (cellText == "firmware") rowMap.TryAdd("firmware", c);
                         else if (cellText == "channelapply" || cellText == "channel") rowMap.TryAdd("channelapply", c);
                         else if (cellText == "status") rowMap.TryAdd("status", c);
                         else if (cellText == "initiator" || cellText == "inisiator") rowMap.TryAdd("initiator", c);
                         else if (cellText == "setting") rowMap.TryAdd("setting", c);
                         // "No.", "No" column is ignored on purpose
-                        // "job" alone (Fleet 3) maps to setting/status — NOT jobnumber
                     }
+
+                    var debugLog = $"[DEBUG] Sheet '{worksheet.Name}' Row {r} Scan finished. Matched: {rowMap.Count} columns. Columns detected: {string.Join(", ", rowMap.Keys)}\n";
+                    _logger.LogInformation(debugLog);
+                    try { System.IO.File.AppendAllText(@"C:\Users\jupri.eka\Desktop\import_debug.txt", debugLog); } catch { }
 
                     // Only accept this row as header if it has at LEAST unitnumber or radioid
                     // AND has at least 3 recognized columns (to prevent false positives from title rows)
@@ -303,16 +308,23 @@ namespace Pm.Services
 
                 if (headerRow == 0)
                 {
+                    var msg = $"[DEBUG IMPORT] Worksheet '{worksheet.Name}' dilewati karena tidak mendeteksi header.\n";
+                    try { System.IO.File.AppendAllText(@"C:\Users\jupri.eka\Desktop\import_debug.txt", msg); } catch { }
+                    _logger.LogWarning(msg);
                     errors.Add($"Worksheet '{worksheet.Name}' dilewati karena tidak mendeteksi header (Unit Number / Radio ID).");
                     continue; // Skip sheet if it does not look like data
                 }
+
+                var msg2 = $"[DEBUG IMPORT] Worksheet '{worksheet.Name}' DETECTED headerRow={headerRow}. Mapped columns: {string.Join(", ", columnMap.Select(x => x.Key + "=" + x.Value))}. Total Rows: {rowCount}\n";
+                try { System.IO.File.AppendAllText(@"C:\Users\jupri.eka\Desktop\import_debug.txt", msg2); } catch { }
+                _logger.LogInformation(msg2);
 
                 // Helper to extract value
                 string? GetValue(int r, string key)
                 {
                     if (columnMap.TryGetValue(key, out int colIndex))
                     {
-                        var val = worksheet.Cells[r, colIndex].Text?.Trim();
+                        var val = worksheet.Cells[r, colIndex].Value?.ToString()?.Trim();
                         return string.IsNullOrWhiteSpace(val) ? null : val;
                     }
                     return null;

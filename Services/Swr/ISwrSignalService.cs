@@ -15,7 +15,7 @@ namespace Pm.Services
 
         // Import & Export
         Task<SwrImportResultDto> ImportFromExcelAsync(IFormFile file, int userId);
-        Task<byte[]> ExportYearlyToExcelAsync(int year, string? siteName = null, int? userId = null);
+        Task<byte[]> ExportYearlyToExcelAsync(int year, List<string>? sites = null, string? type = null, string? search = null, int? userId = null);
 
         // CRUD Site
         Task<List<SwrSiteListDto>> GetSitesAsync();
