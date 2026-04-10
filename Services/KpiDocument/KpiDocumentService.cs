@@ -38,9 +38,9 @@ namespace Pm.Services
                 // Mengecek ke judul grup (AreaGroup), misal: "BAO VIA EMAIL"
                 if (!string.IsNullOrEmpty(entity.AreaGroup) && entity.AreaGroup.ToUpper().Contains("EMAIL"))
                 {
-                    return "Menunggu Balasan (Email)";
+                    return "Menunggu Sign User ( Email )";
                 }
-                return "Menunggu Sign (Office)";
+                return "Menunggu Sign User";
             }
                 
             if (entity.DateReceived.HasValue)
