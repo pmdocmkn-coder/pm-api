@@ -17,6 +17,15 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "permission.delete"));
 
 
+            // KPI Monitoring policies
+            options.AddPolicy("CanViewKpi", policy =>
+                policy.RequireClaim("Permission", "kpi.view", "kpi.view"));
+            options.AddPolicy("CanCreateKpi", policy =>
+                policy.RequireClaim("Permission", "kpi.create", "kpi.create"));
+            options.AddPolicy("CanUpdateKpi", policy =>
+                policy.RequireClaim("Permission", "kpi.update", "kpi.update"));
+            options.AddPolicy("CanDeleteKpi", policy =>
+                policy.RequireClaim("Permission", "kpi.delete", "kpi.delete"));
 
             // Role policies
             options.AddPolicy("CanViewRoles", policy =>

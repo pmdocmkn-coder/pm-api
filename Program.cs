@@ -199,6 +199,9 @@ builder.Services.AddScoped<ILetterNumberService, LetterNumberService>();
 builder.Services.AddScoped<IGatepassService, GatepassService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
 
+// ===== KPI Monitoring =====
+builder.Services.AddScoped<IKpiDocumentService, KpiDocumentService>();
+
 // ===== Division Master Data =====
 builder.Services.AddScoped<IDivisionService, DivisionService>();
 

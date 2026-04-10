@@ -163,7 +163,13 @@ public static class DatabaseSeeder
                     new() { PermissionId = 88, PermissionName = "gatepass.view", Description = "View gatepass data", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 89, PermissionName = "gatepass.create", Description = "Create gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 90, PermissionName = "gatepass.update", Description = "Update gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionId = 91, PermissionName = "gatepass.delete", Description = "Delete gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow }
+                    new() { PermissionId = 91, PermissionName = "gatepass.delete", Description = "Delete gatepass", Group = "Gatepass", CreatedAt = DateTime.UtcNow },
+
+                    // KPI Monitoring
+                    new() { PermissionId = 92, PermissionName = "kpi.view", Description = "View KPI Tracking data", Group = "KPI Monitoring", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 93, PermissionName = "kpi.create", Description = "Create / Clone KPI items", Group = "KPI Monitoring", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 94, PermissionName = "kpi.update", Description = "Update KPI info & dates", Group = "KPI Monitoring", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 95, PermissionName = "kpi.delete", Description = "Delete KPI items", Group = "KPI Monitoring", CreatedAt = DateTime.UtcNow }
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();

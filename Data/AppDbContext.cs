@@ -52,6 +52,9 @@ namespace Pm.Data
         public DbSet<InternalLink> InternalLinks { get; set; } = null!;
         public DbSet<InternalLinkHistory> InternalLinkHistories { get; set; } = null!;
 
+        // KPI Monitoring
+        public DbSet<KpiDocument> KpiDocuments { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -895,7 +898,7 @@ namespace Pm.Data
                 entity.Property(e => e.Firmware).HasMaxLength(100);
                 entity.Property(e => e.ChannelApply).HasMaxLength(500);
 
-                entity.HasIndex(e => e.RadioId).IsUnique().HasDatabaseName("IX_RadioTrunking_RadioId");
+                entity.HasIndex(e => e.RadioId).HasDatabaseName("IX_RadioTrunking_RadioId");
                 entity.HasIndex(e => e.UnitNumber).HasDatabaseName("IX_RadioTrunking_UnitNumber");
                 entity.HasIndex(e => e.SerialNumber).HasDatabaseName("IX_RadioTrunking_SerialNumber");
 

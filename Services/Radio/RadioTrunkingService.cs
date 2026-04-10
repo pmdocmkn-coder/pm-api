@@ -266,7 +266,7 @@ namespace Pm.Services
                 {
                     // Fresh scan per row - don't let title rows pollute the map
                     var rowMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    
+
                     for (int c = 1; c <= colCount; c++)
                     {
                         var cellText = worksheet.Cells[r, c].Value?.ToString()?.Replace(" ", "").Replace("_", "").Replace(",", "").Replace(".", "").ToLower();
@@ -355,7 +355,7 @@ namespace Pm.Services
                              .Replace("Desember", "December", StringComparison.OrdinalIgnoreCase);
 
                     if (DateTime.TryParse(val, out var parsed)) return parsed;
-                    
+
                     return null;
                 }
 
@@ -366,7 +366,7 @@ namespace Pm.Services
                     fw = fw.Trim();
                     // Already has dots? Return as-is
                     if (fw.Contains(".")) return fw;
-                    
+
                     // Auto-format pure digit firmware strings
                     if (fw.All(char.IsDigit))
                     {
@@ -380,79 +380,59 @@ namespace Pm.Services
                     return fw;
                 }
 
-                // Pre-load all existing RadioTrunkings into memory for fast lookup
-                var allExisting = await _context.RadioTrunkings.ToListAsync();
-                var existingByRadioId = allExisting
-                    .Where(rt => !string.IsNullOrEmpty(rt.RadioId))
-                    .GroupBy(rt => rt.RadioId!)
-                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                // INSERT ALL — setiap baris Excel jadi 1 record DB.
+                // RadioId tidak lagi unique constraint, jadi duplikat RadioId diperbolehkan.
+                const int batchSize = 500;
+                var batch = new List<RadioTrunking>();
 
-                // Process Data rows — direct entity manipulation, NO individual SaveChanges
                 for (int r = headerRow + 1; r <= rowCount; r++)
                 {
-                    var unitNumber = GetValue(r, "unitnumber");
-                    var radioId = GetValue(r, "radioid");
+                    var unitNumber   = GetValue(r, "unitnumber")?.Trim();
+                    var radioId      = GetValue(r, "radioid")?.Trim();
+                    var serialNumber = GetValue(r, "serialnumber")?.Trim();
+                    var dept         = GetValue(r, "dept");
+                    var fleet        = GetValue(r, "fleet");
 
-                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId))
+                    // Skip baris yang benar-benar kosong (tidak ada identifier apapun)
+                    if (string.IsNullOrEmpty(unitNumber) && string.IsNullOrEmpty(radioId) && string.IsNullOrEmpty(serialNumber))
                         continue;
-
-                    // Auto gen missing
-                    if (string.IsNullOrEmpty(unitNumber) && !string.IsNullOrEmpty(radioId)) unitNumber = radioId;
-                    if (string.IsNullOrEmpty(radioId) && !string.IsNullOrEmpty(unitNumber)) radioId = unitNumber;
 
                     try
                     {
-                        var rawFirmware = GetValue(r, "firmware");
+                        var rawFirmware      = GetValue(r, "firmware");
                         var formattedFirmware = FormatFirmware(rawFirmware);
-                        var remarks = GetValue(r, "remarks");
-                        var setting = GetValue(r, "setting"); // "Setting" column from Fleet 1&2
-                        // If no explicit remarks but there's a setting value, use it as remarks
+                        var remarks          = GetValue(r, "remarks");
+                        var setting          = GetValue(r, "setting");
                         if (string.IsNullOrEmpty(remarks) && !string.IsNullOrEmpty(setting)) remarks = setting;
 
-                        if (existingByRadioId.TryGetValue(radioId!, out var existing))
+                        var entity = new RadioTrunking
                         {
-                            // UPDATE directly on entity
-                            existing.UnitNumber = unitNumber!;
-                            if (GetValue(r, "dept") is string dept) existing.Dept = dept;
-                            if (GetValue(r, "fleet") is string fleet) existing.Fleet = fleet;
-                            if (GetValue(r, "serialnumber") is string sn) existing.SerialNumber = sn;
-                            if (GetDate(r, "dateprogram") is DateTime dp) existing.DateProgram = dp;
-                            if (GetValue(r, "jobnumber") is string jn) existing.JobNumber = jn;
-                            if (GetValue(r, "radiotype") is string rt2) existing.RadioType = rt2;
-                            if (remarks != null) existing.Remarks = remarks;
-                            if (formattedFirmware != null) existing.Firmware = formattedFirmware;
-                            if (GetValue(r, "channelapply") is string ca) existing.ChannelApply = ca;
-                            if (GetValue(r, "initiator") is string init) existing.Initiator = init;
-                            existing.Status = GetValue(r, "status") ?? existing.Status ?? "Active";
-                            existing.UpdatedAt = DateTime.UtcNow;
-                            existing.UpdatedBy = userId;
-                        }
-                        else
-                        {
-                            // CREATE new entity directly
-                            var entity = new RadioTrunking
-                            {
-                                UnitNumber = unitNumber!,
-                                RadioId = radioId!,
-                                Dept = GetValue(r, "dept"),
-                                Fleet = GetValue(r, "fleet"),
-                                SerialNumber = GetValue(r, "serialnumber"),
-                                DateProgram = GetDate(r, "dateprogram"),
-                                JobNumber = GetValue(r, "jobnumber"),
-                                RadioType = GetValue(r, "radiotype"),
-                                Remarks = remarks,
-                                Firmware = formattedFirmware,
-                                ChannelApply = GetValue(r, "channelapply"),
-                                Initiator = GetValue(r, "initiator"),
-                                Status = GetValue(r, "status") ?? "Active",
-                                CreatedBy = userId,
-                                UpdatedBy = userId
-                            };
-                            _context.RadioTrunkings.Add(entity);
-                            // Also add to lookup so next rows with same RadioId are treated as update
-                            existingByRadioId[radioId!] = entity;
-                        }
+                            UnitNumber   = unitNumber ?? radioId ?? serialNumber ?? "-",
+                            RadioId      = !string.IsNullOrEmpty(radioId) ? radioId : Guid.NewGuid().ToString("N")[..16],
+                            Dept         = dept,
+                            Fleet        = fleet,
+                            SerialNumber = serialNumber,
+                            DateProgram  = GetDate(r, "dateprogram"),
+                            JobNumber    = GetValue(r, "jobnumber"),
+                            RadioType    = GetValue(r, "radiotype"),
+                            Remarks      = remarks,
+                            Firmware     = formattedFirmware,
+                            ChannelApply = GetValue(r, "channelapply"),
+                            Initiator    = GetValue(r, "initiator"),
+                            Status       = GetValue(r, "status") ?? "Active",
+                            CreatedBy    = userId,
+                            UpdatedBy    = userId
+                        };
+                        _context.RadioTrunkings.Add(entity);
                         success++;
+
+                        // Save per 500 baris agar tidak OOM saat file besar
+                        if (success % batchSize == 0)
+                        {
+                            await _context.SaveChangesAsync();
+                            _context.ChangeTracker.Clear();
+                            _logger.LogInformation($"[IMPORT] Sheet '{worksheet.Name}': {success} baris tersimpan...");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -461,21 +441,36 @@ namespace Pm.Services
                     }
                 }
 
-                // Batch save per sheet — ONE database round-trip instead of hundreds
+                // Save sisa baris yang belum mencapai 500
                 try
                 {
                     await _context.SaveChangesAsync();
+                    _context.ChangeTracker.Clear();
+                    _logger.LogInformation($"[IMPORT SAVE OK] Sheet '{worksheet.Name}': total {success} baris tersimpan.");
                 }
                 catch (Exception ex)
                 {
                     _context.ChangeTracker.Clear();
-                    errors.Add($"Sheet '{worksheet.Name}' batch save error: {ex.InnerException?.Message ?? ex.Message}");
+                    var errMsg = $"Sheet '{worksheet.Name}' batch save error: {ex.InnerException?.Message ?? ex.Message}";
+                    _logger.LogError(ex, "[IMPORT SAVE FAILED] " + errMsg);
+                    errors.Add(errMsg);
                 }
             }
 
-            // Pastikan ChangeTracker bersih dari poisonous entity apapun sebelum log sukses/selesai
-            _context.ChangeTracker.Clear();
-            await _activityLog.LogAsync("Radio Trunking", null, "Import", userId, $"Imported {success} data (Failed: {failed})");
+            // Pastikan ChangeTracker bersih
+            try { _context.ChangeTracker.Clear(); } catch { /* ignore */ }
+
+            // Log activity — wrapped in try/catch agar tidak crash jika DB bermasalah
+            try
+            {
+                await _activityLog.LogAsync("Radio Trunking", null, "Import", userId, $"Imported {success} data (Failed: {failed})");
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx, "[IMPORT] Activity log gagal — diabaikan");
+            }
+
+            _logger.LogInformation($"[IMPORT COMPLETE] Total sukses={success}, gagal={failed}, errors={errors.Count}");
             return (success, failed, errors);
         }
 

@@ -87,10 +87,16 @@ namespace Pm.Controllers
             if (file == null || file.Length == 0)
                 return ApiResponse.BadRequest("file", "File tidak valid");
 
-            using var stream = file.OpenReadStream();
-            var (success, failed, errors) = await _service.ImportCsvAsync(stream, GetUserId());
-
-            return ApiResponse.Success(new { success, failed, errors }, $"Import selesai: {success} berhasil, {failed} gagal");
+            try
+            {
+                using var stream = file.OpenReadStream();
+                var (success, failed, errors) = await _service.ImportCsvAsync(stream, GetUserId());
+                return ApiResponse.Success(new { success, failed, errors }, $"Import selesai: {success} berhasil, {failed} gagal");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse.InternalServerError($"Import gagal: {ex.Message}");
+            }
         }
 
         [HttpGet("export")]
