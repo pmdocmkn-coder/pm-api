@@ -82,13 +82,12 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
-          envs: SSH_PASSWORD=${{ secrets.SSH_PASSWORD }}
           script: |
             echo "Restarting application via aaPanel Supervisor..."
             
-            # Matikan semua proses aplikasi dotnet lama agar otomatis dihidupkan ulang oleh Supervisor
-            echo "$SSH_PASSWORD" | sudo -S killall dotnet || true
-            echo "$SSH_PASSWORD" | sudo -S killall Pm || true
+            # Tanpa perlu sudo kalau aplikasi berjalan dengan user yang sama
+            killall dotnet || true
+            killall Pm || true
             
             echo "✅ Aplikasi berhasil di-kill. Supervisor akan otomatis me-restart dalam 1-2 detik!"
             

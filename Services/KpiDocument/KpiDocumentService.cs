@@ -34,7 +34,14 @@ namespace Pm.Services
                 return "Approved";
                 
             if (entity.DateSubmittedToReviewer.HasValue)
-                return "Dikirim Email (Menunggu Balasan)";
+            {
+                // Mengecek ke judul grup (AreaGroup), misal: "BAO VIA EMAIL"
+                if (!string.IsNullOrEmpty(entity.AreaGroup) && entity.AreaGroup.ToUpper().Contains("EMAIL"))
+                {
+                    return "Menunggu Balasan (Email)";
+                }
+                return "Menunggu Sign (Office)";
+            }
                 
             if (entity.DateReceived.HasValue)
                 return "Data Diterima";
