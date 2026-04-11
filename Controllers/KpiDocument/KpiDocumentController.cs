@@ -105,6 +105,30 @@ namespace Pm.Controllers
             }
         }
 
+        [HttpDelete("clone")]
+        [Authorize(Policy = "CanDeleteKpi")]
+        public async Task<IActionResult> DeleteClonedMonth([FromQuery] string targetMonth)
+        {
+            if (!DateTime.TryParse(targetMonth, out var parsedTarget))
+            {
+                return ApiResponse.BadRequest("Invalid format", "Format parameter targetMonth tidak valid. Gunakan yyyy-MM-dd");
+            }
+
+            try
+            {
+                await _service.DeleteMonthDataAsync(parsedTarget, GetUserId());
+                return ApiResponse.Success(null, $"Berhasil menghapus data untuk bulan {parsedTarget:MMM yyyy}");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ApiResponse.BadRequest("Invalid Operation", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse.InternalServerError(ex.Message);
+            }
+        }
+
         [HttpGet("export")]
         [Authorize(Policy = "CanViewKpi")] // Standard view access allows export
         public async Task<IActionResult> ExportExcel([FromQuery] KpiDocumentQueryDto query)

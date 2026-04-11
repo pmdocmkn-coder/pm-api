@@ -30,6 +30,9 @@ namespace Pm.Services
             if (entity.DateSubmittedToRqm.HasValue)
                 return "Selesai (Submitted RQM)";
             
+            if (entity.DateApproved.HasValue && !string.IsNullOrEmpty(entity.Remarks) && entity.Remarks.ToUpper().Contains("TIDAK SUBMIT"))
+                return "Selesai (Approved)";
+
             if (entity.DateApproved.HasValue)
                 return "Approved";
                 
@@ -217,6 +220,7 @@ namespace Pm.Services
                     AreaGroup = item.AreaGroup,
                     DocumentName = item.DocumentName,
                     DataSource = item.DataSource,
+                    GroupTag = item.GroupTag,
                     // Seluruh tanggal dikosongkan untuk bulan baru
                     DateReceived = null,
                     DateSubmittedToReviewer = null,
@@ -234,6 +238,35 @@ namespace Pm.Services
             await _activityLog.LogAsync("KPI Document", 0, "Clone", userId, $"Cloned {newItems.Count} items from {sourceDate:MMM yyyy} to {targetDate:MMM yyyy}");
 
             return newItems.Select(MapToDto).ToList();
+        }
+
+        public async Task DeleteMonthDataAsync(DateTime targetMonth, int userId)
+        {
+            var targetDate = new DateTime(targetMonth.Year, targetMonth.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            
+            var items = await _context.KpiDocuments
+                .Where(k => k.PeriodMonth.Year == targetDate.Year && k.PeriodMonth.Month == targetDate.Month)
+                .ToListAsync();
+
+            if (!items.Any()) return;
+
+            // Periksa apakah sudah ada data yang diproses
+            var hasProcessedData = items.Any(k => 
+                k.DateReceived != null || 
+                k.DateSubmittedToReviewer != null || 
+                k.DateApproved != null || 
+                k.DateSubmittedToRqm != null || 
+                !string.IsNullOrWhiteSpace(k.Remarks));
+
+            if (hasProcessedData)
+            {
+                throw new InvalidOperationException("Tidak bisa menghapus data bulan ini karena sudah ada dokumen yang diisi progres/tanggal.");
+            }
+
+            _context.KpiDocuments.RemoveRange(items);
+            await _context.SaveChangesAsync();
+
+            await _activityLog.LogAsync("KPI Document", 0, "Delete Month", userId, $"Deleted all {items.Count} items for {targetDate:MMM yyyy}");
         }
 
         public async Task<byte[]> ExportExcelAsync(KpiDocumentQueryDto queryDto)

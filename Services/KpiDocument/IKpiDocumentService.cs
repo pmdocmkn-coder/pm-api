@@ -15,6 +15,7 @@ namespace Pm.Services
         Task<KpiDocumentDto> UpdateDatesAsync(int id, UpdateKpiDocumentDatesDto dto, int userId);
         Task DeleteAsync(int id, int userId);
         Task<List<KpiDocumentDto>> CloneFromPreviousMonthAsync(DateTime sourceMonth, DateTime targetMonth, int userId);
+        Task DeleteMonthDataAsync(DateTime targetMonth, int userId);
         Task<byte[]> ExportExcelAsync(KpiDocumentQueryDto query);
         Task<int> ImportExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, int userId);
     }
