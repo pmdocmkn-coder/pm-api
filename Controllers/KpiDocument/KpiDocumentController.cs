@@ -130,11 +130,18 @@ namespace Pm.Controllers
         }
 
         [HttpGet("export")]
-        [Authorize(Policy = "CanViewKpi")] // Standard view access allows export
-        public async Task<IActionResult> ExportExcel([FromQuery] KpiDocumentQueryDto query)
+        [Authorize(Policy = "CanViewKpi")]
+        public async Task<IActionResult> ExportExcel([FromQuery] string? periodMonth, [FromQuery] string? areaGroup)
         {
+            var query = new KpiDocumentQueryDto
+            {
+                PeriodMonth = periodMonth,
+                AreaGroup = areaGroup,
+                PageSize = int.MaxValue
+            };
             var excelData = await _service.ExportExcelAsync(query);
-            return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"KPI_Tracking_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+            var monthLabel = !string.IsNullOrWhiteSpace(periodMonth) ? periodMonth : DateTime.UtcNow.ToString("yyyy-MM");
+            return File(excelData, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"KPI_Tracking_{monthLabel}.xlsx");
         }
 
         [HttpPost("import")]
