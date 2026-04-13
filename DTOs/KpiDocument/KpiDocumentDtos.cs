@@ -22,6 +22,9 @@ namespace Pm.DTOs.KpiDocument
         public DateTime? DateApproved { get; set; }
         public DateTime? DateSubmittedToRqm { get; set; }
         public string? Remarks { get; set; }
+        public string? RemarksSubmittedToReviewer { get; set; }
+        public string? RemarksApproved { get; set; }
+        public string? RemarksSubmittedToRqm { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public required string Status { get; set; }
@@ -52,5 +55,8 @@ namespace Pm.DTOs.KpiDocument
         public DateTime? DateApproved { get; set; }
         public DateTime? DateSubmittedToRqm { get; set; }
         public string? Remarks { get; set; }
+        public string? RemarksSubmittedToReviewer { get; set; }
+        public string? RemarksApproved { get; set; }
+        public string? RemarksSubmittedToRqm { get; set; }
     }
 }

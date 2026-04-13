@@ -66,7 +66,10 @@ namespace Pm.Services
                 DateSubmittedToReviewer = entity.DateSubmittedToReviewer,
                 DateApproved = entity.DateApproved,
                 DateSubmittedToRqm = entity.DateSubmittedToRqm,
-                Remarks = entity.Remarks ?? null,
+                Remarks = entity.Remarks,
+                RemarksSubmittedToReviewer = entity.RemarksSubmittedToReviewer,
+                RemarksApproved = entity.RemarksApproved,
+                RemarksSubmittedToRqm = entity.RemarksSubmittedToRqm,
                 CreatedAt = entity.CreatedAt,
                 UpdatedAt = entity.UpdatedAt,
                 Status = DetermineStatus(entity)
@@ -165,11 +168,18 @@ namespace Pm.Services
             var entity = await _context.KpiDocuments.FindAsync(id);
             if (entity == null) throw new KeyNotFoundException("Dokumen tidak ditemukan");
 
-            entity.DateReceived = dto.DateReceived;
+            // Only update DateReceived if it was explicitly sent (not null).
+            // This prevents bulk updates (which omit dateReceived) from wiping existing dates.
+            if (dto.DateReceived.HasValue)
+                entity.DateReceived = dto.DateReceived;
+
             entity.DateSubmittedToReviewer = dto.DateSubmittedToReviewer;
             entity.DateApproved = dto.DateApproved;
             entity.DateSubmittedToRqm = dto.DateSubmittedToRqm;
-            if (dto.Remarks != null) entity.Remarks = dto.Remarks;
+            entity.Remarks = dto.Remarks;
+            entity.RemarksSubmittedToReviewer = dto.RemarksSubmittedToReviewer;
+            entity.RemarksApproved = dto.RemarksApproved;
+            entity.RemarksSubmittedToRqm = dto.RemarksSubmittedToRqm;
 
             entity.UpdatedAt = DateTime.UtcNow;
             entity.UpdatedBy = userId;

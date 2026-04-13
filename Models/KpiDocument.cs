@@ -8,16 +8,16 @@ namespace Pm.Models
     {
         [Key]
         public int Id { get; set; }
-        
+
         [Required]
         public DateTime PeriodMonth { get; set; }
-        
+
         [Required, MaxLength(100)]
         public required string AreaGroup { get; set; }
-        
+
         [Required, MaxLength(255)]
         public required string DocumentName { get; set; }
-        
+
         [Required, MaxLength(255)]
         public required string DataSource { get; set; }
 
@@ -36,6 +36,16 @@ namespace Pm.Models
 
         [MaxLength(500)]
         public string? Remarks { get; set; }
+
+        [MaxLength(500)]
+        public string? RemarksSubmittedToReviewer { get; set; }
+
+        [MaxLength(500)]
+        public string? RemarksApproved { get; set; }
+
+        [MaxLength(500)]
+        public string? RemarksSubmittedToRqm { get; set; }
+
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
