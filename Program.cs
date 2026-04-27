@@ -221,18 +221,36 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-            "https://pm.mknops.web.id",
-            "https://pmfrontend.vercel.app",
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://pmfrontend-git-*.vercel.app",
-            "https://pmdocmkn-web.vercel.app",
-            "https://*.vercel.app",
-            "https://v0.dev",
-            "https://*.vusercontent.net"
+        policy.SetIsOriginAllowed(origin =>
+        {
+            if (string.IsNullOrEmpty(origin)) return false;
 
-        )
+            var uri = new Uri(origin);
+            var host = uri.Host;
+
+            // Exact allowed origins
+            var exactAllowed = new[]
+            {
+                "pm.mknops.web.id",
+                "pmfrontend.vercel.app",
+                "pmdocmkn-web.vercel.app",
+                "v0.dev",
+                "localhost",
+            };
+
+            if (exactAllowed.Contains(host)) return true;
+
+            // Wildcard: *.vercel.app
+            if (host.EndsWith(".vercel.app")) return true;
+
+            // Wildcard: *.vusercontent.net (v0.dev preview URLs)
+            if (host.EndsWith(".vusercontent.net")) return true;
+
+            // Wildcard: *.mknops.web.id
+            if (host.EndsWith(".mknops.web.id")) return true;
+
+            return false;
+        })
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials();
