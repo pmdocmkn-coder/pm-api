@@ -53,7 +53,13 @@ namespace Pm.Data
         public DbSet<InternalLinkHistory> InternalLinkHistories { get; set; } = null!;
 
         // KPI Monitoring
+        // KPI Document
         public DbSet<KpiDocument> KpiDocuments { get; set; } = null!;
+
+        // PM Schedule
+        public DbSet<Pm.Models.PmSchedule.PmSite> PmSites { get; set; } = null!;
+        public DbSet<Pm.Models.PmSchedule.PmSchedule> PmSchedules { get; set; } = null!;
+        public DbSet<Pm.Models.PmSchedule.PmScheduleTask> PmScheduleTasks { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

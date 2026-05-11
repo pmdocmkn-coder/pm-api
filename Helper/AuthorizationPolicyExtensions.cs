@@ -225,7 +225,15 @@ namespace Pm.Helper
             options.AddPolicy("InternalLinkDelete", policy =>
                 policy.RequireClaim("Permission", "internal.link.delete"));
 
-
+            // PM Schedule
+            options.AddPolicy("PmScheduleView", policy =>
+                policy.RequireClaim("Permission", "pmschedule.view"));
+            options.AddPolicy("PmScheduleCreate", policy =>
+                policy.RequireClaim("Permission", "pmschedule.create"));
+            options.AddPolicy("PmScheduleUpdate", policy =>
+                policy.RequireClaim("Permission", "pmschedule.update"));
+            options.AddPolicy("PmScheduleDelete", policy =>
+                policy.RequireClaim("Permission", "pmschedule.delete"));
         }
 
 

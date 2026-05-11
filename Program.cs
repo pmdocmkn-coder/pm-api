@@ -211,6 +211,10 @@ builder.Services.AddScoped<IRadioConventionalService, RadioConventionalService>(
 builder.Services.AddScoped<IRadioGrafirService, RadioGrafirService>();
 builder.Services.AddScoped<IRadioScrapService, RadioScrapService>();
 
+// PM Schedule
+builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();
+builder.Services.AddScoped<Pm.Services.PmSchedule.IPmScheduleService, Pm.Services.PmSchedule.PmScheduleService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
