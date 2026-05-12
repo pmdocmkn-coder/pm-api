@@ -8,5 +8,7 @@ namespace Pm.Services
         Task<LoginResponseDto?> LoginAsync(LoginDto dto);
         Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto);
         Task UpdateLastLoginAsync(int userId);
+        Task ForgotPasswordAsync(ForgotPasswordDto dto, string resetBaseUrl);
+        Task ResetPasswordAsync(ResetPasswordDto dto);
     }
 }

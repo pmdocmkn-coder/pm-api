@@ -16,17 +16,20 @@ namespace Pm.Controllers
     {
         private readonly IAuthService _authService;
         private readonly IUserService _userService;
+        private readonly IConfiguration _config;
         private readonly ILogger<AuthController> _logger;
         private readonly IValidator<RegisterDto> _registerValidator;
 
         public AuthController(
             IAuthService authService,
             IUserService userService,
+            IConfiguration config,
             ILogger<AuthController> logger,
             IValidator<RegisterDto> registerValidator)
         {
             _authService = authService;
             _userService = userService;
+            _config = config;
             _logger = logger;
             _registerValidator = registerValidator;
         }
@@ -107,13 +110,26 @@ namespace Pm.Controllers
                 }
 
                 var result = await _authService.LoginAsync(dto);
-                if (result == null)
-                {
-                    return ApiResponse.Unauthorized();
-                }
 
                 HttpContext.Items["message"] = "Login berhasil";
                 return ApiResponse.Success(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                var message = ex.Message switch
+                {
+                    "USER_NOT_FOUND" => "Username atau email tidak ditemukan.",
+                    "WRONG_PASSWORD" => "Password Anda salah. Silakan coba lagi.",
+                    _ => "Login gagal."
+                };
+                var errorCode = ex.Message; // USER_NOT_FOUND or WRONG_PASSWORD
+
+                return Unauthorized(new
+                {
+                    statusCode = 401,
+                    message,
+                    errorCode
+                });
             }
             catch (Exception ex)
             {
@@ -204,6 +220,62 @@ namespace Pm.Controllers
         {
             HttpContext.Items["message"] = "Logout berhasil";
             return ApiResponse.Success(new { });
+        }
+
+        /// <summary>
+        /// Forgot password - kirim link reset via email
+        /// </summary>
+        [HttpPost("forgot-password")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { data = ModelState });
+
+                // Use configured frontend URL (reliable for both dev and production)
+                var resetBaseUrl = _config["FrontendUrl"] ?? "https://pm.mknops.web.id";
+
+                await _authService.ForgotPasswordAsync(dto, resetBaseUrl);
+
+                // Always return success (don't reveal if email exists)
+                HttpContext.Items["message"] = "Jika email terdaftar, link reset password telah dikirim.";
+                return ApiResponse.Success(new { });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error during forgot password");
+                // Still return success to not reveal email existence
+                HttpContext.Items["message"] = "Jika email terdaftar, link reset password telah dikirim.";
+                return ApiResponse.Success(new { });
+            }
+        }
+
+        /// <summary>
+        /// Reset password menggunakan token dari email
+        /// </summary>
+        [HttpPost("reset-password")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { data = ModelState });
+
+                await _authService.ResetPasswordAsync(dto);
+
+                HttpContext.Items["message"] = "Password berhasil direset. Silakan login dengan password baru.";
+                return ApiResponse.Success(new { });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error during password reset");
+                return ApiResponse.BadRequest("message", ex.Message);
+            }
         }
     }
 }

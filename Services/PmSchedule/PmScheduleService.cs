@@ -118,5 +118,32 @@ namespace Pm.Services.PmSchedule
 
             return true;
         }
+
+        public async Task<bool> DeleteScheduleAsync(int year, int pmSiteId, string deviceName, int userId)
+        {
+            var schedule = await _context.PmSchedules
+                .Include(s => s.Tasks)
+                .FirstOrDefaultAsync(s => s.Year == year 
+                                          && s.PmSiteId == pmSiteId 
+                                          && s.DeviceName == deviceName);
+
+            if (schedule != null)
+            {
+                _context.PmScheduleTasks.RemoveRange(schedule.Tasks);
+                _context.PmSchedules.Remove(schedule);
+                await _context.SaveChangesAsync();
+
+                await _activityLogService.LogAsync(
+                    "PM Schedule",
+                    null,
+                    "Delete",
+                    userId,
+                    $"Menghapus jadwal PM {deviceName} pada site ID {pmSiteId} tahun {year}"
+                );
+
+                return true;
+            }
+            return false;
+        }
     }
 }

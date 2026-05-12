@@ -9,6 +9,7 @@ namespace Pm.Services.PmSchedule
         Task<List<PmSiteDto>> GetAllSitesAsync();
         Task<PmSiteDto> CreateSiteAsync(PmSiteDto dto, int userId);
         Task<PmSiteDto?> UpdateSiteAsync(int id, PmSiteDto dto, int userId);
+        Task<bool> UpdateSiteOrdersAsync(List<PmSiteOrderDto> orders, int userId);
         Task<bool> DeleteSiteAsync(int id, int userId);
     }
 }

@@ -206,10 +206,7 @@ builder.Services.AddScoped<IKpiDocumentService, KpiDocumentService>();
 builder.Services.AddScoped<IDivisionService, DivisionService>();
 
 // ===== Radio Management =====
-builder.Services.AddScoped<IRadioTrunkingService, RadioTrunkingService>();
-builder.Services.AddScoped<IRadioConventionalService, RadioConventionalService>();
-builder.Services.AddScoped<IRadioGrafirService, RadioGrafirService>();
-builder.Services.AddScoped<IRadioScrapService, RadioScrapService>();
+builder.Services.AddScoped<Pm.Services.Radio.IRadioService, Pm.Services.Radio.RadioService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();

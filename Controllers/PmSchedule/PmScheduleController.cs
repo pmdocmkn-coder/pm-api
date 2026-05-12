@@ -77,5 +77,24 @@ namespace Pm.Controllers.PmSchedule
                 return ApiResponse.InternalServerError("Gagal mengupdate jadwal PM: " + ex.Message);
             }
         }
+
+        [HttpDelete("{year}/{pmSiteId}/{deviceName}")]
+        [Authorize(Policy = "PmScheduleUpdate")]
+        public async Task<IActionResult> DeleteSchedule(int year, int pmSiteId, string deviceName)
+        {
+            try
+            {
+                var success = await _pmScheduleService.DeleteScheduleAsync(year, pmSiteId, Uri.UnescapeDataString(deviceName), CurrentUserId);
+                if (!success)
+                    return ApiResponse.NotFound("Jadwal PM tidak ditemukan");
+
+                return ApiResponse.Success(new { }, "Jadwal PM berhasil dihapus");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting PM schedule");
+                return ApiResponse.InternalServerError("Gagal menghapus jadwal PM: " + ex.Message);
+            }
+        }
     }
 }

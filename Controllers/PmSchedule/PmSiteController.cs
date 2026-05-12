@@ -95,6 +95,25 @@ namespace Pm.Controllers.PmSchedule
             }
         }
 
+        [HttpPut("reorder")]
+        [Authorize(Policy = "PmScheduleUpdate")]
+        public async Task<IActionResult> ReorderSites(List<PmSiteOrderDto> orders)
+        {
+            if (orders == null || orders.Count == 0)
+                return BadRequest(new { message = "Data urutan tidak valid" });
+
+            try
+            {
+                var success = await _pmSiteService.UpdateSiteOrdersAsync(orders, CurrentUserId);
+                return ApiResponse.Success(new { success }, "Urutan PM Site berhasil diupdate");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reordering PM sites");
+                return ApiResponse.InternalServerError("Gagal mengupdate urutan PM Site: " + ex.Message);
+            }
+        }
+
         [HttpDelete("{id}")]
         [Authorize(Policy = "PmScheduleDelete")]
         public async Task<IActionResult> DeleteSite(int id)

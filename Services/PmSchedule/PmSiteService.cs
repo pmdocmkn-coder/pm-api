@@ -66,6 +66,26 @@ namespace Pm.Services.PmSchedule
             return dto;
         }
 
+        public async Task<bool> UpdateSiteOrdersAsync(List<PmSiteOrderDto> orders, int userId)
+        {
+            var siteIds = orders.Select(o => o.Id).ToList();
+            var sites = await _context.PmSites.Where(s => siteIds.Contains(s.Id)).ToListAsync();
+
+            foreach (var order in orders)
+            {
+                var site = sites.FirstOrDefault(s => s.Id == order.Id);
+                if (site != null)
+                {
+                    site.OrderIndex = order.OrderIndex;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            await _activityLogService.LogAsync("PmSite", 0, "UpdateOrder", userId, $"Update urutan {orders.Count} PM Sites");
+
+            return true;
+        }
+
         public async Task<bool> DeleteSiteAsync(int id, int userId)
         {
             var site = await _context.PmSites.FindAsync(id);

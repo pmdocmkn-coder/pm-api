@@ -10,36 +10,41 @@ namespace Pm.Services
     {
         private readonly AppDbContext _context;
         private readonly IJwtService _jwtService;
+        private readonly IEmailService _emailService;
         private readonly ILogger<AuthService> _logger;
 
-        public AuthService(AppDbContext context, IJwtService jwtService, ILogger<AuthService> logger)
+        public AuthService(AppDbContext context, IJwtService jwtService, IEmailService emailService, ILogger<AuthService> logger)
         {
             _context = context;
             _jwtService = jwtService;
+            _emailService = emailService;
             _logger = logger;
         }
 
         public async Task<LoginResponseDto?> LoginAsync(LoginDto dto)
         {
-            _logger.LogInformation("🔐 Login attempt for username: {Username}", dto.Username);
+            _logger.LogInformation("🔐 Login attempt for: {Username}", dto.Username);
 
+            // Search by username OR email
+            var input = dto.Username.Trim();
             var user = await _context.Users
                 .AsTracking()
                 .Include(u => u.Role)
                     .ThenInclude(r => r!.RolePermissions)
                     .ThenInclude(rp => rp.Permission)
-                .FirstOrDefaultAsync(u => u.Username == dto.Username && u.IsActive);
+                .FirstOrDefaultAsync(u => 
+                    (u.Username == input || u.Email == input) && u.IsActive);
 
             if (user == null)
             {
-                _logger.LogWarning("❌ Login failed: User {Username} not found or inactive", dto.Username);
-                return null;
+                _logger.LogWarning("❌ Login failed: User {Input} not found or inactive", input);
+                throw new UnauthorizedAccessException("USER_NOT_FOUND");
             }
 
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             {
-                _logger.LogWarning("❌ Login failed: Invalid password for user {Username}", dto.Username);
-                return null;
+                _logger.LogWarning("❌ Login failed: Invalid password for user {Username}", user.Username);
+                throw new UnauthorizedAccessException("WRONG_PASSWORD");
             }
 
             // Get user permissions
@@ -51,7 +56,6 @@ namespace Pm.Services
             var token = _jwtService.GenerateToken(user, permissions);
             var expiresIn = _jwtService.GetTokenExpirationTime();
 
-            // ✅ GUNAKAN DateTimeOffset untuk TRUE UTC
             var trueUtcTime = DateTimeOffset.UtcNow.DateTime;
 
             _logger.LogInformation("🕐 Server Local Time: {Local}", DateTime.Now);
@@ -109,43 +113,26 @@ namespace Pm.Services
                 return false;
             }
 
-            // Verify current password
             var isCurrentPasswordValid = BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash);
-            _logger.LogInformation("🔐 Current password validation result: {IsValid}", isCurrentPasswordValid);
-
             if (!isCurrentPasswordValid)
             {
                 _logger.LogWarning("❌ Change password failed: Invalid current password for user {UserId}", userId);
                 return false;
             }
 
-            // Validate new password strength
-            _logger.LogInformation("🔐 Validating new password strength...");
-            var isStrong = IsStrongPassword(dto.NewPassword);
-            _logger.LogInformation("🔐 New password strength validation result: {IsStrong}", isStrong);
-
-            if (!isStrong)
+            if (!IsStrongPassword(dto.NewPassword))
             {
-                _logger.LogWarning("❌ Change password failed: New password doesn't meet strength requirements for user {UserId}", userId);
                 throw new Exception("Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol.");
             }
 
-            // Hash new password
-            var newPasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
-
-            // ⚠️ PERBAIKAN: Explicitly update the entity state
-            user.PasswordHash = newPasswordHash;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             user.UpdatedAt = DateTime.UtcNow;
-
-            // ⚠️ PERBAIKAN: Mark entity as modified
             _context.Entry(user).State = EntityState.Modified;
 
             try
             {
-                var rowsAffected = await _context.SaveChangesAsync();
-                _logger.LogInformation("✅ Password changed successfully for user {UserId}. Rows affected: {RowsAffected}", userId, rowsAffected);
-
-                // ⚠️ PERBAIKAN: Return true even if rowsAffected is 0, as long as no exception
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("✅ Password changed successfully for user {UserId}", userId);
                 return true;
             }
             catch (Exception ex)
@@ -157,13 +144,84 @@ namespace Pm.Services
 
         public async Task UpdateLastLoginAsync(int userId)
         {
-
             var user = await _context.Users.FindAsync(userId);
             if (user != null)
             {
                 user.LastLogin = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
             }
+        }
+
+        // =============================================
+        // FORGOT PASSWORD
+        // =============================================
+        public async Task ForgotPasswordAsync(ForgotPasswordDto dto, string resetBaseUrl)
+        {
+            _logger.LogInformation("🔑 Forgot password request for email: {Email}", dto.Email);
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email && u.IsActive);
+
+            if (user == null)
+            {
+                _logger.LogWarning("⚠️ Forgot password: email {Email} not found or user inactive", dto.Email);
+                return; // Don't reveal if email exists
+            }
+
+            // Invalidate old unused tokens
+            var oldTokens = await _context.PasswordResetTokens
+                .Where(t => t.UserId == user.UserId && !t.IsUsed)
+                .ToListAsync();
+            foreach (var old in oldTokens) old.IsUsed = true;
+
+            // Create new token
+            var token = Guid.NewGuid().ToString("N");
+            var resetToken = new PasswordResetToken
+            {
+                UserId = user.UserId,
+                Token = token,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+                IsUsed = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.PasswordResetTokens.Add(resetToken);
+            await _context.SaveChangesAsync();
+
+            // Send email
+            var resetLink = $"{resetBaseUrl}/reset-password?token={token}";
+            await _emailService.SendPasswordResetEmailAsync(user.Email!, user.FullName, resetLink);
+
+            _logger.LogInformation("✅ Password reset email sent to {Email} for user {UserId}", dto.Email, user.UserId);
+        }
+
+        // =============================================
+        // RESET PASSWORD
+        // =============================================
+        public async Task ResetPasswordAsync(ResetPasswordDto dto)
+        {
+            _logger.LogInformation("🔑 Reset password attempt with token");
+
+            var resetToken = await _context.PasswordResetTokens
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.Token == dto.Token && !t.IsUsed);
+
+            if (resetToken == null)
+                throw new Exception("Link reset tidak valid atau sudah pernah digunakan.");
+
+            if (resetToken.ExpiresAt < DateTime.UtcNow)
+                throw new Exception("Link reset sudah kedaluwarsa. Silakan minta link baru.");
+
+            if (!IsStrongPassword(dto.NewPassword))
+                throw new Exception("Password baru harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, angka, dan simbol.");
+
+            var user = resetToken.User!;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+            resetToken.IsUsed = true;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("✅ Password reset successful for user {UserId}", user.UserId);
         }
 
         private static bool IsStrongPassword(string password)

@@ -33,12 +33,8 @@ namespace Pm.Data
         public DbSet<LetterNumber> LetterNumbers { get; set; } = null!;
 
         // Radio Management
-        public DbSet<RadioTrunking> RadioTrunkings { get; set; } = null!;
-        public DbSet<RadioTrunkingHistory> RadioTrunkingHistories { get; set; } = null!;
-        public DbSet<RadioConventional> RadioConventionals { get; set; } = null!;
-        public DbSet<RadioConventionalHistory> RadioConventionalHistories { get; set; } = null!;
-        public DbSet<RadioGrafir> RadioGrafirs { get; set; } = null!;
-        public DbSet<RadioScrap> RadioScraps { get; set; } = null!;
+        public DbSet<Radio> Radios { get; set; } = null!;
+        public DbSet<RadioHistory> RadioHistories { get; set; } = null!;
 
         // Gatepass & Quotation
         public DbSet<Gatepass> Gatepasses { get; set; } = null!;
@@ -60,6 +56,9 @@ namespace Pm.Data
         public DbSet<Pm.Models.PmSchedule.PmSite> PmSites { get; set; } = null!;
         public DbSet<Pm.Models.PmSchedule.PmSchedule> PmSchedules { get; set; } = null!;
         public DbSet<Pm.Models.PmSchedule.PmScheduleTask> PmScheduleTasks { get; set; } = null!;
+
+        // Password Reset
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1121,6 +1120,40 @@ namespace Pm.Data
 
                 entity.HasIndex(e => new { e.InternalLinkId, e.Date })
                     .HasDatabaseName("IX_InternalLinkHistory_LinkDate");
+            });
+
+            // ===========================================
+            // PASSWORD RESET TOKEN CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<PasswordResetToken>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("PasswordResetTokens");
+
+                entity.Property(e => e.Token)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.ExpiresAt)
+                    .IsRequired();
+
+                entity.Property(e => e.IsUsed)
+                    .HasDefaultValue(false);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Token)
+                    .IsUnique()
+                    .HasDatabaseName("IX_PasswordResetToken_Token");
+
+                entity.HasIndex(e => new { e.UserId, e.IsUsed })
+                    .HasDatabaseName("IX_PasswordResetToken_User_Used");
             });
         }
     }
