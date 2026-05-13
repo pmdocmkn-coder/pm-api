@@ -161,6 +161,9 @@ namespace Pm.Helper
             policy.RequireClaim("Permission", "radio.scrap.export"));
             options.AddPolicy("RadioScrapImport", policy =>
             policy.RequireClaim("Permission", "radio.scrap.import"));
+             options.AddPolicy("RadioDeletetAll", policy =>
+            policy.RequireClaim("Permission", "radio.deleteall.deleteall"));
+            
 
 
             //Divisi
