@@ -396,7 +396,7 @@ namespace Pm.Services.Radio
                 var headerText = ws.Cells[headerRow, c].Text?.Trim();
                 if (string.IsNullOrEmpty(headerText)) continue;
 
-                var lower = headerText.ToLower();
+                var lower = headerText.ToLower().Trim().TrimEnd('.');
 
                 if (lower.Contains("nomor aset") || lower == "nomor aset") colMap["NomorAset"] = c;
                 else if (lower.Contains("nomor unit") || lower == "nomor unit") colMap["NomorUnit"] = c;
@@ -404,15 +404,15 @@ namespace Pm.Services.Radio
                 else if (lower == "type" || lower == "tipe") colMap["Type"] = c;
                 else if (lower.Contains("trungking") || lower.Contains("trunking")) colMap["Trunking"] = c;
                 else if (lower == "konv" || lower.Contains("conventional") || lower.Contains("konvensional")) colMap["Konv"] = c;
-                else if (lower == "div" || lower == "divisi" || lower == "division") colMap["Division"] = c;
-                else if (lower == "dept" || lower == "department") colMap["Department"] = c;
+                else if (lower == "div" || lower.Contains("divis")) colMap["Division"] = c;
+                else if (lower == "dept" || lower.Contains("depart")) colMap["Department"] = c;
                 else if (lower.Contains("perusahaan") || lower.Contains("company")) colMap["Company"] = c;
                 else if (lower == "channel") colMap["Channel"] = c;
                 else if (lower.Contains("tanggal") || lower == "date") colMap["Tanggal"] = c;
                 else if (lower.Contains("id radio") || lower == "id radio") colMap["RadioId"] = c;
                 else if (lower == "scrap" || lower == "skrap") colMap["Scrap"] = c;
                 else if (lower == "mark" || lower == "keterangan") colMap["Mark"] = c;
-                else if (lower != "no" && lower != "fleet" && lower != "contraktor")
+                else if (lower != "no" && lower != "fleet" && lower != "contraktor" && lower != "no.")
                 {
                     // Could be a fleet sub-column (e.g., "2001", "2351", etc.)
                     if (int.TryParse(headerText.Trim(), out _))
@@ -525,7 +525,7 @@ namespace Pm.Services.Radio
 
         // ============================================
         // IMPORT: Radio Unit (LV)
-        // Kolom: No, Nomor LV, SN, LV Type, Div, Dept, Skrap, Mark
+        // Kolom: No, Nomor Aset, Nomor LV, Serial Number, LV Type, DIV., Dept., TRUNGKING, KONV, Scrap, Mark
         // ============================================
         public async Task<int> ImportUnitAsync(IFormFile file, int userId)
         {
@@ -542,14 +542,18 @@ namespace Pm.Services.Radio
             int maxRow = ws.Dimension.End.Row;
             int maxCol = ws.Dimension.End.Column;
 
-            // Smart detect header
+            // Smart detect header row
             int headerRow = 0;
             for (int r = 1; r <= Math.Min(5, maxRow); r++)
             {
                 for (int c = 1; c <= maxCol; c++)
                 {
                     var cellText = ws.Cells[r, c].Text?.Trim().ToLower();
-                    if (cellText != null && (cellText.Contains("nomor lv") || cellText.Contains("lv type")))
+                    if (cellText != null && (
+                        cellText.Contains("nomor lv") ||
+                        cellText.Contains("lv type") ||
+                        cellText.Contains("serial") ||
+                        cellText.Contains("nomor aset")))
                     {
                         headerRow = r;
                         break;
@@ -559,50 +563,153 @@ namespace Pm.Services.Radio
             }
 
             if (headerRow == 0)
-                throw new Exception("Header row tidak ditemukan. Pastikan ada kolom 'Nomor LV' atau 'LV Type'.");
+                throw new Exception("Header row tidak ditemukan. Pastikan ada kolom 'Nomor LV', 'Serial Number', atau 'Nomor Aset'.");
 
             var colMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var fleetColumns = new List<(int col, string fleetName)>();
+
             for (int c = 1; c <= maxCol; c++)
             {
                 var headerText = ws.Cells[headerRow, c].Text?.Trim();
                 if (string.IsNullOrEmpty(headerText)) continue;
 
-                var lower = headerText.ToLower();
-                if (lower.Contains("nomor lv") || lower == "nomor lv") colMap["NomorLv"] = c;
+                var lower = headerText.ToLower().Trim().TrimEnd('.');
+
+                if (lower.Contains("nomor aset") || lower == "nomor aset") colMap["NomorAset"] = c;
+                else if (lower.Contains("nomor lv") || lower == "nomor lv") colMap["NomorLv"] = c;
                 else if (lower == "sn" || lower.Contains("serial")) colMap["SerialNumber"] = c;
-                else if (lower.Contains("lv type") || lower == "lv type") colMap["Type"] = c;
+                // LV Type / Type Radio / Type
+                else if (lower.Contains("lv type") || lower.Contains("type radio") || lower == "type" || lower == "tipe") colMap["Type"] = c;
+                // Division: DIV, DIV., Divisi, Division
                 else if (lower == "div" || lower.Contains("divis")) colMap["Division"] = c;
+                // Department: Dept, Dept., Department
                 else if (lower == "dept" || lower.Contains("depart")) colMap["Department"] = c;
+                // Channel
+                else if (lower == "channel") colMap["Channel"] = c;
+                // Trunking: TRUNGKING, TRUNKING, Trunking
+                else if (lower.Contains("trungking") || lower.Contains("trunking")) colMap["Trunking"] = c;
+                // Konvensional: KONV, Konvensional, Conventional
+                else if (lower == "konv" || lower.Contains("konvensional") || lower.Contains("conventional")) colMap["Konv"] = c;
+                // Scrap: Skrap, Scrap
                 else if (lower.Contains("skrap") || lower.Contains("scrap")) colMap["Scrap"] = c;
                 else if (lower == "mark" || lower == "keterangan") colMap["Mark"] = c;
+                else if (lower.Contains("tanggal") || lower == "date") colMap["Tanggal"] = c;
+                else if (lower.Contains("id radio") || lower == "id radio") colMap["RadioId"] = c;
+                else if (lower != "no" && lower != "fleet" && lower != "no.")
+                {
+                    // Fleet sub-columns (numeric headers like 2001, 2351, etc.)
+                    if (int.TryParse(headerText.Trim(), out _))
+                        fleetColumns.Add((c, headerText.Trim()));
+                }
             }
 
-            _logger.LogInformation("📊 Import Unit: Header row={Row}, Columns mapped={Count}", headerRow, colMap.Count);
+            // Also scan the row ABOVE headerRow for any missed columns (merged header scenario)
+            if (headerRow > 1)
+            {
+                for (int c = 1; c <= maxCol; c++)
+                {
+                    var aboveText = ws.Cells[headerRow - 1, c].Text?.Trim().ToLower().TrimEnd('.');
+                    if (string.IsNullOrEmpty(aboveText)) continue;
+                    // Only map if not already mapped
+                    if (aboveText == "div" || aboveText.Contains("divis")) { if (!colMap.ContainsKey("Division")) colMap["Division"] = c; }
+                    else if (aboveText == "dept" || aboveText.Contains("depart")) { if (!colMap.ContainsKey("Department")) colMap["Department"] = c; }
+                    else if (aboveText == "channel") { if (!colMap.ContainsKey("Channel")) colMap["Channel"] = c; }
+                    else if (aboveText.Contains("tanggal") || aboveText == "date") { if (!colMap.ContainsKey("Tanggal")) colMap["Tanggal"] = c; }
+                    else if (aboveText.Contains("id radio")) { if (!colMap.ContainsKey("RadioId")) colMap["RadioId"] = c; }
+                    else if (aboveText == "mark") { if (!colMap.ContainsKey("Mark")) colMap["Mark"] = c; }
+                    else if (aboveText.Contains("trungking") || aboveText.Contains("trunking")) { if (!colMap.ContainsKey("Trunking")) colMap["Trunking"] = c; }
+                    else if (aboveText == "konv" || aboveText.Contains("konvensional")) { if (!colMap.ContainsKey("Konv")) colMap["Konv"] = c; }
+                }
+            }
+
+            // Check row below for fleet sub-columns
+            if (fleetColumns.Count == 0 && headerRow < maxRow)
+            {
+                for (int c = 1; c <= maxCol; c++)
+                {
+                    var text = ws.Cells[headerRow + 1, c].Text?.Trim();
+                    if (!string.IsNullOrEmpty(text) && int.TryParse(text, out _))
+                        fleetColumns.Add((c, text));
+                }
+            }
+
+            int dataStartRow = headerRow + 1;
+            if (fleetColumns.Count > 0)
+            {
+                var testCell = ws.Cells[headerRow + 1, fleetColumns.First().col].Text?.Trim();
+                if (testCell == fleetColumns.First().fleetName)
+                    dataStartRow = headerRow + 2;
+            }
+
+            _logger.LogInformation("📊 Import Unit: Header row={Row}, Columns mapped={Count}, Fleet columns={FleetCount}",
+                headerRow, colMap.Count, fleetColumns.Count);
 
             int imported = 0;
-            for (int row = headerRow + 1; row <= maxRow; row++)
+            for (int row = dataStartRow; row <= maxRow; row++)
             {
-                var firstCell = ws.Cells[row, 1].Text?.Trim();
-                if (string.IsNullOrEmpty(firstCell)) continue;
+                // Skip empty rows
+                var hasData = false;
+                for (int c = 1; c <= Math.Min(5, maxCol); c++)
+                {
+                    if (!string.IsNullOrWhiteSpace(ws.Cells[row, c].Text)) { hasData = true; break; }
+                }
+                if (!hasData) continue;
 
                 var radio = new Models.Radio
                 {
                     Category = "Unit",
+                    NomorAset = GetCellValue(ws, row, colMap, "NomorAset"),
                     NomorLv = GetCellValue(ws, row, colMap, "NomorLv"),
                     SerialNumber = GetCellValue(ws, row, colMap, "SerialNumber"),
                     Type = GetCellValue(ws, row, colMap, "Type"),
                     Division = GetCellValue(ws, row, colMap, "Division"),
                     Department = GetCellValue(ws, row, colMap, "Department"),
+                    Channel = GetCellValue(ws, row, colMap, "Channel"),
+                    IsTrunking = IsChecked(ws, row, colMap, "Trunking"),
+                    IsConventional = IsChecked(ws, row, colMap, "Konv"),
+                    RadioId = GetCellValue(ws, row, colMap, "RadioId"),
                     Mark = GetCellValue(ws, row, colMap, "Mark"),
                     IsScrap = false,
                     CreatedAt = DateTime.UtcNow
                 };
 
+                // Parse tanggal — handles multiple formats including "12-Dec-25", "19-Mar-26", "1-Nov-22"
+                var tanggalStr = GetCellValue(ws, row, colMap, "Tanggal");
+                if (!string.IsNullOrEmpty(tanggalStr))
+                {
+                    if (DateTime.TryParse(tanggalStr, System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None, out var tanggal))
+                    {
+                        radio.Tanggal = tanggal;
+                    }
+                    else
+                    {
+                        var formats = new[] {
+                            "d-MMM-yy", "d-MMM-yyyy", "dd-MMM-yy", "dd-MMM-yyyy",
+                            "d/MM/yyyy", "dd/MM/yyyy", "M/d/yyyy", "MM/dd/yyyy",
+                            "d-MM-yyyy", "dd-MM-yyyy", "yyyy-MM-dd"
+                        };
+                        if (DateTime.TryParseExact(tanggalStr, formats,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.None, out var parsed))
+                            radio.Tanggal = parsed;
+                    }
+                }
+
+                // Parse fleet sub-columns
+                var fleetList = new List<string>();
+                foreach (var (col, fleetName) in fleetColumns)
+                {
+                    var cellVal = ws.Cells[row, col].Text?.Trim().ToLower();
+                    if (!string.IsNullOrEmpty(cellVal) && (cellVal == "✓" || cellVal == "√" || cellVal == "v" || cellVal == "1" || cellVal == "yes" || cellVal == "true" || cellVal == "y" || cellVal == "ü" || cellVal == "u" || cellVal == "\uf0fc" || cellVal == "p" || cellVal == "a" || cellVal == "ok" || cellVal.Contains("true")))
+                        fleetList.Add(fleetName);
+                }
+                radio.Fleet = fleetList.Count > 0 ? string.Join(",", fleetList) : null;
+
+                // Check scrap column
                 var scrapVal = GetCellValue(ws, row, colMap, "Scrap");
                 if (!string.IsNullOrEmpty(scrapVal))
-                {
-                    radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.ToLower() == "yes" || scrapVal == "1";
-                }
+                    radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.ToLower() == "yes" || scrapVal.ToLower() == "true" || scrapVal == "1";
 
                 _context.Radios.Add(radio);
                 imported++;
@@ -673,7 +780,7 @@ namespace Pm.Services.Radio
                 var headerText = ws.Cells[headerRow, c].Text?.Trim();
                 if (string.IsNullOrEmpty(headerText)) continue;
 
-                var lower = headerText.ToLower().Trim();
+                var lower = headerText.ToLower().Trim().TrimEnd('.');
 
                 // Type Radio — handles "TYPE Radio", "Type", "Tipe"
                 if (lower.Contains("type radio") || lower == "type" || lower == "tipe")
@@ -749,99 +856,6 @@ namespace Pm.Services.Radio
                             radio.DateScrapped = parsed;
                         }
                     }
-                }
-
-                _context.Radios.Add(radio);
-                imported++;
-            }
-
-            await _context.SaveChangesAsync();
-
-            try
-            {
-                await _activityLog.LogAsync("Radio", null, "Import", userId,
-                    $"Import Legacy Scrap: {imported} data radio scrap legacy berhasil diimport");
-            }
-            catch (Exception logEx)
-            {
-                _logger.LogWarning(logEx, "⚠️ ActivityLog failed for legacy scrap import");
-            }
-
-            _logger.LogInformation("✅ Import Legacy Scrap completed: {Count} records imported", imported);
-            return imported;
-        }
-        {
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-            using var stream = new MemoryStream();
-            await file.CopyToAsync(stream);
-            using var package = new ExcelPackage(stream);
-            var ws = package.Workbook.Worksheets[0];
-
-            if (ws == null || ws.Dimension == null)
-                throw new Exception("File Excel kosong atau tidak valid");
-
-            int maxRow = ws.Dimension.End.Row;
-            int maxCol = ws.Dimension.End.Column;
-
-            // Smart detect header
-            int headerRow = 0;
-            for (int r = 1; r <= Math.Min(5, maxRow); r++)
-            {
-                for (int c = 1; c <= maxCol; c++)
-                {
-                    var cellText = ws.Cells[r, c].Text?.Trim().ToLower();
-                    if (cellText != null && (cellText.Contains("job number") || cellText.Contains("date scrapped")))
-                    {
-                        headerRow = r;
-                        break;
-                    }
-                }
-                if (headerRow > 0) break;
-            }
-
-            if (headerRow == 0)
-                throw new Exception("Header row tidak ditemukan. Pastikan ada kolom 'Job Number' atau 'Date Scrapped'.");
-
-            var colMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            for (int c = 1; c <= maxCol; c++)
-            {
-                var headerText = ws.Cells[headerRow, c].Text?.Trim();
-                if (string.IsNullOrEmpty(headerText)) continue;
-
-                var lower = headerText.ToLower();
-                if (lower == "type" || lower == "tipe") colMap["Type"] = c;
-                else if (lower.Contains("serial")) colMap["SerialNumber"] = c;
-                else if (lower.Contains("job number") || lower.Contains("job no")) colMap["JobNumber"] = c;
-                else if (lower.Contains("date scrapped") || lower.Contains("date scrap")) colMap["DateScrapped"] = c;
-                else if (lower.Contains("remark") || lower == "remarks") colMap["Remarks"] = c;
-            }
-
-            _logger.LogInformation("📊 Import Legacy Scrap: Header row={Row}, Columns mapped={Count}", headerRow, colMap.Count);
-
-            int imported = 0;
-            for (int row = headerRow + 1; row <= maxRow; row++)
-            {
-                var firstCell = ws.Cells[row, 1].Text?.Trim();
-                if (string.IsNullOrEmpty(firstCell)) continue;
-
-                var radio = new Models.Radio
-                {
-                    Category = "LegacyScrap",
-                    Type = GetCellValue(ws, row, colMap, "Type"),
-                    SerialNumber = GetCellValue(ws, row, colMap, "SerialNumber"),
-                    ScrapJobNumber = GetCellValue(ws, row, colMap, "JobNumber"),
-                    Remarks = GetCellValue(ws, row, colMap, "Remarks"),
-                    IsScrap = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                // Parse date scrapped
-                var dateStr = GetCellValue(ws, row, colMap, "DateScrapped");
-                if (!string.IsNullOrEmpty(dateStr))
-                {
-                    if (DateTime.TryParse(dateStr, out var dateScrapped))
-                        radio.DateScrapped = dateScrapped;
                 }
 
                 _context.Radios.Add(radio);
