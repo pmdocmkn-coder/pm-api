@@ -44,16 +44,49 @@ namespace Pm.Controllers.Radio
 
         [HttpGet]
         [Authorize(Policy = "RadioView")]
-        public async Task<IActionResult> GetAll([FromQuery] string? category = null, [FromQuery] bool isScrap = false)
+        public async Task<IActionResult> GetAll([FromQuery] RadioQueryDto query)
         {
             try
             {
-                var data = await _radioService.GetAllAsync(category, isScrap);
+                var data = await _radioService.GetAllAsync(query);
                 return ApiResponse.Success(data);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting radios, category: {Category}, isScrap: {IsScrap}", category, isScrap);
+                _logger.LogError(ex, "Error getting radios");
+                return ApiResponse.InternalServerError("Gagal mengambil data radio: " + ex.Message);
+            }
+        }
+
+        [HttpGet("unpaged")]
+        [Authorize(Policy = "RadioView")]
+        public async Task<IActionResult> GetAllUnpaged([FromQuery] string? category = null, [FromQuery] bool isScrap = false)
+        {
+            try
+            {
+                var data = await _radioService.GetAllUnpagedAsync(category, isScrap);
+                return ApiResponse.Success(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unpaged radios");
+                return ApiResponse.InternalServerError("Gagal mengambil data radio: " + ex.Message);
+            }
+        }
+
+        // Alias untuk kompatibilitas frontend yang memanggil /api/radios/all
+        [HttpGet("all")]
+        [Authorize(Policy = "RadioView")]
+        public async Task<IActionResult> GetAllAlias([FromQuery] string? category = null, [FromQuery] bool isScrap = false)
+        {
+            try
+            {
+                var data = await _radioService.GetAllUnpagedAsync(category, isScrap);
+                return ApiResponse.Success(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting all radios");
                 return ApiResponse.InternalServerError("Gagal mengambil data radio: " + ex.Message);
             }
         }
@@ -180,6 +213,70 @@ namespace Pm.Controllers.Radio
             }
         }
 
+        [HttpDelete("all/kpc")]
+        [Authorize(Policy = "RadioDeletetAllKPC")]
+        public async Task<IActionResult> DeleteAllKpc()
+        {
+            try
+            {
+                var count = await _radioService.DeleteByCategoryAsync("Internal", CurrentUserId);
+                return ApiResponse.Success(new { deleted = count }, $"{count} data Radio KPC berhasil dihapus");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting all KPC radios");
+                return ApiResponse.InternalServerError("Gagal menghapus data Radio KPC: " + ex.Message);
+            }
+        }
+
+        [HttpDelete("all/kontraktor")]
+        [Authorize(Policy = "RadioDeletetAllKontraktor")]
+        public async Task<IActionResult> DeleteAllKontraktor()
+        {
+            try
+            {
+                var count = await _radioService.DeleteByCategoryAsync("Contractor", CurrentUserId);
+                return ApiResponse.Success(new { deleted = count }, $"{count} data Radio Kontraktor berhasil dihapus");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting all Contractor radios");
+                return ApiResponse.InternalServerError("Gagal menghapus data Radio Kontraktor: " + ex.Message);
+            }
+        }
+
+        [HttpDelete("all/unit")]
+        [Authorize(Policy = "RadioDeletetAllUnit")]
+        public async Task<IActionResult> DeleteAllUnit()
+        {
+            try
+            {
+                var count = await _radioService.DeleteByCategoryAsync("Unit", CurrentUserId);
+                return ApiResponse.Success(new { deleted = count }, $"{count} data Radio Unit berhasil dihapus");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting all Unit radios");
+                return ApiResponse.InternalServerError("Gagal menghapus data Radio Unit: " + ex.Message);
+            }
+        }
+
+        [HttpDelete("all/scrap")]
+        [Authorize(Policy = "RadioDeletetAllScrap")]
+        public async Task<IActionResult> DeleteAllScrap()
+        {
+            try
+            {
+                var count = await _radioService.DeleteByCategoryAsync("LegacyScrap", CurrentUserId);
+                return ApiResponse.Success(new { deleted = count }, $"{count} data Radio Scrap berhasil dihapus");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting all Scrap radios");
+                return ApiResponse.InternalServerError("Gagal menghapus data Radio Scrap: " + ex.Message);
+            }
+        }
+
         // ============================================
         // SCRAP
         // ============================================
@@ -220,8 +317,11 @@ namespace Pm.Controllers.Radio
 
             try
             {
-                var count = await _radioService.ImportInternalAsync(file, CurrentUserId);
-                return ApiResponse.Success(new { imported = count }, $"{count} data radio internal berhasil diimport");
+                var result = await _radioService.ImportInternalAsync(file, CurrentUserId);
+                var msg = result.SheetCount > 1
+                    ? $"Berhasil import {result.TotalImported} data dari {result.SheetCount} sheet"
+                    : $"{result.TotalImported} data radio internal berhasil diimport";
+                return ApiResponse.Success(result, msg);
             }
             catch (Exception ex)
             {
@@ -239,8 +339,11 @@ namespace Pm.Controllers.Radio
 
             try
             {
-                var count = await _radioService.ImportContractorAsync(file, CurrentUserId);
-                return ApiResponse.Success(new { imported = count }, $"{count} data radio contractor berhasil diimport");
+                var result = await _radioService.ImportContractorAsync(file, CurrentUserId);
+                var msg = result.SheetCount > 1
+                    ? $"Berhasil import {result.TotalImported} data dari {result.SheetCount} sheet"
+                    : $"{result.TotalImported} data radio contractor berhasil diimport";
+                return ApiResponse.Success(result, msg);
             }
             catch (Exception ex)
             {
@@ -258,8 +361,11 @@ namespace Pm.Controllers.Radio
 
             try
             {
-                var count = await _radioService.ImportUnitAsync(file, CurrentUserId);
-                return ApiResponse.Success(new { imported = count }, $"{count} data radio unit berhasil diimport");
+                var result = await _radioService.ImportUnitAsync(file, CurrentUserId);
+                var msg = result.SheetCount > 1
+                    ? $"Berhasil import {result.TotalImported} data dari {result.SheetCount} sheet"
+                    : $"{result.TotalImported} data radio unit berhasil diimport";
+                return ApiResponse.Success(result, msg);
             }
             catch (Exception ex)
             {
@@ -277,8 +383,11 @@ namespace Pm.Controllers.Radio
 
             try
             {
-                var count = await _radioService.ImportLegacyScrapAsync(file, CurrentUserId);
-                return ApiResponse.Success(new { imported = count }, $"{count} data radio scrap legacy berhasil diimport");
+                var result = await _radioService.ImportLegacyScrapAsync(file, CurrentUserId);
+                var msg = result.SheetCount > 1
+                    ? $"Berhasil import {result.TotalImported} data dari {result.SheetCount} sheet"
+                    : $"{result.TotalImported} data radio scrap legacy berhasil diimport";
+                return ApiResponse.Success(result, msg);
             }
             catch (Exception ex)
             {

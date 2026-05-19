@@ -175,7 +175,21 @@ public static class DatabaseSeeder
                     new() { PermissionId = 96, PermissionName = "pmschedule.view", Description = "View PM Schedule data", Group = "PM Schedule", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 97, PermissionName = "pmschedule.create", Description = "Create PM Schedule", Group = "PM Schedule", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 98, PermissionName = "pmschedule.update", Description = "Update PM Schedule", Group = "PM Schedule", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionId = 99, PermissionName = "pmschedule.delete", Description = "Delete PM Schedule", Group = "PM Schedule", CreatedAt = DateTime.UtcNow }
+                    new() { PermissionId = 99, PermissionName = "pmschedule.delete", Description = "Delete PM Schedule", Group = "PM Schedule", CreatedAt = DateTime.UtcNow },
+
+                    // Radio Delete All (per kategori)
+                    new() { PermissionId = 100, PermissionName = "radio.delete.all.kpc", Description = "Hapus semua data Radio KPC", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 101, PermissionName = "radio.delete.all.kontraktor", Description = "Hapus semua data Radio Kontraktor", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 102, PermissionName = "radio.delete.all.unit", Description = "Hapus semua data Radio Unit", Group = "Radio", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 103, PermissionName = "radio.delete.all.scrap", Description = "Hapus semua data Radio Scrap", Group = "Radio Scrap", CreatedAt = DateTime.UtcNow },
+
+                    // CCTV KPC
+                    new() { PermissionId = 104, PermissionName = "cctv.kpc.view", Description = "Lihat data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 105, PermissionName = "cctv.kpc.create", Description = "Tambah data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 106, PermissionName = "cctv.kpc.update", Description = "Edit data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 107, PermissionName = "cctv.kpc.delete", Description = "Hapus data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 108, PermissionName = "cctv.kpc.delete.all", Description = "Hapus semua data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionId = 109, PermissionName = "cctv.kpc.menu", Description = "Akses menu CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow }
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();

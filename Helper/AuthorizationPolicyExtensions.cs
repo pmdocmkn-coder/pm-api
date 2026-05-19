@@ -150,19 +150,27 @@ namespace Pm.Helper
             options.AddPolicy("RadioExport", policy =>
                 policy.RequireClaim("Permission", "radio.export"));
             options.AddPolicy("RadioScrapView", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.view"));
+                policy.RequireClaim("Permission", "radio.scrap.view"));
             options.AddPolicy("RadioScrapDelete", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.delete"));
+                policy.RequireClaim("Permission", "radio.scrap.delete"));
             options.AddPolicy("RadioScrapUpdate", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.update"));
+                policy.RequireClaim("Permission", "radio.scrap.update"));
             options.AddPolicy("RadioScrapCreate", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.create"));
+                policy.RequireClaim("Permission", "radio.scrap.create"));
             options.AddPolicy("RadioScrapExport", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.export"));
+                policy.RequireClaim("Permission", "radio.scrap.export"));
             options.AddPolicy("RadioScrapImport", policy =>
-            policy.RequireClaim("Permission", "radio.scrap.import"));
-             options.AddPolicy("RadioDeletetAll", policy =>
-            policy.RequireClaim("Permission", "radio.deleteall.deleteall"));
+                policy.RequireClaim("Permission", "radio.scrap.import"));
+            options.AddPolicy("RadioDeletetAllKPC", policy =>
+                policy.RequireClaim("Permission", "radio.delete.all.kpc"));
+            options.AddPolicy("RadioDeletetAllKontraktor", policy =>
+                policy.RequireClaim("Permission", "radio.delete.all.kontraktor"));
+            options.AddPolicy("RadioDeletetAllUnit", policy =>
+                policy.RequireClaim("Permission", "radio.delete.all.unit"));
+            options.AddPolicy("RadioDeletetAllScrap", policy =>
+                policy.RequireClaim("Permission", "radio.delete.all.scrap"));
+
+
             
 
 
@@ -237,6 +245,18 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "pmschedule.update"));
             options.AddPolicy("PmScheduleDelete", policy =>
                 policy.RequireClaim("Permission", "pmschedule.delete"));
+
+            // CCTV KPC
+            options.AddPolicy("CctvKpcView", policy =>
+                policy.RequireClaim("Permission", "cctv.kpc.view"));
+            options.AddPolicy("CctvKpcCreate", policy =>
+                policy.RequireClaim("Permission", "cctv.kpc.create"));
+            options.AddPolicy("CctvKpcUpdate", policy =>
+                policy.RequireClaim("Permission", "cctv.kpc.update"));
+            options.AddPolicy("CctvKpcDelete", policy =>
+                policy.RequireClaim("Permission", "cctv.kpc.delete"));
+            options.AddPolicy("CctvKpcDeleteAll", policy =>
+                policy.RequireClaim("Permission", "cctv.kpc.delete.all"));
         }
 
 

@@ -57,6 +57,9 @@ namespace Pm.Data
         public DbSet<Pm.Models.PmSchedule.PmSchedule> PmSchedules { get; set; } = null!;
         public DbSet<Pm.Models.PmSchedule.PmScheduleTask> PmScheduleTasks { get; set; } = null!;
 
+        // CCTV KPC
+        public DbSet<CctvKpc> CctvKpcs { get; set; } = null!;
+
         // Password Reset
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
@@ -1120,6 +1123,57 @@ namespace Pm.Data
 
                 entity.HasIndex(e => new { e.InternalLinkId, e.Date })
                     .HasDatabaseName("IX_InternalLinkHistory_LinkDate");
+            });
+
+            // ===========================================
+            // CCTV KPC CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<CctvKpc>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("CctvKpcs");
+
+                entity.Property(e => e.Severity)
+                    .IsRequired()
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Low");
+
+                entity.Property(e => e.Camera)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.IpCamera)
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.Model)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.Brand)
+                    .HasMaxLength(100);
+
+                entity.Property(e => e.ExplicitLocation)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.FotoKoordinat)
+                    .HasMaxLength(1000);
+
+                entity.Property(e => e.Remarks)
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.Severity)
+                    .HasDatabaseName("IX_CctvKpc_Severity");
+
+                entity.HasIndex(e => e.Brand)
+                    .HasDatabaseName("IX_CctvKpc_Brand");
+
+                entity.HasIndex(e => e.IsActive)
+                    .HasDatabaseName("IX_CctvKpc_IsActive");
             });
 
             // ===========================================

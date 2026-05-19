@@ -212,6 +212,9 @@ builder.Services.AddScoped<Pm.Services.Radio.IRadioService, Pm.Services.Radio.Ra
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmScheduleService, Pm.Services.PmSchedule.PmScheduleService>();
 
+// ===== CCTV KPC =====
+builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.CctvKpc.CctvKpcService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
