@@ -78,6 +78,9 @@ namespace Pm.Services.CctvKpc
             if (!string.IsNullOrWhiteSpace(query.Brand))
                 q = q.Where(c => c.Brand == query.Brand);
 
+            if (!string.IsNullOrWhiteSpace(query.ExplicitLocation))
+                q = q.Where(c => c.ExplicitLocation == query.ExplicitLocation);
+
             if (query.IsActive.HasValue)
                 q = q.Where(c => c.IsActive == query.IsActive.Value);
 

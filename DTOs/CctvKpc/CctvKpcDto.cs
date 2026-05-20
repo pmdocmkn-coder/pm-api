@@ -39,6 +39,7 @@ namespace Pm.DTOs.CctvKpc
         public string? Severity { get; set; }
         public string? Brand { get; set; }
         public bool? IsActive { get; set; }
+        public string? ExplicitLocation { get; set; }
         public new int PageSize { get; set; } = 50;
     }
 }
