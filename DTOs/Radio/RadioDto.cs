@@ -84,4 +84,23 @@ namespace Pm.DTOs.Radio
         public string CreatedBy { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
     }
+
+    public class DuplicateSnDto
+    {
+        public string SerialNumber { get; set; } = null!;
+        public int Count { get; set; }
+        public List<DuplicateSnItemDto> Occurrences { get; set; } = new();
+    }
+
+    public class DuplicateSnItemDto
+    {
+        public int Id { get; set; }
+        public string Category { get; set; } = null!;
+        public string? NomorAset { get; set; }
+        public string? NomorUnit { get; set; }
+        public string? NomorLv { get; set; }
+        public string? Company { get; set; }
+        public string? Division { get; set; }
+        public string? Department { get; set; }
+    }
 }

@@ -74,6 +74,22 @@ namespace Pm.Controllers.Radio
             }
         }
 
+        [HttpGet("duplicate-sns")]
+        [Authorize(Policy = "RadioView")]
+        public async Task<IActionResult> GetDuplicateSerialNumbers()
+        {
+            try
+            {
+                var data = await _radioService.GetDuplicateSerialNumbersAsync();
+                return ApiResponse.Success(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting duplicate serial numbers");
+                return ApiResponse.InternalServerError("Gagal mengambil data duplikat SN: " + ex.Message);
+            }
+        }
+
         // Alias untuk kompatibilitas frontend yang memanggil /api/radios/all
         [HttpGet("all")]
         [Authorize(Policy = "RadioView")]

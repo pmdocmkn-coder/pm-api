@@ -136,7 +136,9 @@ namespace Pm.Services.Radio
                 q = q.Where(r => r.DateScrapped <= dateTo);
             }
 
-            // Hitung duplicate set
+            // Hitung duplicate set — selalu dari seluruh DB (tanpa filter search/division/dll)
+            // agar duplikat terdeteksi meski salah satu pasangannya tidak match search.
+            // Normalisasi RadioId dengan Trim() untuk menghindari masalah spasi.
             var duplicateKeys = await _context.Radios
                 .Where(r => r.Category == query.Category && !r.IsScrap &&
                             !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId != "-")
@@ -145,19 +147,40 @@ namespace Pm.Services.Radio
                 .Select(g => new { g.Key.RadioId, g.Key.Fleet })
                 .ToListAsync();
 
+            // duplicateSet: key = "radioId_fleet" (trimmed, lowercase) untuk validasi
             var duplicateSet = duplicateKeys
-                .Select(k => $"{k.RadioId}_{k.Fleet ?? ""}")
-                .ToHashSet();
+                .Select(k => $"{k.RadioId!.Trim().ToLower()}_{(k.Fleet ?? "").Trim().ToLower()}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // duplicateRadioIdList: List<string> agar EF bisa translate ke SQL IN (...)
+            var duplicateRadioIdList = duplicateKeys
+                .Select(k => k.RadioId!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             int totalCount;
             List<Models.Radio> radios;
 
             if (query.IsDuplicate == true)
             {
+                if (duplicateRadioIdList.Count == 0)
+                {
+                    return new PagedResultDto<RadioDto>(new List<RadioDto>(), query, 0);
+                }
+
+                // Ambil semua record yang sudah kena filter (search, divisi, dll),
+                // lalu filter di memori berdasarkan duplicateSet.
+                // Ini lebih aman daripada filter di DB karena menghindari masalah
+                // case sensitivity dan spasi pada RadioId.
                 var allFiltered = await q.OrderBy(r => r.Id).ToListAsync();
-                var dupFiltered = allFiltered.Where(r =>
-                    !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId != "-" &&
-                    duplicateSet.Contains($"{r.RadioId}_{r.Fleet ?? ""}")).ToList();
+
+                var dupFiltered = allFiltered
+                    .Where(r =>
+                        !string.IsNullOrWhiteSpace(r.RadioId) &&
+                        r.RadioId.Trim() != "-" &&
+                        duplicateSet.Contains(
+                            $"{r.RadioId.Trim().ToLower()}_{(r.Fleet ?? "").Trim().ToLower()}"))
+                    .ToList();
 
                 totalCount = dupFiltered.Count;
                 radios = dupFiltered
@@ -176,8 +199,9 @@ namespace Pm.Services.Radio
             }
 
             var items = radios.Select(r => MapToDto(r,
-                !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId != "-" &&
-                duplicateSet.Contains($"{r.RadioId}_{r.Fleet ?? ""}")
+                !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId.Trim() != "-" &&
+                duplicateSet.Contains(
+                    $"{r.RadioId.Trim().ToLower()}_{(r.Fleet ?? "").Trim().ToLower()}")
             )).ToList();
 
             return new PagedResultDto<RadioDto>(items, query, totalCount);
@@ -203,12 +227,57 @@ namespace Pm.Services.Radio
                 .Select(g => new { g.Key.RadioId, g.Key.Fleet })
                 .ToListAsync();
 
-            var duplicateSet = duplicateKeys.Select(k => $"{k.RadioId}_{k.Fleet ?? ""}").ToHashSet();
+            var duplicateSet = duplicateKeys
+                .Select(k => $"{k.RadioId!.Trim().ToLower()}_{(k.Fleet ?? "").Trim().ToLower()}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             return radios.Select(r => MapToDto(r,
-                !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId != "-" &&
-                duplicateSet.Contains($"{r.RadioId}_{r.Fleet ?? ""}")
+                !string.IsNullOrWhiteSpace(r.RadioId) && r.RadioId.Trim() != "-" &&
+                duplicateSet.Contains(
+                    $"{r.RadioId.Trim().ToLower()}_{(r.Fleet ?? "").Trim().ToLower()}")
             ));
+        }
+
+        // ============================================
+        // GET DUPLICATE SERIAL NUMBERS (Cross Category)
+        // ============================================
+        public async Task<List<DuplicateSnDto>> GetDuplicateSerialNumbersAsync()
+        {
+            var duplicates = new List<DuplicateSnDto>();
+
+            var duplicateGroups = await _context.Radios.AsNoTracking()
+                .Where(r => !r.IsScrap && !string.IsNullOrWhiteSpace(r.SerialNumber) && r.SerialNumber != "-" && r.SerialNumber != "n/a" && r.SerialNumber != "N/A")
+                .GroupBy(r => r.SerialNumber.Trim().ToLower())
+                .Where(g => g.Count() > 1)
+                .Select(g => new
+                {
+                    SerialNumber = g.Key,
+                    Count = g.Count(),
+                    Items = g.Select(x => new DuplicateSnItemDto
+                    {
+                        Id = x.Id,
+                        Category = x.Category,
+                        NomorAset = x.NomorAset,
+                        NomorUnit = x.NomorUnit,
+                        NomorLv = x.NomorLv,
+                        Company = x.Company,
+                        Division = x.Division,
+                        Department = x.Department
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            foreach (var group in duplicateGroups)
+            {
+                duplicates.Add(new DuplicateSnDto
+                {
+                    SerialNumber = group.SerialNumber, // Note: it's the lowercase version here, could get the original if needed but this is fine for display/matching
+                    Count = group.Count,
+                    Occurrences = group.Items
+                });
+            }
+
+            return duplicates;
         }
 
         // ============================================
