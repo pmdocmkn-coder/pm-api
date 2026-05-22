@@ -103,4 +103,16 @@ namespace Pm.DTOs.Radio
         public string? Division { get; set; }
         public string? Department { get; set; }
     }
+
+    public class RadioLookupDto
+    {
+        public int Id { get; set; }
+        public string Category { get; set; } = null!;
+        public string? SerialNumber { get; set; }
+        public string? Type { get; set; }
+        public string? Division { get; set; }
+        public string? Department { get; set; }
+        public string? NomorAset { get; set; }
+        public string Label { get; set; } = null!;
+    }
 }

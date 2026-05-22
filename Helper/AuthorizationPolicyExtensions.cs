@@ -4,6 +4,15 @@ namespace Pm.Helper
 {
     public static class AuthorizationPolicyExtensions
     {
+        private static AuthorizationPolicyBuilder RequireAnyPermission(
+            this AuthorizationPolicyBuilder policy,
+            params string[] permissionNames)
+        {
+            return policy.RequireAssertion(ctx =>
+                permissionNames.Any(name =>
+                    ctx.User.HasClaim(c => c.Type == "Permission" && c.Value == name)));
+        }
+
         public static void AddCustomAuthorizationPolicies(this AuthorizationOptions options)
         {
             //Permission Management
@@ -169,6 +178,51 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "radio.delete.all.unit"));
             options.AddPolicy("RadioDeletetAllScrap", policy =>
                 policy.RequireClaim("Permission", "radio.delete.all.scrap"));
+
+            // Radio Repair
+            options.AddPolicy("RadioRepairView", policy =>
+                policy.RequireAnyPermission("radio.repair.view", "radio.repair.menu"));
+            options.AddPolicy("RadioRepairUpdate", policy =>
+                policy.RequireClaim("Permission", "radio.repair.update"));
+            options.AddPolicy("RadioRepairSupervise", policy =>
+                policy.RequireClaim("Permission", "radio.repair.supervise"));
+            options.AddPolicy("RadioRepairDelete", policy =>
+                policy.RequireClaim("Permission", "radio.repair.delete"));
+
+            // Radio Handover
+            options.AddPolicy("RadioHandoverView", policy =>
+                policy.RequireAnyPermission("radio.handover.view", "radio.handover.menu"));
+            options.AddPolicy("RadioHandoverCreateHd", policy =>
+                policy.RequireAnyPermission(
+                    HandoverPermissionHelper.CreateHd,
+                    HandoverPermissionHelper.CreateLegacy));
+            options.AddPolicy("RadioHandoverCreateTekWh", policy =>
+                policy.RequireAnyPermission(
+                    HandoverPermissionHelper.CreateTekWh,
+                    HandoverPermissionHelper.CreateLegacy));
+            options.AddPolicy("RadioHandoverCreateWhHd", policy =>
+                policy.RequireAnyPermission(
+                    HandoverPermissionHelper.CreateWhHd,
+                    HandoverPermissionHelper.CreateLegacy));
+            options.AddPolicy("RadioHandoverLookup", policy =>
+                policy.RequireAssertion(ctx =>
+                    HandoverPermissionHelper.CanLookupRadioSerial(ctx.User)));
+            options.AddPolicy("RadioHandoverExport", policy =>
+                policy.RequireClaim("Permission", "radio.handover.export"));
+
+            // Warehouse Borrow
+            options.AddPolicy("WarehouseBorrowView", policy =>
+                policy.RequireAnyPermission("warehouse.borrow.view", "warehouse.borrow.menu"));
+            options.AddPolicy("WarehouseBorrowCreate", policy =>
+                policy.RequireClaim("Permission", "warehouse.borrow.create"));
+            options.AddPolicy("WarehouseBorrowSupervise", policy =>
+                policy.RequireClaim("Permission", "warehouse.borrow.supervise"));
+            options.AddPolicy("WarehouseBorrowIssue", policy =>
+                policy.RequireClaim("Permission", "warehouse.borrow.issue"));
+            options.AddPolicy("WarehouseBorrowReturn", policy =>
+                policy.RequireClaim("Permission", "warehouse.borrow.return"));
+            options.AddPolicy("WarehouseBorrowCancel", policy =>
+                policy.RequireClaim("Permission", "warehouse.borrow.cancel"));
 
 
             

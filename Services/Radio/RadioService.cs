@@ -290,6 +290,30 @@ namespace Pm.Services.Radio
             return MapToDto(r);
         }
 
+        public async Task<List<RadioLookupDto>> LookupBySerialAsync(string serialNumber)
+        {
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                return new List<RadioLookupDto>();
+
+            var s = serialNumber.Trim().ToLower();
+            return await _context.Radios.AsNoTracking()
+                .Where(r => !r.IsScrap && r.SerialNumber != null && r.SerialNumber.ToLower().Contains(s))
+                .OrderBy(r => r.SerialNumber)
+                .Take(20)
+                .Select(r => new RadioLookupDto
+                {
+                    Id = r.Id,
+                    Category = r.Category,
+                    SerialNumber = r.SerialNumber,
+                    Type = r.Type,
+                    Division = r.Division,
+                    Department = r.Department,
+                    NomorAset = r.NomorAset,
+                    Label = $"{r.SerialNumber} — {r.Category}" + (r.NomorAset != null ? $" ({r.NomorAset})" : "")
+                })
+                .ToListAsync();
+        }
+
         public async Task<IEnumerable<RadioHistoryDto>> GetHistoryAsync(int id)
         {
             var radio = await _context.Radios.FindAsync(id);

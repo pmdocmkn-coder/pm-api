@@ -107,6 +107,22 @@ namespace Pm.Controllers.Radio
             }
         }
 
+        [HttpGet("lookup-by-serial")]
+        [Authorize(Policy = "RadioHandoverLookup")]
+        public async Task<IActionResult> LookupBySerial([FromQuery] string serialNumber)
+        {
+            try
+            {
+                var data = await _radioService.LookupBySerialAsync(serialNumber);
+                return ApiResponse.Success(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error lookup radio by serial");
+                return ApiResponse.InternalServerError("Gagal lookup SN: " + ex.Message);
+            }
+        }
+
         [HttpGet("{id}")]
         [Authorize(Policy = "RadioView")]
         public async Task<IActionResult> GetById(int id)

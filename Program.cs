@@ -207,6 +207,10 @@ builder.Services.AddScoped<IDivisionService, DivisionService>();
 
 // ===== Radio Management =====
 builder.Services.AddScoped<Pm.Services.Radio.IRadioService, Pm.Services.Radio.RadioService>();
+builder.Services.AddScoped<Pm.Services.Media.IImageBase64Validator, Pm.Services.Media.ImageBase64Validator>();
+builder.Services.AddScoped<Pm.Services.RadioRepairJob.IRadioRepairJobService, Pm.Services.RadioRepairJob.RadioRepairJobService>();
+builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
+builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();

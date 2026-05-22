@@ -36,6 +36,17 @@ namespace Pm.Data
         public DbSet<Radio> Radios { get; set; } = null!;
         public DbSet<RadioHistory> RadioHistories { get; set; } = null!;
 
+        // Radio Repair & Handover
+        public DbSet<RadioRepairJob> RadioRepairJobs { get; set; } = null!;
+        public DbSet<RadioRepairJobStatusLog> RadioRepairJobStatusLogs { get; set; } = null!;
+        public DbSet<RadioHandover> RadioHandovers { get; set; } = null!;
+        public DbSet<RadioHandoverAccessory> RadioHandoverAccessories { get; set; } = null!;
+        public DbSet<RadioHandoverPhoto> RadioHandoverPhotos { get; set; } = null!;
+
+        // Warehouse Part Borrow
+        public DbSet<WarehousePartBorrow> WarehousePartBorrows { get; set; } = null!;
+        public DbSet<WarehousePartBorrowStatusLog> WarehousePartBorrowStatusLogs { get; set; } = null!;
+
         // Gatepass & Quotation
         public DbSet<Gatepass> Gatepasses { get; set; } = null!;
         public DbSet<GatepassItem> GatepassItems { get; set; } = null!;
@@ -1208,6 +1219,71 @@ namespace Pm.Data
 
                 entity.HasIndex(e => new { e.UserId, e.IsUsed })
                     .HasDatabaseName("IX_PasswordResetToken_User_Used");
+            });
+
+            // ===========================================
+            // RADIO REPAIR & HANDOVER
+            // ===========================================
+            modelBuilder.Entity<RadioRepairJob>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.JobNumber).IsUnique();
+                entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
+                entity.HasOne(e => e.AssignedTechnician).WithMany().HasForeignKey(e => e.AssignedTechnicianUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.OpenedBy).WithMany().HasForeignKey(e => e.OpenedByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.Radio).WithMany().HasForeignKey(e => e.RadioId).OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<RadioRepairJobStatusLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.FromStatus).HasConversion<string>().HasMaxLength(50);
+                entity.Property(e => e.ToStatus).HasConversion<string>().HasMaxLength(50);
+                entity.HasOne(e => e.Job).WithMany(j => j.StatusLogs).HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RadioHandover>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.HandoverNumber).IsUnique();
+                entity.Property(e => e.HandoverType).HasConversion<string>().HasMaxLength(50);
+                entity.Property(e => e.RadioPhotoBase64).HasColumnType("longtext");
+                entity.Property(e => e.HandedOverSignatureBase64).HasColumnType("longtext");
+                entity.Property(e => e.ReceiverSignatureBase64).HasColumnType("longtext");
+                entity.HasOne(e => e.RadioRepairJob).WithMany(j => j.Handovers).HasForeignKey(e => e.RadioRepairJobId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<RadioHandoverAccessory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ItemName).HasMaxLength(200);
+                entity.Property(e => e.Unit).HasMaxLength(20);
+                entity.HasOne(e => e.RadioHandover).WithMany(h => h.Accessories).HasForeignKey(e => e.RadioHandoverId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RadioHandoverPhoto>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.PhotoBase64).HasColumnType("longtext");
+                entity.HasIndex(e => new { e.RadioHandoverId, e.SortOrder });
+                entity.HasOne(e => e.RadioHandover).WithMany(h => h.Photos).HasForeignKey(e => e.RadioHandoverId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<WarehousePartBorrow>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.BorrowNumber).IsUnique();
+                entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
+                entity.HasOne(e => e.BorrowedBy).WithMany().HasForeignKey(e => e.BorrowedByUserId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.RelatedRepairJob).WithMany().HasForeignKey(e => e.RelatedRepairJobId).OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<WarehousePartBorrowStatusLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.FromStatus).HasConversion<string>().HasMaxLength(50);
+                entity.Property(e => e.ToStatus).HasConversion<string>().HasMaxLength(50);
+                entity.HasOne(e => e.Borrow).WithMany(b => b.StatusLogs).HasForeignKey(e => e.BorrowId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

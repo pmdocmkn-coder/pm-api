@@ -189,7 +189,32 @@ public static class DatabaseSeeder
                     new() { PermissionId = 106, PermissionName = "cctv.kpc.update", Description = "Edit data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 107, PermissionName = "cctv.kpc.delete", Description = "Hapus data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 108, PermissionName = "cctv.kpc.delete.all", Description = "Hapus semua data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionId = 109, PermissionName = "cctv.kpc.menu", Description = "Akses menu CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow }
+                    new() { PermissionId = 109, PermissionName = "cctv.kpc.menu", Description = "Akses menu CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
+
+                    // Radio Repair
+                    new() { PermissionName = "radio.repair.menu", Description = "Menu dashboard perbaikan radio", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.view", Description = "Lihat dashboard & detail job perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.update", Description = "Teknisi update status perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.supervise", Description = "Supervisor approve material", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.delete", Description = "Batalkan job perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+
+                    // Radio Handover
+                    new() { PermissionName = "radio.handover.menu", Description = "Menu serah terima radio", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.view", Description = "Lihat histori serah terima", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.create", Description = "[Legacy] Buat serah terima (semua tipe)", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.create.hd", Description = "Buat serah terima Helpdesk → Teknisi", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.create.tek_wh", Description = "Buat serah terima Teknisi → Warehouse", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.create.wh_hd", Description = "Buat serah terima Warehouse → Helpdesk", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.export", Description = "Export serah terima", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+
+                    // Warehouse Borrow
+                    new() { PermissionName = "warehouse.borrow.menu", Description = "Menu peminjaman warehouse", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.view", Description = "Lihat histori peminjaman", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.create", Description = "Ajukan pinjam part", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.supervise", Description = "Supervisi Warehouse approve", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.issue", Description = "Tandai part keluar", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.return", Description = "Tandai part kembali", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "warehouse.borrow.cancel", Description = "Batalkan permintaan pinjam", Group = "Warehouse", CreatedAt = DateTime.UtcNow }
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();
@@ -272,6 +297,95 @@ public static class DatabaseSeeder
                 await context.Users.AddAsync(superAdmin);
                 await context.SaveChangesAsync();
                 logger.LogInformation("✅ Super Admin user seeded successfully");
+            }
+
+            // 5. Seed operational roles (if missing)
+            var operationalRoles = new[]
+            {
+                ("Helpdesk", "Serah terima radio dari helpdesk"),
+                ("Teknisi", "Perbaikan radio & peminjaman part"),
+                ("Warehouse", "Penerima radio & operasional gudang"),
+                ("Supervisor Warehouse", "Approve peminjaman part"),
+                ("Supervisor", "Approve material perbaikan radio")
+            };
+            foreach (var (name, desc) in operationalRoles)
+            {
+                if (!await context.Roles.AnyAsync(r => r.RoleName == name))
+                {
+                    await context.Roles.AddAsync(new Role
+                    {
+                        RoleName = name,
+                        Description = desc,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            await context.SaveChangesAsync();
+
+            // 6. Seed default permissions for operational roles (additive only)
+            var operationalRolePermissions = new Dictionary<string, string[]>
+            {
+                ["Helpdesk"] = new[]
+                {
+                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.hd",
+                    "radio.repair.view"
+                },
+                ["Teknisi"] = new[]
+                {
+                    "radio.repair.menu", "radio.repair.view", "radio.repair.update",
+                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh",
+                    "warehouse.borrow.menu", "warehouse.borrow.view", "warehouse.borrow.create", "warehouse.borrow.return"
+                },
+                ["Teknisi WSK"] = new[]
+                {
+                    "radio.repair.menu", "radio.repair.view", "radio.repair.update",
+                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh",
+                    "warehouse.borrow.menu", "warehouse.borrow.view", "warehouse.borrow.create", "warehouse.borrow.return"
+                },
+                ["Warehouse"] = new[]
+                {
+                    "radio.handover.view", "radio.handover.create.wh_hd",
+                    "warehouse.borrow.menu", "warehouse.borrow.view",
+                    "warehouse.borrow.issue", "warehouse.borrow.return"
+                },
+                ["Supervisor Warehouse"] = new[]
+                {
+                    "warehouse.borrow.menu", "warehouse.borrow.view", "warehouse.borrow.supervise"
+                },
+                ["Supervisor"] = new[]
+                {
+                    "radio.repair.view", "radio.repair.supervise"
+                }
+            };
+
+            foreach (var (roleName, permNames) in operationalRolePermissions)
+            {
+                var role = await context.Roles.FirstOrDefaultAsync(r => r.RoleName == roleName);
+                if (role == null) continue;
+
+                var existing = await context.RolePermissions
+                    .Where(rp => rp.RoleId == role.RoleId)
+                    .Select(rp => rp.PermissionId)
+                    .ToListAsync();
+
+                var toAdd = allPermissions
+                    .Where(p => permNames.Contains(p.PermissionName))
+                    .Where(p => !existing.Contains(p.PermissionId))
+                    .Select(p => new RolePermission
+                    {
+                        RoleId = role.RoleId,
+                        PermissionId = p.PermissionId,
+                        CreatedAt = DateTime.UtcNow
+                    })
+                    .ToList();
+
+                if (toAdd.Count > 0)
+                {
+                    logger.LogInformation("Adding {Count} permissions to role {Role}...", toAdd.Count, roleName);
+                    await context.RolePermissions.AddRangeAsync(toAdd);
+                    await context.SaveChangesAsync();
+                }
             }
 
             logger.LogInformation("🎉 Database seeding completed successfully!");
