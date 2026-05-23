@@ -39,6 +39,7 @@ namespace Pm.Data
         // Radio Repair & Handover
         public DbSet<RadioRepairJob> RadioRepairJobs { get; set; } = null!;
         public DbSet<RadioRepairJobStatusLog> RadioRepairJobStatusLogs { get; set; } = null!;
+        public DbSet<RepairJobCustomStatus> RepairJobCustomStatuses { get; set; } = null!;
         public DbSet<RadioHandover> RadioHandovers { get; set; } = null!;
         public DbSet<RadioHandoverAccessory> RadioHandoverAccessories { get; set; } = null!;
         public DbSet<RadioHandoverPhoto> RadioHandoverPhotos { get; set; } = null!;

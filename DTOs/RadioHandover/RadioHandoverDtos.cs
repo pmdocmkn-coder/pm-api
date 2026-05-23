@@ -113,9 +113,7 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverDetailDto : RadioHandoverListDto
     {
         public int? RadioId { get; set; }
-        public string? RadioOwnerLabel { get; set; }
-        public string? OwnerDivision { get; set; }
-        public string? OwnerDepartment { get; set; }
+        // RadioOwnerLabel, OwnerDivision, OwnerDepartment sudah ada di RadioHandoverListDto — tidak perlu redeclare
         public string? BatterySerialNumber { get; set; }
         public string? DamageDescription { get; set; }
         public string? RadioPhotoBase64 { get; set; }
@@ -124,7 +122,7 @@ namespace Pm.DTOs.RadioHandover
         public string? ReceiverSignatureBase64 { get; set; }
         public string? Remarks { get; set; }
         public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
-        public string HelpdeskTicketNumber { get; set; } = null!;
+        // HelpdeskTicketNumber sudah ada di RadioHandoverListDto — tidak perlu redeclare
         public string JobStatus { get; set; } = null!;
     }
 

@@ -22,7 +22,8 @@ namespace Pm.Services.RadioRepairJob
         private IQueryable<Models.RadioRepairJob> BaseQuery() =>
             _context.RadioRepairJobs.AsNoTracking()
                 .Include(j => j.AssignedTechnician)
-                .Include(j => j.Radio);
+                .Include(j => j.Radio)
+                .Include(j => j.CustomStatus);
 
         private static bool IsTechnician(string? roleName) =>
             Pm.Helper.OperationalRoleNames.IsTechnicianRole(roleName);
@@ -35,9 +36,6 @@ namespace Pm.Services.RadioRepairJob
             RadioRepairJobQueryDto query, int currentUserId, string? roleName)
         {
             var q = ApplyDeletedFilter(BaseQuery(), query.IncludeDeleted);
-
-            if (IsTechnician(roleName))
-                q = q.Where(j => j.AssignedTechnicianUserId == currentUserId);
 
             if (!string.IsNullOrWhiteSpace(query.Status) &&
                 Enum.TryParse<RadioRepairJobStatus>(query.Status, true, out var st))
@@ -96,6 +94,9 @@ namespace Pm.Services.RadioRepairJob
                     Status = j.Status.ToString(),
                     AssignedTechnicianUserId = j.AssignedTechnicianUserId,
                     AssignedTechnicianName = j.AssignedTechnician.FullName,
+                    CustomStatusId = j.CustomStatusId,
+                    CustomStatusLabel = j.CustomStatus != null ? j.CustomStatus.Label : null,
+                    CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
                     OpenedAt = j.OpenedAt,
                     ClosedAt = j.ClosedAt,
                     IsDeleted = j.IsDeleted,
@@ -130,8 +131,6 @@ namespace Pm.Services.RadioRepairJob
         public async Task<RadioRepairDashboardDto> GetDashboardAsync(int currentUserId, string? roleName)
         {
             var q = _context.RadioRepairJobs.AsNoTracking().Where(j => !j.IsDeleted);
-            if (IsTechnician(roleName))
-                q = q.Where(j => j.AssignedTechnicianUserId == currentUserId);
 
             var counts = await q.GroupBy(_ => 1).Select(g => new
             {
@@ -144,7 +143,7 @@ namespace Pm.Services.RadioRepairJob
                 HandedToWarehouse = g.Count(x => x.Status == RadioRepairJobStatus.HandedToWarehouse),
                 ReturnedToHelpdesk = g.Count(x => x.Status == RadioRepairJobStatus.ReturnedToHelpdesk),
                 Cancelled = g.Count(x => x.Status == RadioRepairJobStatus.Cancelled)
-            }).FirstOrDefaultAsync();
+            }).OrderBy(_ => 1).FirstOrDefaultAsync();
 
             return new RadioRepairDashboardDto
             {
@@ -166,15 +165,15 @@ namespace Pm.Services.RadioRepairJob
                 .Include(j => j.AssignedTechnician)
                 .Include(j => j.OpenedBy)
                 .Include(j => j.Radio)
+                .Include(j => j.CustomStatus)
                 .Include(j => j.StatusLogs).ThenInclude(l => l.User)
                 .Include(j => j.Handovers).ThenInclude(h => h.HandedOverBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.ReceivedBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.Accessories)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(j => j.Id == id);
 
             if (job == null) return null;
-            if (IsTechnician(roleName) && job.AssignedTechnicianUserId != currentUserId)
-                throw new UnauthorizedAccessException("Anda tidak memiliki akses ke job ini.");
 
             var dto = MapDetail(job, includeDeletedHandovers: false);
             await EnrichRadioMasterFieldsAsync(new List<RadioRepairJobListDto> { dto });
@@ -187,24 +186,69 @@ namespace Pm.Services.RadioRepairJob
             var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
-            if (IsTechnician(roleName) && job.AssignedTechnicianUserId != userId)
-                throw new UnauthorizedAccessException("Hanya teknisi penanggung job ini yang dapat mengubah status.");
-
             if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
                 throw new InvalidOperationException("Job sudah diserahkan ke warehouse atau kembali ke helpdesk.");
 
             if (job.Status == RadioRepairJobStatus.Cancelled)
                 throw new InvalidOperationException("Job sudah dibatalkan.");
 
+            // Handle custom status — job tetap InProgress di enum, tapi punya label custom
+            if (dto.CustomStatusId.HasValue)
+            {
+                var customStatus = await _context.RepairJobCustomStatuses
+                    .FirstOrDefaultAsync(s => s.Id == dto.CustomStatusId && s.IsActive)
+                    ?? throw new KeyNotFoundException("Status custom tidak ditemukan atau tidak aktif.");
+
+                var fromStatus = job.Status;
+                var fromCustomLabel = job.CustomStatusId.HasValue
+                    ? (await _context.RepairJobCustomStatuses.AsNoTracking()
+                        .Where(s => s.Id == job.CustomStatusId)
+                        .Select(s => s.Label)
+                        .FirstOrDefaultAsync() ?? job.CustomStatusId.ToString())
+                    : fromStatus.ToString();
+
+                job.Status = RadioRepairJobStatus.InProgress;
+                job.CustomStatusId = dto.CustomStatusId;
+                job.UpdatedAt = DateTime.UtcNow;
+
+                var note = dto.Note ?? $"Status custom: {customStatus.Label}";
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = RadioRepairJobStatus.InProgress,
+                    Note = $"[Custom] {fromCustomLabel} → {customStatus.Label}. {note}",
+                    UserId = userId,
+                    At = DateTime.UtcNow
+                });
+
+                await _activityLog.LogAsync("RadioRepairJob", job.Id, "CustomStatusChange", userId,
+                    $"Custom status → {customStatus.Label}");
+                await _context.SaveChangesAsync();
+                return (await GetByIdAsync(id, userId, roleName))!;
+            }
+
+            // Clear custom status jika ada
+            job.CustomStatusId = null;
+
             var from = job.Status;
-            ValidateStatusTransition(from, dto.Status, isSupervisor: false);
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorMkn,
+                StringComparison.OrdinalIgnoreCase);
+            ValidateStatusTransition(from, dto.Status, isSupervisor);
 
             job.Status = dto.Status;
             job.UpdatedAt = DateTime.UtcNow;
-            await AddStatusLogAsync(job.Id, from, dto.Status, dto.Note, userId);
-            await WriteRepairHistoryAsync(job, from, dto.Status, dto.Note, userId);
+
+            var statusNote = dto.Note;
+            if (isSupervisor && from != dto.Status)
+                statusNote = string.IsNullOrWhiteSpace(statusNote)
+                    ? $"[Override supervisor] {from} → {dto.Status}"
+                    : $"[Override supervisor] {statusNote}";
+
+            await AddStatusLogAsync(job.Id, from, dto.Status, statusNote, userId);
+            await WriteRepairHistoryAsync(job, from, dto.Status, statusNote, userId);
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "StatusChange", userId,
-                $"Status {from} → {dto.Status}");
+                $"Status {from} → {dto.Status}{(isSupervisor ? " (supervisor override)" : "")}");
 
             await _context.SaveChangesAsync();
             return (await GetByIdAsync(id, userId, roleName))!;
@@ -235,7 +279,9 @@ namespace Pm.Services.RadioRepairJob
 
         public async Task<RadioRepairJobDetailDto> UpdateAsync(int id, UpdateRadioRepairJobDto dto, int userId)
         {
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.AssignedTechnician)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
@@ -252,6 +298,17 @@ namespace Pm.Services.RadioRepairJob
             var tech = await _context.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserId == dto.AssignedTechnicianUserId && u.IsActive)
                 ?? throw new ArgumentException("Teknisi tidak valid.");
+
+            // Kumpulkan perubahan sebelum apply
+            var changes = new List<string>();
+            if (!string.Equals(job.HelpdeskTicketNumber, dto.HelpdeskTicketNumber.Trim()))
+                changes.Add($"Tiket: \"{job.HelpdeskTicketNumber}\" → \"{dto.HelpdeskTicketNumber.Trim()}\"");
+            if (!string.Equals(job.RadioSerialNumber, dto.RadioSerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                changes.Add($"SN: \"{job.RadioSerialNumber}\" → \"{dto.RadioSerialNumber.Trim()}\"");
+            if (!string.Equals(job.DamageDescription, dto.DamageDescription.Trim()))
+                changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{dto.DamageDescription.Trim()}\"");
+            if (job.AssignedTechnicianUserId != dto.AssignedTechnicianUserId)
+                changes.Add($"Teknisi: \"{job.AssignedTechnician?.FullName ?? job.AssignedTechnicianUserId.ToString()}\" → \"{tech.FullName}\"");
 
             job.HelpdeskTicketNumber = dto.HelpdeskTicketNumber.Trim();
             job.RadioSerialNumber = dto.RadioSerialNumber.Trim();
@@ -271,8 +328,73 @@ namespace Pm.Services.RadioRepairJob
                 job.OwnerDepartment = string.IsNullOrWhiteSpace(dto.OwnerDepartment) ? null : dto.OwnerDepartment.Trim();
             job.UpdatedAt = DateTime.UtcNow;
 
+            // Catat di StatusLogs agar muncul di timeline detail panel
+            if (changes.Count > 0)
+            {
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = job.Status,
+                    ToStatus = job.Status,
+                    Note = $"[Edit supervisor] {string.Join("; ", changes)}",
+                    UserId = userId,
+                    At = DateTime.UtcNow
+                });
+            }
+
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "Update", userId,
                 $"Edit tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}, teknisi {tech.FullName}");
+
+            // Tulis ke RadioHistories agar muncul di modal Riwayat Perubahan Radio
+            await WriteEditHistoryAsync(job, changes, $"supervisor ({tech.FullName})", userId);
+
+            await _context.SaveChangesAsync();
+            return (await GetByIdAsync(id, userId, null))!;
+        }
+
+        /// <summary>
+        /// Update oleh teknisi — hanya boleh ubah keterangan kerusakan.
+        /// Setiap perubahan dicatat di StatusLogs dengan action "Edit" agar terlihat siapa yang mengubah apa.
+        /// </summary>
+        public async Task<RadioRepairJobDetailDto> TechnicianUpdateAsync(
+            int id, TechnicianUpdateRepairJobDto dto, int userId)
+        {
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
+                throw new InvalidOperationException("Job yang sudah ke warehouse atau helpdesk tidak dapat diedit.");
+
+            var newDamage = dto.DamageDescription.Trim();
+            var changes = new List<string>();
+
+            if (!string.Equals(job.DamageDescription, newDamage, StringComparison.Ordinal))
+            {
+                changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{newDamage}\"");
+                job.DamageDescription = newDamage;
+            }
+
+            if (changes.Count == 0)
+                return (await GetByIdAsync(id, userId, null))!;
+
+            job.UpdatedAt = DateTime.UtcNow;
+
+            // Catat di StatusLogs agar muncul di timeline — siapa yang ubah apa
+            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+            {
+                JobId = job.Id,
+                FromStatus = job.Status,
+                ToStatus = job.Status,
+                Note = $"[Edit oleh teknisi] {string.Join("; ", changes)}",
+                UserId = userId,
+                At = DateTime.UtcNow
+            });
+
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "TechnicianEdit", userId,
+                string.Join("; ", changes));
+
+            // Tulis ke RadioHistories agar muncul di modal Riwayat Perubahan Radio
+            await WriteEditHistoryAsync(job, changes, "teknisi", userId);
 
             await _context.SaveChangesAsync();
             return (await GetByIdAsync(id, userId, null))!;
@@ -395,6 +517,21 @@ namespace Pm.Services.RadioRepairJob
             RadioRepairJobStatus from, RadioRepairJobStatus to, bool isSupervisor)
         {
             if (to == RadioRepairJobStatus.Cancelled) return;
+
+            // Supervisor bisa override ke status manapun (termasuk rollback dari RepairCompleted)
+            // kecuali status yang sudah final (HandedToWarehouse, ReturnedToHelpdesk)
+            if (isSupervisor)
+            {
+                var supervisorForbidden = new[]
+                {
+                    RadioRepairJobStatus.HandedToWarehouse,
+                    RadioRepairJobStatus.ReturnedToHelpdesk
+                };
+                if (supervisorForbidden.Contains(to))
+                    throw new InvalidOperationException($"Status {to} hanya bisa dicapai melalui proses serah terima.");
+                return; // supervisor bebas ke status lain
+            }
+
             var allowed = from switch
             {
                 RadioRepairJobStatus.Received => new[]
@@ -407,7 +544,7 @@ namespace Pm.Services.RadioRepairJob
                 RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
                 RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
                 RadioRepairJobStatus.WaitingMaterialApproval => Array.Empty<RadioRepairJobStatus>(),
-                RadioRepairJobStatus.RepairCompleted => Array.Empty<RadioRepairJobStatus>(),
+                RadioRepairJobStatus.RepairCompleted => new[] { RadioRepairJobStatus.InProgress }, // teknisi bisa rollback jika salah tekan
                 _ => Array.Empty<RadioRepairJobStatus>()
             };
             if (!allowed.Contains(to))
@@ -445,6 +582,25 @@ namespace Pm.Services.RadioRepairJob
             });
         }
 
+        /// <summary>
+        /// Tulis ke RadioHistories saat ada perubahan field data (edit metadata job).
+        /// Hanya dipanggil jika job terhubung ke master radio (RadioId != null).
+        /// </summary>
+        private async Task WriteEditHistoryAsync(
+            Models.RadioRepairJob job, List<string> changes, string editorLabel, int userId)
+        {
+            if (!job.RadioId.HasValue) return;
+            if (changes.Count == 0) return;
+            _context.RadioHistories.Add(new RadioHistory
+            {
+                RadioId = job.RadioId.Value,
+                Action = "RepairJobEdited",
+                Details = $"Job {job.JobNumber} diedit oleh {editorLabel}. Perubahan: {string.Join("; ", changes)}",
+                CreatedBy = await GetUserDisplayNameAsync(userId),
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
         private async Task<string> GetUserDisplayNameAsync(int userId)
         {
             var u = await _context.Users.AsNoTracking()
@@ -475,6 +631,9 @@ namespace Pm.Services.RadioRepairJob
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
             AssignedTechnicianName = job.AssignedTechnician.FullName,
+            CustomStatusId = job.CustomStatusId,
+            CustomStatusLabel = job.CustomStatus?.Label,
+            CustomStatusColor = job.CustomStatus?.Color,
             OpenedByName = job.OpenedBy.FullName,
             OpenedAt = job.OpenedAt,
             ClosedAt = job.ClosedAt,
@@ -559,8 +718,10 @@ namespace Pm.Services.RadioRepairJob
                     item.RadioFleet = radio.Fleet?.Trim();
                 if (string.IsNullOrWhiteSpace(item.RadioCategory))
                     item.RadioCategory = radio.Category;
-                if (string.IsNullOrWhiteSpace(item.EquipmentName))
-                    item.EquipmentName = radio.Type?.Trim();
+                // Selalu pakai nama alat dari master radio jika job terhubung ke master
+                // agar konsisten dengan data yang tampil di detail panel
+                if (!string.IsNullOrWhiteSpace(radio.Type))
+                    item.EquipmentName = radio.Type.Trim();
             }
         }
 

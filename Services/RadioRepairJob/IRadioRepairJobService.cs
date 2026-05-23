@@ -11,6 +11,7 @@ namespace Pm.Services.RadioRepairJob
         Task<RadioRepairJobDetailDto> UpdateStatusAsync(int id, UpdateRadioRepairJobStatusDto dto, int userId, string? roleName);
         Task<RadioRepairJobDetailDto> ApproveMaterialAsync(int id, ApproveMaterialDto dto, int userId);
         Task<RadioRepairJobDetailDto> UpdateAsync(int id, UpdateRadioRepairJobDto dto, int userId);
+        Task<RadioRepairJobDetailDto> TechnicianUpdateAsync(int id, TechnicianUpdateRepairJobDto dto, int userId);
         Task SoftDeleteAsync(int id, int userId);
         Task RestoreAsync(int id, int userId);
         Task DeletePermanentAsync(int id, int userId);

@@ -59,6 +59,15 @@ namespace Pm.Models
 
         public int? CurrentHandoverId { get; set; }
 
+        /// <summary>
+        /// Status custom dari supervisor (nullable).
+        /// Jika terisi, status "efektif" yang ditampilkan adalah label custom ini.
+        /// Status enum tetap InProgress sebagai induk saat job di status custom.
+        /// </summary>
+        public int? CustomStatusId { get; set; }
+        [ForeignKey(nameof(CustomStatusId))]
+        public RepairJobCustomStatus? CustomStatus { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 

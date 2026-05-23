@@ -31,6 +31,12 @@ namespace Pm.DTOs.RadioRepairJob
         public string Status { get; set; } = null!;
         public int AssignedTechnicianUserId { get; set; }
         public string AssignedTechnicianName { get; set; } = null!;
+        /// <summary>ID status custom jika job sedang di status custom.</summary>
+        public int? CustomStatusId { get; set; }
+        /// <summary>Label status custom untuk ditampilkan di UI.</summary>
+        public string? CustomStatusLabel { get; set; }
+        /// <summary>Warna status custom (Tailwind class atau hex).</summary>
+        public string? CustomStatusColor { get; set; }
         public DateTime OpenedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
         public bool IsDeleted { get; set; }
@@ -98,7 +104,7 @@ namespace Pm.DTOs.RadioRepairJob
     public class RadioRepairJobDetailDto : RadioRepairJobListDto
     {
         public string? BatterySerialNumber { get; set; }
-        public string? EquipmentName { get; set; }
+        // EquipmentName sudah ada di RadioRepairJobListDto — tidak perlu redeclare
         public string? UnitNumber { get; set; }
         public string? RadioOwnerLabel { get; set; }
         public string? OwnerDivision { get; set; }
@@ -128,6 +134,11 @@ namespace Pm.DTOs.RadioRepairJob
         public RadioRepairJobStatus Status { get; set; }
         [MaxLength(500)]
         public string? Note { get; set; }
+        /// <summary>
+        /// Jika diisi, job akan masuk ke status custom ini (tetap InProgress di enum).
+        /// Jika null, status custom dihapus dan job kembali ke status enum murni.
+        /// </summary>
+        public int? CustomStatusId { get; set; }
     }
 
     public class ApproveMaterialDto
@@ -160,5 +171,15 @@ namespace Pm.DTOs.RadioRepairJob
         public string? OwnerDivision { get; set; }
         [MaxLength(100)]
         public string? OwnerDepartment { get; set; }
+    }
+
+    /// <summary>
+    /// DTO untuk teknisi — hanya boleh ubah keterangan kerusakan.
+    /// Perubahan dicatat di StatusLogs agar terlihat siapa yang mengubah apa.
+    /// </summary>
+    public class TechnicianUpdateRepairJobDto
+    {
+        [Required, MaxLength(2000)]
+        public string DamageDescription { get; set; } = null!;
     }
 }

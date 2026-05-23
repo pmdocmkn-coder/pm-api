@@ -240,9 +240,6 @@ namespace Pm.Services.RadioHandover
             if (job.Status != RadioRepairJobStatus.RepairCompleted)
                 throw new InvalidOperationException("Job harus berstatus RepairCompleted.");
 
-            if (job.AssignedTechnicianUserId != currentUserId)
-                throw new UnauthorizedAccessException("Hanya teknisi penanggung job yang dapat serah terima ke warehouse.");
-
             var currentRole = await _context.Users.AsNoTracking()
                 .Include(u => u.Role)
                 .Where(u => u.UserId == currentUserId)

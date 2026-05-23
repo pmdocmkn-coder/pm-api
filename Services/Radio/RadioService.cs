@@ -247,7 +247,7 @@ namespace Pm.Services.Radio
 
             var duplicateGroups = await _context.Radios.AsNoTracking()
                 .Where(r => !r.IsScrap && !string.IsNullOrWhiteSpace(r.SerialNumber) && r.SerialNumber != "-" && r.SerialNumber != "n/a" && r.SerialNumber != "N/A")
-                .GroupBy(r => r.SerialNumber.Trim().ToLower())
+                .GroupBy(r => r.SerialNumber!.Trim().ToLower())
                 .Where(g => g.Count() > 1)
                 .Select(g => new
                 {

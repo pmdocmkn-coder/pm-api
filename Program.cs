@@ -209,6 +209,7 @@ builder.Services.AddScoped<IDivisionService, DivisionService>();
 builder.Services.AddScoped<Pm.Services.Radio.IRadioService, Pm.Services.Radio.RadioService>();
 builder.Services.AddScoped<Pm.Services.Media.IImageBase64Validator, Pm.Services.Media.ImageBase64Validator>();
 builder.Services.AddScoped<Pm.Services.RadioRepairJob.IRadioRepairJobService, Pm.Services.RadioRepairJob.RadioRepairJobService>();
+builder.Services.AddScoped<Pm.Services.RepairJobCustomStatus.IRepairJobCustomStatusService, Pm.Services.RepairJobCustomStatus.RepairJobCustomStatusService>();
 builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
 
@@ -303,15 +304,9 @@ builder.Services.Configure<FormOptions>(options =>
 var app = builder.Build();
 
 // ===== Middleware =====
+// Swagger aktif di semua environment untuk keperluan testing internal
 app.UseSwagger();
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1 (DEV)"));
-}
-else
-{
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1"));
-}
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PM MKN API V1"));
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
@@ -321,12 +316,6 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
 app.UseHttpsRedirection();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
 
 // ===== SEEDING (Development Only) =====
 if (app.Environment.IsDevelopment())

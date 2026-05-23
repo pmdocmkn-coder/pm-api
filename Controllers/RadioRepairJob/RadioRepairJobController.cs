@@ -104,6 +104,24 @@ namespace Pm.Controllers.RadioRepairJob
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
+        /// <summary>
+        /// Update oleh teknisi — hanya keterangan kerusakan yang boleh diubah.
+        /// Perubahan dicatat di timeline (StatusLogs) dengan nama teknisi yang mengubah.
+        /// </summary>
+        [HttpPatch("{id}/notes")]
+        [Authorize(Policy = "RadioRepairUpdate")]
+        public async Task<IActionResult> TechnicianUpdate(int id, [FromBody] TechnicianUpdateRepairJobDto dto)
+        {
+            try
+            {
+                var data = await _service.TechnicianUpdateAsync(id, dto, CurrentUserId);
+                return ApiResponse.Success(data, "Keterangan diperbarui");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
         [HttpPatch("{id}/status")]
         [Authorize(Policy = "RadioRepairUpdate")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateRadioRepairJobStatusDto dto)
