@@ -69,7 +69,7 @@ namespace Pm.Services.WarehousePartBorrow
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
-                    RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.JobNumber : null
+                    RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null
                 })
                 .ToListAsync();
 
@@ -90,7 +90,7 @@ namespace Pm.Services.WarehousePartBorrow
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
-                    RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.JobNumber : null
+                    RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null
                 })
                 .ToListAsync();
 
@@ -239,7 +239,7 @@ namespace Pm.Services.WarehousePartBorrow
             Status = b.Status.ToString(),
             BorrowedByName = b.BorrowedBy.FullName,
             RequestedAt = b.RequestedAt,
-            RelatedJobNumber = b.RelatedRepairJob?.JobNumber,
+            RelatedJobNumber = b.RelatedRepairJob?.HelpdeskTicketNumber,
             Purpose = b.Purpose,
             RelatedRepairJobId = b.RelatedRepairJobId,
             ApprovalNote = b.ApprovalNote,

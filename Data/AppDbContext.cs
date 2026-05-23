@@ -1228,6 +1228,7 @@ namespace Pm.Data
             modelBuilder.Entity<RadioRepairJob>(entity =>
             {
                 entity.HasKey(e => e.Id);
+                entity.Property(e => e.JobNumber).HasMaxLength(200);
                 entity.HasIndex(e => e.JobNumber).IsUnique();
                 entity.HasIndex(e => new { e.IsDeleted, e.HelpdeskTicketNumber, e.RadioSerialNumber });
                 entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
@@ -1247,6 +1248,7 @@ namespace Pm.Data
             modelBuilder.Entity<RadioHandover>(entity =>
             {
                 entity.HasKey(e => e.Id);
+                entity.Property(e => e.EquipmentTagType).HasConversion<int>();
                 entity.HasIndex(e => e.HandoverNumber).IsUnique();
                 entity.HasIndex(e => new { e.IsDeleted, e.HandoverAt });
                 entity.Property(e => e.HandoverType).HasConversion<string>().HasMaxLength(50);

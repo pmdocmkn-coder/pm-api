@@ -53,7 +53,6 @@ namespace Pm.Services.RadioRepairJob
             {
                 var s = query.Search.Trim().ToLower();
                 q = q.Where(j =>
-                    j.JobNumber.ToLower().Contains(s) ||
                     j.HelpdeskTicketNumber.ToLower().Contains(s) ||
                     j.RadioSerialNumber.ToLower().Contains(s) ||
                     j.DamageDescription.ToLower().Contains(s) ||
@@ -77,7 +76,6 @@ namespace Pm.Services.RadioRepairJob
                 .Select(j => new RadioRepairJobListDto
                 {
                     Id = j.Id,
-                    JobNumber = j.JobNumber,
                     HelpdeskTicketNumber = j.HelpdeskTicketNumber,
                     RadioSerialNumber = j.RadioSerialNumber,
                     RadioId = j.RadioId,
@@ -576,7 +574,7 @@ namespace Pm.Services.RadioRepairJob
             {
                 RadioId = job.RadioId.Value,
                 Action = "RepairStatusChanged",
-                Details = $"Job {job.JobNumber}: {from} → {to}. Teknisi: {tech}. {(note != null ? "Catatan: " + note : "")}",
+                Details = $"Tiket {job.HelpdeskTicketNumber}: {from} → {to}. Teknisi: {tech}. {(note != null ? "Catatan: " + note : "")}",
                 CreatedBy = await GetUserDisplayNameAsync(userId),
                 CreatedAt = DateTime.UtcNow
             });
@@ -595,7 +593,7 @@ namespace Pm.Services.RadioRepairJob
             {
                 RadioId = job.RadioId.Value,
                 Action = "RepairJobEdited",
-                Details = $"Job {job.JobNumber} diedit oleh {editorLabel}. Perubahan: {string.Join("; ", changes)}",
+                Details = $"Tiket {job.HelpdeskTicketNumber} diedit oleh {editorLabel}. Perubahan: {string.Join("; ", changes)}",
                 CreatedBy = await GetUserDisplayNameAsync(userId),
                 CreatedAt = DateTime.UtcNow
             });
@@ -614,7 +612,6 @@ namespace Pm.Services.RadioRepairJob
         private static RadioRepairJobDetailDto MapDetail(Models.RadioRepairJob job, bool includeDeletedHandovers = false) => new()
         {
             Id = job.Id,
-            JobNumber = job.JobNumber,
             HelpdeskTicketNumber = job.HelpdeskTicketNumber,
             RadioSerialNumber = job.RadioSerialNumber,
             RadioId = job.RadioId,
@@ -657,6 +654,8 @@ namespace Pm.Services.RadioRepairJob
                 HandoverNumber = h.HandoverNumber,
                 HandoverType = h.HandoverType.ToString(),
                 HandoverAt = h.HandoverAt,
+                SignedAt = h.SignedAt,
+                EquipmentTagType = h.EquipmentTagType.ToString(),
                 HandedOverByName = h.HandedOverBy.FullName,
                 ReceivedByName = h.ReceivedBy.FullName,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),

@@ -54,6 +54,30 @@ namespace Pm.DTOs.RadioHandover
         public string? DamageDescription { get; set; }
         public int? RadioRepairJobId { get; set; }
 
+        /// <summary>Tag kuning (rusak) atau hijau (baik). Default rusak untuk HD→Tek.</summary>
+        public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
+
+        [MaxLength(200)]
+        public string? OriginFrom { get; set; }
+        [MaxLength(2000)]
+        public string? RepairDataDescription { get; set; }
+        [MaxLength(200)]
+        public string? RepairedByName { get; set; }
+        [MaxLength(100)]
+        public string? FrequencyError { get; set; }
+        [MaxLength(100)]
+        public string? AfReading { get; set; }
+        [MaxLength(100)]
+        public string? PowerReading { get; set; }
+        [MaxLength(100)]
+        public string? VoltageOutNoLoad { get; set; }
+        [MaxLength(100)]
+        public string? VoltageOutWithLoad { get; set; }
+        [MaxLength(500)]
+        public string? PhysicalCondition { get; set; }
+        [MaxLength(500)]
+        public string? DisplayCondition { get; set; }
+
         [Required]
         public int ReceivedByUserId { get; set; }
 
@@ -76,7 +100,6 @@ namespace Pm.DTOs.RadioHandover
         public string HandoverNumber { get; set; } = null!;
         public string HandoverType { get; set; } = null!;
         public int RadioRepairJobId { get; set; }
-        public string JobNumber { get; set; } = null!;
         public string HelpdeskTicketNumber { get; set; } = null!;
         public string RadioSerialNumber { get; set; } = null!;
         public string? EquipmentName { get; set; }
@@ -90,6 +113,8 @@ namespace Pm.DTOs.RadioHandover
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
         public DateTime HandoverAt { get; set; }
+        public DateTime? SignedAt { get; set; }
+        public string EquipmentTagType { get; set; } = "Damaged";
         public bool HasRadioPhoto { get; set; }
         public bool HasHandedOverSignature { get; set; }
         public bool HasReceiverSignature { get; set; }
@@ -113,9 +138,21 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverDetailDto : RadioHandoverListDto
     {
         public int? RadioId { get; set; }
+        public string? RadioMasterRadioId { get; set; }
+        public string? RadioFleet { get; set; }
         // RadioOwnerLabel, OwnerDivision, OwnerDepartment sudah ada di RadioHandoverListDto — tidak perlu redeclare
         public string? BatterySerialNumber { get; set; }
         public string? DamageDescription { get; set; }
+        public string? OriginFrom { get; set; }
+        public string? RepairDataDescription { get; set; }
+        public string? RepairedByName { get; set; }
+        public string? FrequencyError { get; set; }
+        public string? AfReading { get; set; }
+        public string? PowerReading { get; set; }
+        public string? VoltageOutNoLoad { get; set; }
+        public string? VoltageOutWithLoad { get; set; }
+        public string? PhysicalCondition { get; set; }
+        public string? DisplayCondition { get; set; }
         public string? RadioPhotoBase64 { get; set; }
         public List<string> RadioPhotos { get; set; } = [];
         public string? HandedOverSignatureBase64 { get; set; }

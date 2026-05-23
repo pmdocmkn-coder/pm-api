@@ -59,6 +59,39 @@ namespace Pm.Models
         [MaxLength(1000)]
         public string? Remarks { get; set; }
 
+        /// <summary>Tag kuning (rusak) atau hijau (baik).</summary>
+        public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
+
+        [MaxLength(200)]
+        public string? OriginFrom { get; set; }
+
+        [MaxLength(2000)]
+        public string? RepairDataDescription { get; set; }
+
+        [MaxLength(200)]
+        public string? RepairedByName { get; set; }
+
+        [MaxLength(100)]
+        public string? FrequencyError { get; set; }
+
+        [MaxLength(100)]
+        public string? AfReading { get; set; }
+
+        [MaxLength(100)]
+        public string? PowerReading { get; set; }
+
+        [MaxLength(100)]
+        public string? VoltageOutNoLoad { get; set; }
+
+        [MaxLength(100)]
+        public string? VoltageOutWithLoad { get; set; }
+
+        [MaxLength(500)]
+        public string? PhysicalCondition { get; set; }
+
+        [MaxLength(500)]
+        public string? DisplayCondition { get; set; }
+
         public int HandedOverByUserId { get; set; }
         [ForeignKey(nameof(HandedOverByUserId))]
         public User HandedOverBy { get; set; } = null!;

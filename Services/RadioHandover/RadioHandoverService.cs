@@ -68,7 +68,7 @@ namespace Pm.Services.RadioHandover
                 q = q.Where(h =>
                     h.HandoverNumber.ToLower().Contains(s) ||
                     h.RadioSerialNumber.ToLower().Contains(s) ||
-                    h.RadioRepairJob.JobNumber.ToLower().Contains(s));
+                    h.RadioRepairJob.HelpdeskTicketNumber.ToLower().Contains(s));
             }
 
             var total = await q.CountAsync();
@@ -81,7 +81,6 @@ namespace Pm.Services.RadioHandover
                     HandoverNumber = h.HandoverNumber,
                     HandoverType = h.HandoverType.ToString(),
                     RadioRepairJobId = h.RadioRepairJobId,
-                    JobNumber = h.RadioRepairJob.JobNumber,
                     HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
                     RadioSerialNumber = h.RadioSerialNumber,
                     EquipmentName = h.EquipmentName,
@@ -95,6 +94,8 @@ namespace Pm.Services.RadioHandover
                     HandedOverByName = h.HandedOverBy.FullName,
                     ReceivedByName = h.ReceivedBy.FullName,
                     HandoverAt = h.HandoverAt,
+                    SignedAt = h.SignedAt,
+                    EquipmentTagType = h.EquipmentTagType.ToString(),
                     HasRadioPhoto = h.RadioPhotoBase64 != null && h.RadioPhotoBase64.Length > 0,
                     HasHandedOverSignature = h.HandedOverSignatureBase64 != null && h.HandedOverSignatureBase64.Length > 0,
                     HasReceiverSignature = h.ReceiverSignatureBase64 != null && h.ReceiverSignatureBase64.Length > 0,
@@ -160,8 +161,7 @@ namespace Pm.Services.RadioHandover
         {
             if (string.IsNullOrWhiteSpace(dto.HelpdeskTicketNumber))
                 throw new ArgumentException("No tiket helpdesk wajib diisi.");
-            if (string.IsNullOrWhiteSpace(dto.DamageDescription))
-                throw new ArgumentException("Keterangan kerusakan wajib diisi.");
+            ValidateTagFieldsForCreate(dto);
 
             await ValidateRadioSerialAsync(dto.RadioId, dto.RadioSerialNumber);
             await ValidateTechnicianReceiverAsync(dto.ReceivedByUserId);
@@ -171,23 +171,24 @@ namespace Pm.Services.RadioHandover
                 dto.HelpdeskTicketNumber!.Trim(),
                 dto.RadioSerialNumber.Trim());
 
-            var jobNumber = await DocumentNumberHelper.NextRadioRepairJobNumberAsync(_context);
+            var ticket = dto.HelpdeskTicketNumber.Trim();
+            var serial = dto.RadioSerialNumber.Trim();
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
             var now = DateTime.UtcNow;
 
             var job = new Models.RadioRepairJob
             {
-                JobNumber = jobNumber,
-                HelpdeskTicketNumber = dto.HelpdeskTicketNumber.Trim(),
+                JobNumber = RepairJobReference.InternalKey(ticket, serial),
+                HelpdeskTicketNumber = ticket,
                 RadioId = dto.RadioId,
-                RadioSerialNumber = dto.RadioSerialNumber.Trim(),
+                RadioSerialNumber = serial,
                 BatterySerialNumber = dto.BatterySerialNumber?.Trim(),
                 EquipmentName = equipment.EquipmentName,
                 UnitNumber = equipment.UnitNumber,
                 RadioOwnerLabel = equipment.RadioOwnerLabel,
                 OwnerDivision = equipment.OwnerDivision,
                 OwnerDepartment = equipment.OwnerDepartment,
-                DamageDescription = dto.DamageDescription.Trim(),
+                DamageDescription = ResolveJobDamageDescription(dto),
                 Status = RadioRepairJobStatus.Received,
                 AssignedTechnicianUserId = dto.ReceivedByUserId,
                 OpenedByUserId = currentUserId,
@@ -202,7 +203,7 @@ namespace Pm.Services.RadioHandover
                 JobId = job.Id,
                 FromStatus = null,
                 ToStatus = RadioRepairJobStatus.Received,
-                Note = "Job dibuat dari serah terima HD→Tek",
+                Note = $"Job dibuat dari serah terima HD→Tek (tag {(dto.EquipmentTagType == EquipmentTagType.Good ? "hijau" : "kuning")})",
                 UserId = currentUserId,
                 At = now
             });
@@ -253,6 +254,8 @@ namespace Pm.Services.RadioHandover
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
             var now = DateTime.UtcNow;
 
+            await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.TechnicianToWarehouse);
+
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, true);
             handover.RadioId = job.RadioId ?? dto.RadioId;
             handover.RadioSerialNumber = job.RadioSerialNumber;
@@ -284,7 +287,7 @@ namespace Pm.Services.RadioHandover
                 await AddRepairWarehouseHistoryAsync(job, handover, currentUserId);
 
             await _activityLog.LogAsync("RadioHandover", handover.Id, "Create",
-                currentUserId, $"STR {strNumber} Tek→WH, Job {job.JobNumber}");
+                currentUserId, $"STR {strNumber} Tek→WH, tiket {job.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
             return (await GetByIdAsync(handover.Id))!;
@@ -312,6 +315,14 @@ namespace Pm.Services.RadioHandover
 
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
             var now = DateTime.UtcNow;
+
+            if (dto.EquipmentTagType != EquipmentTagType.Damaged)
+                dto.EquipmentTagType = EquipmentTagType.Good;
+
+            if (dto.EquipmentTagType == EquipmentTagType.Good)
+                ValidateGoodTagFields(dto);
+
+            await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.WarehouseToHelpdesk);
 
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, true);
             handover.HandoverType = RadioHandoverType.WarehouseToHelpdesk;
@@ -343,7 +354,7 @@ namespace Pm.Services.RadioHandover
                 await AddRepairReturnedToHelpdeskHistoryAsync(job, handover, currentUserId);
 
             await _activityLog.LogAsync("RadioHandover", handover.Id, "Create",
-                currentUserId, $"STR {strNumber} WH→HD, Job {job.JobNumber}");
+                currentUserId, $"STR {strNumber} WH→HD, tiket {job.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
             return (await GetByIdAsync(handover.Id))!;
@@ -456,6 +467,7 @@ namespace Pm.Services.RadioHandover
                 Status = receiverSignatureComplete ? "Completed" : "PendingReceiverSignature",
                 CreatedAt = now
             };
+            ApplyTagFields(handover, dto);
 
             for (var i = 0; i < photos.Count; i++)
             {
@@ -480,6 +492,75 @@ namespace Pm.Services.RadioHandover
             }
 
             return handover;
+        }
+
+        private static void ValidateTagFieldsForCreate(CreateRadioHandoverDto dto)
+        {
+            if (dto.EquipmentTagType == EquipmentTagType.Good)
+            {
+                ValidateGoodTagFields(dto);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.DamageDescription))
+                throw new ArgumentException("Keterangan kerusakan wajib untuk tag kuning (peralatan rusak).");
+        }
+
+        private static void ValidateGoodTagFields(CreateRadioHandoverDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.RepairDataDescription))
+                throw new ArgumentException("Data perbaikan wajib untuk tag hijau (peralatan baik).");
+        }
+
+        private static string ResolveJobDamageDescription(CreateRadioHandoverDto dto)
+        {
+            if (dto.EquipmentTagType == EquipmentTagType.Damaged)
+                return dto.DamageDescription!.Trim();
+            return string.IsNullOrWhiteSpace(dto.DamageDescription)
+                ? dto.RepairDataDescription!.Trim()
+                : dto.DamageDescription.Trim();
+        }
+
+        private static void ApplyTagFields(Models.RadioHandover handover, CreateRadioHandoverDto dto)
+        {
+            handover.EquipmentTagType = dto.EquipmentTagType;
+            handover.OriginFrom = dto.OriginFrom?.Trim();
+            handover.RepairDataDescription = dto.RepairDataDescription?.Trim();
+            handover.RepairedByName = dto.RepairedByName?.Trim();
+            handover.FrequencyError = dto.FrequencyError?.Trim();
+            handover.AfReading = dto.AfReading?.Trim();
+            handover.PowerReading = dto.PowerReading?.Trim();
+            handover.VoltageOutNoLoad = dto.VoltageOutNoLoad?.Trim();
+            handover.VoltageOutWithLoad = dto.VoltageOutWithLoad?.Trim();
+            handover.PhysicalCondition = dto.PhysicalCondition?.Trim();
+            handover.DisplayCondition = dto.DisplayCondition?.Trim();
+        }
+
+        private async Task ApplyInheritedTagFieldsAsync(
+            CreateRadioHandoverDto dto, int jobId, RadioHandoverType handoverType)
+        {
+            var prev = await _context.RadioHandovers.AsNoTracking()
+                .Where(h => h.RadioRepairJobId == jobId && !h.IsDeleted)
+                .OrderByDescending(h => h.HandoverAt)
+                .FirstOrDefaultAsync();
+
+            if (handoverType == RadioHandoverType.WarehouseToHelpdesk
+                && dto.EquipmentTagType == EquipmentTagType.Good
+                && string.IsNullOrWhiteSpace(dto.RepairedByName)
+                && prev != null)
+            {
+                var tech = await _context.Users.AsNoTracking()
+                    .Where(u => u.UserId == prev.HandedOverByUserId)
+                    .Select(u => u.FullName)
+                    .FirstOrDefaultAsync();
+                dto.RepairedByName ??= tech;
+            }
+
+            if (handoverType == RadioHandoverType.TechnicianToWarehouse && prev != null)
+                dto.EquipmentTagType = prev.EquipmentTagType;
+
+            if (string.IsNullOrWhiteSpace(dto.OriginFrom) && prev != null)
+                dto.OriginFrom ??= prev.OriginFrom ?? prev.RadioOwnerLabel;
         }
 
         /// <summary>Salin aksesoris dari STR HD→Tek terakhir jika Tek→WH tidak mengirim daftar baru.</summary>
@@ -542,7 +623,7 @@ namespace Pm.Services.RadioHandover
             {
                 RadioId = job.RadioId!.Value,
                 Action = "RepairOpened",
-                Details = $"Tiket: {job.HelpdeskTicketNumber}, Job: {job.JobNumber}, STR: {handover.HandoverNumber}, Kerusakan: {job.DamageDescription}, Teknisi: {techName}",
+                Details = $"Tiket: {job.HelpdeskTicketNumber}, STR: {handover.HandoverNumber}, Kerusakan: {job.DamageDescription}, Teknisi: {techName}",
                 CreatedBy = await GetUserDisplayNameAsync(userId),
                 CreatedAt = DateTime.UtcNow
             });
@@ -559,7 +640,7 @@ namespace Pm.Services.RadioHandover
             {
                 RadioId = job.RadioId!.Value,
                 Action = "RepairReturnedToHelpdesk",
-                Details = $"Job: {job.JobNumber}, STR: {handover.HandoverNumber}, Penerima Helpdesk: {hdName}",
+                Details = $"Tiket: {job.HelpdeskTicketNumber}, STR: {handover.HandoverNumber}, Penerima Helpdesk: {hdName}",
                 CreatedBy = await GetUserDisplayNameAsync(userId),
                 CreatedAt = DateTime.UtcNow
             });
@@ -576,7 +657,7 @@ namespace Pm.Services.RadioHandover
             {
                 RadioId = job.RadioId!.Value,
                 Action = "RepairHandoverWarehouse",
-                Details = $"Job: {job.JobNumber}, STR: {handover.HandoverNumber}, Penerima WH: {whName}",
+                Details = $"Tiket: {job.HelpdeskTicketNumber}, STR: {handover.HandoverNumber}, Penerima WH: {whName}",
                 CreatedBy = await GetUserDisplayNameAsync(userId),
                 CreatedAt = DateTime.UtcNow
             });
@@ -645,11 +726,12 @@ namespace Pm.Services.RadioHandover
             HandoverNumber = h.HandoverNumber,
             HandoverType = h.HandoverType.ToString(),
             RadioRepairJobId = h.RadioRepairJobId,
-            JobNumber = h.RadioRepairJob.JobNumber,
             HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
             JobStatus = h.RadioRepairJob.Status.ToString(),
             RadioSerialNumber = h.RadioSerialNumber,
             RadioId = h.RadioId,
+            RadioMasterRadioId = h.Radio?.RadioId,
+            RadioFleet = h.Radio?.Fleet,
             EquipmentName = h.EquipmentName ?? h.Radio?.Type,
             UnitNumber = h.UnitNumber ?? h.Radio?.NomorUnit,
             RadioOwnerLabel = h.RadioOwnerLabel ?? (h.Radio != null ? FormatRadioOwnerLabel(h.Radio) : null),
@@ -661,6 +743,18 @@ namespace Pm.Services.RadioHandover
             HandedOverByName = h.HandedOverBy.FullName,
             ReceivedByName = h.ReceivedBy.FullName,
             HandoverAt = h.HandoverAt,
+            SignedAt = h.SignedAt,
+            EquipmentTagType = h.EquipmentTagType.ToString(),
+            OriginFrom = h.OriginFrom,
+            RepairDataDescription = h.RepairDataDescription,
+            RepairedByName = h.RepairedByName,
+            FrequencyError = h.FrequencyError,
+            AfReading = h.AfReading,
+            PowerReading = h.PowerReading,
+            VoltageOutNoLoad = h.VoltageOutNoLoad,
+            VoltageOutWithLoad = h.VoltageOutWithLoad,
+            PhysicalCondition = h.PhysicalCondition,
+            DisplayCondition = h.DisplayCondition,
             HasRadioPhoto = h.Photos.Count > 0 || !string.IsNullOrEmpty(h.RadioPhotoBase64),
             HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
             HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),

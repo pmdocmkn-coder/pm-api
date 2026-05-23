@@ -17,7 +17,6 @@ namespace Pm.DTOs.RadioRepairJob
     public class RadioRepairJobListDto
     {
         public int Id { get; set; }
-        public string JobNumber { get; set; } = null!;
         public string HelpdeskTicketNumber { get; set; } = null!;
         public string RadioSerialNumber { get; set; } = null!;
         public int? RadioId { get; set; }
@@ -94,6 +93,8 @@ namespace Pm.DTOs.RadioRepairJob
         public string HandoverNumber { get; set; } = null!;
         public string HandoverType { get; set; } = null!;
         public DateTime HandoverAt { get; set; }
+        public DateTime? SignedAt { get; set; }
+        public string EquipmentTagType { get; set; } = "Damaged";
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
         public bool HasRadioPhoto { get; set; }

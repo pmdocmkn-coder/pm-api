@@ -5,17 +5,6 @@ namespace Pm.Helper
 {
     public static class DocumentNumberHelper
     {
-        public static async Task<string> NextRadioRepairJobNumberAsync(AppDbContext context)
-        {
-            var prefix = $"RRJ-{DateTime.UtcNow:yyyyMM}-";
-            var last = await context.RadioRepairJobs
-                .Where(j => j.JobNumber.StartsWith(prefix))
-                .OrderByDescending(j => j.JobNumber)
-                .Select(j => j.JobNumber)
-                .FirstOrDefaultAsync();
-            return prefix + NextSequence(last, prefix);
-        }
-
         public static async Task<string> NextHandoverNumberAsync(AppDbContext context)
         {
             var prefix = $"STR-{DateTime.UtcNow:yyyyMM}-";

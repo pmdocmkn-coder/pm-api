@@ -10,7 +10,8 @@ namespace Pm.Models
         [Key]
         public int Id { get; set; }
 
-        [Required, MaxLength(30)]
+        /// <summary>Kunci internal unik (tiket::SN). Tidak ditampilkan ke pengguna.</summary>
+        [Required, MaxLength(200)]
         public string JobNumber { get; set; } = null!;
 
         [Required, MaxLength(50)]

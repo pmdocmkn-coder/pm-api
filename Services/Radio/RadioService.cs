@@ -303,6 +303,7 @@ namespace Pm.Services.Radio
                 .Select(r => new RadioLookupDto
                 {
                     Id = r.Id,
+                    RadioId = r.RadioId,
                     Category = r.Category,
                     SerialNumber = r.SerialNumber,
                     Type = r.Type,

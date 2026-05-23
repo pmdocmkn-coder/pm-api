@@ -107,6 +107,8 @@ namespace Pm.DTOs.Radio
     public class RadioLookupDto
     {
         public int Id { get; set; }
+        /// <summary>ID grafir / nomor radio di master (bukan PK database).</summary>
+        public string? RadioId { get; set; }
         public string Category { get; set; } = null!;
         public string? SerialNumber { get; set; }
         public string? Type { get; set; }
