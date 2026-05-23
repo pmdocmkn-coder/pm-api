@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
 #nullable disable
 
-namespace Pm.Migrations
+namespace Pm.Migrations.KpiMonitoring
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260523021143_RadioHandoverEquipmentTag")]
+    partial class RadioHandoverEquipmentTag
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1679,14 +1682,6 @@ namespace Pm.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
 
@@ -1908,20 +1903,8 @@ namespace Pm.Migrations
                     b.Property<int>("OpenedByUserId")
                         .HasColumnType("int");
 
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
-
-                    b.Property<string>("RadioOwnerLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("RadioSerialNumber")
                         .IsRequired()

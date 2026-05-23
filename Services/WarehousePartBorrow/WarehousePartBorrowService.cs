@@ -206,6 +206,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.Status = WarehousePartBorrowStatus.Cancelled;
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Cancelled, "Dibatalkan", userId);
+            await _activityLog.LogAsync("WarehousePartBorrow", b.Id, "Cancel", userId, $"Batalkan {b.BorrowNumber}");
             await _context.SaveChangesAsync();
         }
 

@@ -26,6 +26,21 @@ namespace Pm.Models
         [MaxLength(100)]
         public string? BatterySerialNumber { get; set; }
 
+        [MaxLength(100)]
+        public string? EquipmentName { get; set; }
+
+        [MaxLength(100)]
+        public string? UnitNumber { get; set; }
+
+        [MaxLength(200)]
+        public string? RadioOwnerLabel { get; set; }
+
+        [MaxLength(100)]
+        public string? OwnerDivision { get; set; }
+
+        [MaxLength(100)]
+        public string? OwnerDepartment { get; set; }
+
         [Required, MaxLength(2000)]
         public string DamageDescription { get; set; } = null!;
 
@@ -46,6 +61,10 @@ namespace Pm.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public int? DeletedByUserId { get; set; }
 
         public ICollection<RadioRepairJobStatusLog> StatusLogs { get; set; } = new List<RadioRepairJobStatusLog>();
         public ICollection<RadioHandover> Handovers { get; set; } = new List<RadioHandover>();

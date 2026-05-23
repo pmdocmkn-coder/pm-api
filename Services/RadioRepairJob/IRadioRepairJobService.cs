@@ -10,6 +10,11 @@ namespace Pm.Services.RadioRepairJob
         Task<RadioRepairJobDetailDto?> GetByIdAsync(int id, int currentUserId, string? roleName);
         Task<RadioRepairJobDetailDto> UpdateStatusAsync(int id, UpdateRadioRepairJobStatusDto dto, int userId, string? roleName);
         Task<RadioRepairJobDetailDto> ApproveMaterialAsync(int id, ApproveMaterialDto dto, int userId);
-        Task CancelAsync(int id, int userId, string? roleName);
+        Task<RadioRepairJobDetailDto> UpdateAsync(int id, UpdateRadioRepairJobDto dto, int userId);
+        Task SoftDeleteAsync(int id, int userId);
+        Task RestoreAsync(int id, int userId);
+        Task DeletePermanentAsync(int id, int userId);
+        Task<List<RadioRepairTicketGroupDto>> GetGroupedByTicketAsync(
+            RadioRepairJobQueryDto query, int currentUserId, string? roleName, bool includeDeleted);
     }
 }

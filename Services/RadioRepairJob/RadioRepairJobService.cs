@@ -27,10 +27,14 @@ namespace Pm.Services.RadioRepairJob
         private static bool IsTechnician(string? roleName) =>
             Pm.Helper.OperationalRoleNames.IsTechnicianRole(roleName);
 
+        private static IQueryable<Models.RadioRepairJob> ApplyDeletedFilter(
+            IQueryable<Models.RadioRepairJob> q, bool includeDeleted) =>
+            includeDeleted ? q.Where(j => j.IsDeleted) : q.Where(j => !j.IsDeleted);
+
         public async Task<PagedResultDto<RadioRepairJobListDto>> GetAllAsync(
             RadioRepairJobQueryDto query, int currentUserId, string? roleName)
         {
-            var q = BaseQuery();
+            var q = ApplyDeletedFilter(BaseQuery(), query.IncludeDeleted);
 
             if (IsTechnician(roleName))
                 q = q.Where(j => j.AssignedTechnicianUserId == currentUserId);
@@ -54,7 +58,17 @@ namespace Pm.Services.RadioRepairJob
                     j.JobNumber.ToLower().Contains(s) ||
                     j.HelpdeskTicketNumber.ToLower().Contains(s) ||
                     j.RadioSerialNumber.ToLower().Contains(s) ||
-                    j.DamageDescription.ToLower().Contains(s));
+                    j.DamageDescription.ToLower().Contains(s) ||
+                    (j.EquipmentName != null && j.EquipmentName.ToLower().Contains(s)) ||
+                    (j.Radio != null && j.Radio.RadioId != null && j.Radio.RadioId.ToLower().Contains(s)) ||
+                    (j.Radio != null && j.Radio.Fleet != null && j.Radio.Fleet.ToLower().Contains(s)) ||
+                    (j.Radio != null && j.Radio.Type != null && j.Radio.Type.ToLower().Contains(s)) ||
+                    _context.Radios.Any(r =>
+                        r.SerialNumber != null &&
+                        r.SerialNumber.ToLower() == j.RadioSerialNumber.ToLower() &&
+                        ((r.RadioId != null && r.RadioId.ToLower().Contains(s)) ||
+                         (r.Fleet != null && r.Fleet.ToLower().Contains(s)) ||
+                         (r.Type != null && r.Type.ToLower().Contains(s)))));
             }
 
             var total = await q.CountAsync();
@@ -69,22 +83,53 @@ namespace Pm.Services.RadioRepairJob
                     HelpdeskTicketNumber = j.HelpdeskTicketNumber,
                     RadioSerialNumber = j.RadioSerialNumber,
                     RadioId = j.RadioId,
+                    RadioMasterRadioId = j.Radio != null ? j.Radio.RadioId : null,
+                    RadioFleet = j.Radio != null ? j.Radio.Fleet : null,
                     RadioCategory = j.Radio != null ? j.Radio.Category : null,
+                    EquipmentName = j.EquipmentName ?? (j.Radio != null ? j.Radio.Type : null),
+                    PreviewPhotoBase64 = j.Handovers
+                        .Where(h => h.HandoverType == RadioHandoverType.HelpdeskToTechnician && !h.IsDeleted)
+                        .OrderBy(h => h.HandoverAt)
+                        .Select(h => h.RadioPhotoBase64)
+                        .FirstOrDefault(),
                     DamageDescription = j.DamageDescription,
                     Status = j.Status.ToString(),
                     AssignedTechnicianUserId = j.AssignedTechnicianUserId,
                     AssignedTechnicianName = j.AssignedTechnician.FullName,
                     OpenedAt = j.OpenedAt,
-                    ClosedAt = j.ClosedAt
+                    ClosedAt = j.ClosedAt,
+                    IsDeleted = j.IsDeleted,
+                    DeletedAt = j.DeletedAt
                 })
                 .ToListAsync();
+
+            await EnrichRadioMasterFieldsAsync(items);
 
             return new PagedResultDto<RadioRepairJobListDto>(items, query, total);
         }
 
+        public async Task<List<RadioRepairTicketGroupDto>> GetGroupedByTicketAsync(
+            RadioRepairJobQueryDto query, int currentUserId, string? roleName, bool includeDeleted)
+        {
+            query.IncludeDeleted = includeDeleted;
+            query.Page = 1;
+            query.PageSize = 500;
+            var paged = await GetAllAsync(query, currentUserId, roleName);
+            return paged.Data
+                .GroupBy(j => j.HelpdeskTicketNumber)
+                .OrderByDescending(g => g.Max(x => x.OpenedAt))
+                .Select(g => new RadioRepairTicketGroupDto
+                {
+                    HelpdeskTicketNumber = g.Key,
+                    RadioCount = g.Count(),
+                    Radios = g.OrderByDescending(x => x.OpenedAt).ToList()
+                })
+                .ToList();
+        }
+
         public async Task<RadioRepairDashboardDto> GetDashboardAsync(int currentUserId, string? roleName)
         {
-            var q = _context.RadioRepairJobs.AsNoTracking();
+            var q = _context.RadioRepairJobs.AsNoTracking().Where(j => !j.IsDeleted);
             if (IsTechnician(roleName))
                 q = q.Where(j => j.AssignedTechnicianUserId == currentUserId);
 
@@ -124,19 +169,22 @@ namespace Pm.Services.RadioRepairJob
                 .Include(j => j.StatusLogs).ThenInclude(l => l.User)
                 .Include(j => j.Handovers).ThenInclude(h => h.HandedOverBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.ReceivedBy)
+                .Include(j => j.Handovers).ThenInclude(h => h.Accessories)
                 .FirstOrDefaultAsync(j => j.Id == id);
 
             if (job == null) return null;
             if (IsTechnician(roleName) && job.AssignedTechnicianUserId != currentUserId)
                 throw new UnauthorizedAccessException("Anda tidak memiliki akses ke job ini.");
 
-            return MapDetail(job);
+            var dto = MapDetail(job, includeDeletedHandovers: false);
+            await EnrichRadioMasterFieldsAsync(new List<RadioRepairJobListDto> { dto });
+            return dto;
         }
 
         public async Task<RadioRepairJobDetailDto> UpdateStatusAsync(
             int id, UpdateRadioRepairJobStatusDto dto, int userId, string? roleName)
         {
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id)
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (IsTechnician(roleName) && job.AssignedTechnicianUserId != userId)
@@ -164,7 +212,7 @@ namespace Pm.Services.RadioRepairJob
 
         public async Task<RadioRepairJobDetailDto> ApproveMaterialAsync(int id, ApproveMaterialDto dto, int userId)
         {
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id)
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (job.Status != RadioRepairJobStatus.WaitingMaterialApproval)
@@ -185,20 +233,163 @@ namespace Pm.Services.RadioRepairJob
             return (await GetByIdAsync(id, userId, null))!;
         }
 
-        public async Task CancelAsync(int id, int userId, string? roleName)
+        public async Task<RadioRepairJobDetailDto> UpdateAsync(int id, UpdateRadioRepairJobDto dto, int userId)
         {
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id)
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
-                throw new InvalidOperationException("Job yang sudah ke warehouse atau helpdesk tidak dapat dibatalkan.");
+                throw new InvalidOperationException("Job yang sudah ke warehouse atau kembali ke helpdesk tidak dapat diedit.");
 
-            var from = job.Status;
-            job.Status = RadioRepairJobStatus.Cancelled;
+            await ValidateDuplicateTicketSerialAsync(
+                dto.HelpdeskTicketNumber.Trim(),
+                dto.RadioSerialNumber.Trim(),
+                excludeJobId: id);
+
+            if (dto.RadioId.HasValue)
+                await ValidateRadioSerialLinkAsync(dto.RadioId, dto.RadioSerialNumber);
+
+            var tech = await _context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == dto.AssignedTechnicianUserId && u.IsActive)
+                ?? throw new ArgumentException("Teknisi tidak valid.");
+
+            job.HelpdeskTicketNumber = dto.HelpdeskTicketNumber.Trim();
+            job.RadioSerialNumber = dto.RadioSerialNumber.Trim();
+            job.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
+            job.DamageDescription = dto.DamageDescription.Trim();
+            job.AssignedTechnicianUserId = dto.AssignedTechnicianUserId;
+            job.RadioId = dto.RadioId;
+            if (dto.EquipmentName != null)
+                job.EquipmentName = string.IsNullOrWhiteSpace(dto.EquipmentName) ? null : dto.EquipmentName.Trim();
+            if (dto.UnitNumber != null)
+                job.UnitNumber = string.IsNullOrWhiteSpace(dto.UnitNumber) ? null : dto.UnitNumber.Trim();
+            if (dto.RadioOwnerLabel != null)
+                job.RadioOwnerLabel = string.IsNullOrWhiteSpace(dto.RadioOwnerLabel) ? null : dto.RadioOwnerLabel.Trim();
+            if (dto.OwnerDivision != null)
+                job.OwnerDivision = string.IsNullOrWhiteSpace(dto.OwnerDivision) ? null : dto.OwnerDivision.Trim();
+            if (dto.OwnerDepartment != null)
+                job.OwnerDepartment = string.IsNullOrWhiteSpace(dto.OwnerDepartment) ? null : dto.OwnerDepartment.Trim();
             job.UpdatedAt = DateTime.UtcNow;
-            await AddStatusLogAsync(job.Id, from, RadioRepairJobStatus.Cancelled, "Dibatalkan", userId);
+
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "Update", userId,
+                $"Edit tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}, teknisi {tech.FullName}");
+
+            await _context.SaveChangesAsync();
+            return (await GetByIdAsync(id, userId, null))!;
+        }
+
+        public async Task SoftDeleteAsync(int id, int userId)
+        {
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Handovers)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
+                throw new InvalidOperationException("Job yang sudah ke warehouse atau helpdesk tidak dapat dihapus.");
+
+            var now = DateTime.UtcNow;
+            job.IsDeleted = true;
+            job.DeletedAt = now;
+            job.DeletedByUserId = userId;
+            job.UpdatedAt = now;
+
+            foreach (var h in job.Handovers.Where(x => !x.IsDeleted))
+            {
+                h.IsDeleted = true;
+                h.DeletedAt = now;
+                h.DeletedByUserId = userId;
+                h.UpdatedAt = now;
+            }
+
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "SoftDelete", userId,
+                $"Arsip pekerjaan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
+
             await _context.SaveChangesAsync();
         }
+
+        public async Task RestoreAsync(int id, int userId)
+        {
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Handovers)
+                .FirstOrDefaultAsync(j => j.Id == id && j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job arsip tidak ditemukan.");
+
+            job.IsDeleted = false;
+            job.DeletedAt = null;
+            job.DeletedByUserId = null;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "Restore", userId,
+                $"Pulihkan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeletePermanentAsync(int id, int userId)
+        {
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Handovers).ThenInclude(h => h.Accessories)
+                .Include(j => j.Handovers).ThenInclude(h => h.Photos)
+                .Include(j => j.StatusLogs)
+                .FirstOrDefaultAsync(j => j.Id == id)
+                ?? throw new KeyNotFoundException("Job arsip tidak ditemukan.");
+
+            if (!job.IsDeleted)
+                throw new InvalidOperationException("Pekerjaan harus berada di arsip sebelum dihapus permanen.");
+
+            var ticket = job.HelpdeskTicketNumber;
+            var sn = job.RadioSerialNumber;
+
+            job.CurrentHandoverId = null;
+            foreach (var h in job.Handovers.ToList())
+            {
+                _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
+                _context.RadioHandoverPhotos.RemoveRange(h.Photos);
+                _context.RadioHandovers.Remove(h);
+            }
+
+            _context.RadioRepairJobStatusLogs.RemoveRange(job.StatusLogs);
+            _context.RadioRepairJobs.Remove(job);
+
+            await _activityLog.LogAsync("RadioRepairJob", id, "PermanentlyDeleted", userId,
+                $"Hapus permanen tiket {ticket}, SN {sn}");
+
+            await _context.SaveChangesAsync();
+        }
+
+        internal static async Task ValidateDuplicateTicketSerialAsync(
+            AppDbContext context,
+            string ticket,
+            string serial,
+            int? excludeJobId = null)
+        {
+            var exists = await context.RadioRepairJobs.AnyAsync(j =>
+                !j.IsDeleted &&
+                j.HelpdeskTicketNumber == ticket &&
+                j.RadioSerialNumber == serial &&
+                j.Status != RadioRepairJobStatus.Cancelled &&
+                (!excludeJobId.HasValue || j.Id != excludeJobId.Value));
+            if (exists)
+                throw new InvalidOperationException(
+                    $"Sudah ada pekerjaan aktif untuk tiket {ticket} dengan SN {serial}.");
+        }
+
+        private async Task ValidateDuplicateTicketSerialAsync(string ticket, string serial, int? excludeJobId = null) =>
+            await ValidateDuplicateTicketSerialAsync(_context, ticket, serial, excludeJobId);
+
+        private static async Task ValidateRadioSerialLinkAsync(AppDbContext context, int? radioId, string serial)
+        {
+            if (!radioId.HasValue) return;
+            var radio = await context.Radios.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == radioId.Value)
+                ?? throw new ArgumentException("Radio tidak ditemukan di master.");
+            if (!string.Equals(radio.SerialNumber, serial.Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Serial number tidak cocok dengan data master radio.");
+        }
+
+        private Task ValidateRadioSerialLinkAsync(int? radioId, string serial) =>
+            ValidateRadioSerialLinkAsync(_context, radioId, serial);
 
         private static void ValidateStatusTransition(
             RadioRepairJobStatus from, RadioRepairJobStatus to, bool isSupervisor)
@@ -206,7 +397,13 @@ namespace Pm.Services.RadioRepairJob
             if (to == RadioRepairJobStatus.Cancelled) return;
             var allowed = from switch
             {
-                RadioRepairJobStatus.Received => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.Cancelled },
+                RadioRepairJobStatus.Received => new[]
+                {
+                    RadioRepairJobStatus.InProgress,
+                    RadioRepairJobStatus.Monitoring,
+                    RadioRepairJobStatus.WaitingMaterialApproval,
+                    RadioRepairJobStatus.Cancelled
+                },
                 RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
                 RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
                 RadioRepairJobStatus.WaitingMaterialApproval => Array.Empty<RadioRepairJobStatus>(),
@@ -258,15 +455,22 @@ namespace Pm.Services.RadioRepairJob
             return string.IsNullOrWhiteSpace(u.FullName) ? u.Username! : $"{u.FullName} ({u.Username})";
         }
 
-        private static RadioRepairJobDetailDto MapDetail(Models.RadioRepairJob job) => new()
+        private static RadioRepairJobDetailDto MapDetail(Models.RadioRepairJob job, bool includeDeletedHandovers = false) => new()
         {
             Id = job.Id,
             JobNumber = job.JobNumber,
             HelpdeskTicketNumber = job.HelpdeskTicketNumber,
             RadioSerialNumber = job.RadioSerialNumber,
             RadioId = job.RadioId,
+            RadioMasterRadioId = job.Radio?.RadioId,
+            RadioFleet = job.Radio?.Fleet,
             RadioCategory = job.Radio?.Category,
             BatterySerialNumber = job.BatterySerialNumber,
+            EquipmentName = job.EquipmentName ?? job.Radio?.Type,
+            UnitNumber = job.UnitNumber ?? job.Radio?.NomorUnit,
+            RadioOwnerLabel = job.RadioOwnerLabel ?? FormatJobOwnerLabel(job.Radio),
+            OwnerDivision = job.OwnerDivision ?? job.Radio?.Division,
+            OwnerDepartment = job.OwnerDepartment ?? job.Radio?.Department,
             DamageDescription = job.DamageDescription,
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
@@ -274,6 +478,8 @@ namespace Pm.Services.RadioRepairJob
             OpenedByName = job.OpenedBy.FullName,
             OpenedAt = job.OpenedAt,
             ClosedAt = job.ClosedAt,
+            IsDeleted = job.IsDeleted,
+            DeletedAt = job.DeletedAt,
             StatusLogs = job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
@@ -283,7 +489,10 @@ namespace Pm.Services.RadioRepairJob
                 UserName = l.User.FullName,
                 At = l.At
             }).ToList(),
-            Handovers = job.Handovers.OrderBy(h => h.HandoverAt).Select(h => new RadioRepairJobHandoverSummaryDto
+            Handovers = job.Handovers
+                .Where(h => includeDeletedHandovers || !h.IsDeleted)
+                .OrderBy(h => h.HandoverAt)
+                .Select(h => new RadioRepairJobHandoverSummaryDto
             {
                 Id = h.Id,
                 HandoverNumber = h.HandoverNumber,
@@ -294,6 +503,97 @@ namespace Pm.Services.RadioRepairJob
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64)
+            }).ToList(),
+            PrimaryHandover = job.Handovers
+                .Where(h => !h.IsDeleted && h.HandoverType == RadioHandoverType.HelpdeskToTechnician)
+                .OrderBy(h => h.HandoverAt)
+                .Select(h => MapPrimaryHandover(h, job))
+                .FirstOrDefault()
+        };
+
+        /// <summary>Isi ID Radio & Fleet dari master (FK atau lookup SN) jika belum terisi di DTO.</summary>
+        private async Task EnrichRadioMasterFieldsAsync(IList<RadioRepairJobListDto> items)
+        {
+            if (items.Count == 0) return;
+
+            var radioIds = items.Where(i => i.RadioId.HasValue).Select(i => i.RadioId!.Value).Distinct().ToList();
+            var serialKeys = items
+                .Select(i => i.RadioSerialNumber.Trim())
+                .Where(s => s.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var radiosById = radioIds.Count > 0
+                ? await _context.Radios.AsNoTracking()
+                    .Where(r => radioIds.Contains(r.Id))
+                    .ToDictionaryAsync(r => r.Id)
+                : new Dictionary<int, Models.Radio>();
+
+            var allBySerial = serialKeys.Count > 0
+                ? await _context.Radios.AsNoTracking()
+                    .Where(r => r.SerialNumber != null)
+                    .ToListAsync()
+                : new List<Models.Radio>();
+
+            var serialMap = allBySerial
+                .Where(r => serialKeys.Contains(r.SerialNumber!.Trim(), StringComparer.OrdinalIgnoreCase))
+                .GroupBy(r => r.SerialNumber!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.Id).First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in items)
+            {
+                Models.Radio? radio = null;
+                if (item.RadioId.HasValue && radiosById.TryGetValue(item.RadioId.Value, out var byId))
+                    radio = byId;
+                else if (serialMap.TryGetValue(item.RadioSerialNumber.Trim(), out var bySn))
+                {
+                    radio = bySn;
+                    item.RadioId ??= radio.Id;
+                }
+
+                if (radio == null) continue;
+
+                if (string.IsNullOrWhiteSpace(item.RadioMasterRadioId))
+                    item.RadioMasterRadioId = radio.RadioId?.Trim();
+                if (string.IsNullOrWhiteSpace(item.RadioFleet))
+                    item.RadioFleet = radio.Fleet?.Trim();
+                if (string.IsNullOrWhiteSpace(item.RadioCategory))
+                    item.RadioCategory = radio.Category;
+                if (string.IsNullOrWhiteSpace(item.EquipmentName))
+                    item.EquipmentName = radio.Type?.Trim();
+            }
+        }
+
+        private static string? FormatJobOwnerLabel(Models.Radio? radio)
+        {
+            if (radio == null) return null;
+            if (!string.IsNullOrWhiteSpace(radio.Company)) return radio.Company.Trim();
+            return radio.Category;
+        }
+
+        private static RadioRepairPrimaryHandoverDto MapPrimaryHandover(Models.RadioHandover h, Models.RadioRepairJob job) => new()
+        {
+            Id = h.Id,
+            HandoverNumber = h.HandoverNumber,
+            HandoverAt = h.HandoverAt,
+            HandedOverByName = h.HandedOverBy.FullName,
+            ReceivedByName = h.ReceivedBy.FullName,
+            Status = h.Status,
+            EquipmentName = h.EquipmentName,
+            UnitNumber = h.UnitNumber,
+            RadioOwnerLabel = h.RadioOwnerLabel,
+            OwnerDivision = h.OwnerDivision,
+            OwnerDepartment = h.OwnerDepartment,
+            RadioSerialNumber = h.RadioSerialNumber,
+            BatterySerialNumber = h.BatterySerialNumber,
+            DamageDescription = job.DamageDescription,
+            Accessories = h.Accessories.Select(a => new RadioRepairHandoverAccessoryDto
+            {
+                ItemName = string.IsNullOrWhiteSpace(a.ItemName) ? (a.AccessoryCode ?? "") : a.ItemName,
+                Quantity = a.Quantity,
+                Unit = a.Unit,
+                Description = a.Description,
+                SerialNumber = a.SerialNumber
             }).ToList()
         };
     }

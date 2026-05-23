@@ -21,10 +21,19 @@ namespace Pm.Controllers.RadioHandover
 
         private string? RoleName => User.FindFirst("RoleName")?.Value;
 
+        private IActionResult? GuardArchiveQuery(bool includeDeleted)
+        {
+            if (includeDeleted && !User.HasClaim("Permission", "radio.handover.view.archive"))
+                return ApiResponse.Forbidden();
+            return null;
+        }
+
         [HttpGet]
         [Authorize(Policy = "RadioHandoverView")]
         public async Task<IActionResult> GetAll([FromQuery] RadioHandoverQueryDto query)
         {
+            var guard = GuardArchiveQuery(query.IncludeDeleted);
+            if (guard != null) return guard;
             try
             {
                 var data = await _service.GetAllAsync(query, CurrentUserId, RoleName);
@@ -118,6 +127,60 @@ namespace Pm.Controllers.RadioHandover
             {
                 return ApiResponse.Success(await _service.GetHelpdeskReceiversAsync());
             }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}")]
+        [Authorize(Policy = "RadioHandoverEdit")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateRadioHandoverDto dto)
+        {
+            try
+            {
+                var data = await _service.UpdateAsync(id, dto, CurrentUserId);
+                return ApiResponse.Success(data, "Serah terima diperbarui");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Policy = "RadioHandoverDelete")]
+        public async Task<IActionResult> SoftDelete(int id)
+        {
+            try
+            {
+                await _service.SoftDeleteAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Serah terima dipindah ke arsip");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("handover", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/restore")]
+        [Authorize(Policy = "RadioHandoverViewArchive")]
+        public async Task<IActionResult> Restore(int id)
+        {
+            try
+            {
+                await _service.RestoreAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Serah terima dipulihkan");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpDelete("{id}/permanent")]
+        [Authorize(Policy = "RadioHandoverDeletePermanent")]
+        public async Task<IActionResult> DeletePermanent(int id)
+        {
+            try
+            {
+                await _service.DeletePermanentAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Serah terima dihapus permanen");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("handover", new[] { ex.Message }); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
     }

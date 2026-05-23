@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
 #nullable disable
 
-namespace Pm.Migrations
+namespace Pm.Migrations.KpiMonitoring
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260523003316_ExtendRadioHandoverStatusLength")]
+    partial class ExtendRadioHandoverStatusLength
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1647,16 +1650,6 @@ namespace Pm.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("DeletedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EquipmentName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int>("HandedOverByUserId")
                         .HasColumnType("int");
 
@@ -1676,23 +1669,8 @@ namespace Pm.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
-
-                    b.Property<string>("RadioOwnerLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("RadioPhotoBase64")
                         .HasColumnType("longtext");
@@ -1723,10 +1701,6 @@ namespace Pm.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<string>("UnitNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1742,8 +1716,6 @@ namespace Pm.Migrations
                     b.HasIndex("RadioRepairJobId");
 
                     b.HasIndex("ReceivedByUserId");
-
-                    b.HasIndex("IsDeleted", "HandoverAt");
 
                     b.ToTable("RadioHandovers");
                 });
@@ -1879,23 +1851,10 @@ namespace Pm.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("DeletedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EquipmentName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<string>("HelpdeskTicketNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("JobNumber")
                         .IsRequired()
@@ -1908,20 +1867,8 @@ namespace Pm.Migrations
                     b.Property<int>("OpenedByUserId")
                         .HasColumnType("int");
 
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
-
-                    b.Property<string>("RadioOwnerLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("RadioSerialNumber")
                         .IsRequired()
@@ -1932,10 +1879,6 @@ namespace Pm.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
-
-                    b.Property<string>("UnitNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -1950,8 +1893,6 @@ namespace Pm.Migrations
                     b.HasIndex("OpenedByUserId");
 
                     b.HasIndex("RadioId");
-
-                    b.HasIndex("IsDeleted", "HelpdeskTicketNumber", "RadioSerialNumber");
 
                     b.ToTable("RadioRepairJobs");
                 });

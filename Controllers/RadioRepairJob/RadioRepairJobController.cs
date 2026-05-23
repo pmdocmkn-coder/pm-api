@@ -21,13 +21,39 @@ namespace Pm.Controllers.RadioRepairJob
 
         private string? RoleName => User.FindFirst("RoleName")?.Value;
 
+        private bool HasPermission(string name) =>
+            User.HasClaim("Permission", name);
+
+        private IActionResult? GuardArchiveQuery(bool includeDeleted)
+        {
+            if (includeDeleted && !HasPermission("radio.repair.view.archive"))
+                return ApiResponse.Forbidden();
+            return null;
+        }
+
         [HttpGet]
         [Authorize(Policy = "RadioRepairView")]
         public async Task<IActionResult> GetAll([FromQuery] RadioRepairJobQueryDto query)
         {
+            var guard = GuardArchiveQuery(query.IncludeDeleted);
+            if (guard != null) return guard;
             try
             {
                 var data = await _service.GetAllAsync(query, CurrentUserId, RoleName);
+                return ApiResponse.Success(data);
+            }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpGet("by-ticket")]
+        [Authorize(Policy = "RadioRepairView")]
+        public async Task<IActionResult> GetByTicket([FromQuery] RadioRepairJobQueryDto query, [FromQuery] bool includeDeleted = false)
+        {
+            var guard = GuardArchiveQuery(includeDeleted);
+            if (guard != null) return guard;
+            try
+            {
+                var data = await _service.GetGroupedByTicketAsync(query, CurrentUserId, RoleName, includeDeleted);
                 return ApiResponse.Success(data);
             }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
@@ -47,15 +73,34 @@ namespace Pm.Controllers.RadioRepairJob
 
         [HttpGet("{id}")]
         [Authorize(Policy = "RadioRepairView")]
-        public async Task<IActionResult> GetById(int id)
+        public async Task<IActionResult> GetById(int id, [FromQuery] bool includeDeleted = false)
         {
+            var guard = GuardArchiveQuery(includeDeleted);
+            if (guard != null) return guard;
             try
             {
                 var data = await _service.GetByIdAsync(id, CurrentUserId, RoleName);
-                if (data == null) return ApiResponse.NotFound("Job tidak ditemukan");
+                if (data == null) return ApiResponse.NotFound("Pekerjaan tidak ditemukan");
+                if (data.IsDeleted && !includeDeleted)
+                    return ApiResponse.NotFound("Pekerjaan tidak ditemukan");
                 return ApiResponse.Success(data);
             }
             catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}")]
+        [Authorize(Policy = "RadioRepairEdit")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateRadioRepairJobDto dto)
+        {
+            try
+            {
+                var data = await _service.UpdateAsync(id, dto, CurrentUserId);
+                return ApiResponse.Success(data, "Pekerjaan diperbarui");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (ArgumentException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -90,12 +135,39 @@ namespace Pm.Controllers.RadioRepairJob
 
         [HttpDelete("{id}")]
         [Authorize(Policy = "RadioRepairDelete")]
-        public async Task<IActionResult> Cancel(int id)
+        public async Task<IActionResult> SoftDelete(int id)
         {
             try
             {
-                await _service.CancelAsync(id, CurrentUserId, RoleName);
-                return ApiResponse.Success(null, "Job dibatalkan");
+                await _service.SoftDeleteAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Pekerjaan dipindah ke arsip");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/restore")]
+        [Authorize(Policy = "RadioRepairViewArchive")]
+        public async Task<IActionResult> Restore(int id)
+        {
+            try
+            {
+                await _service.RestoreAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Pekerjaan dipulihkan");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpDelete("{id}/permanent")]
+        [Authorize(Policy = "RadioRepairDeletePermanent")]
+        public async Task<IActionResult> DeletePermanent(int id)
+        {
+            try
+            {
+                await _service.DeletePermanentAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Pekerjaan dihapus permanen");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }

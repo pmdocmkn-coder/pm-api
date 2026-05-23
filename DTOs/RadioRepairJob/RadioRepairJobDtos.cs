@@ -10,6 +10,8 @@ namespace Pm.DTOs.RadioRepairJob
         public int? TechnicianUserId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
+        /// <summary>Hanya dengan permission radio.repair.view.archive.</summary>
+        public bool IncludeDeleted { get; set; }
     }
 
     public class RadioRepairJobListDto
@@ -19,13 +21,27 @@ namespace Pm.DTOs.RadioRepairJob
         public string HelpdeskTicketNumber { get; set; } = null!;
         public string RadioSerialNumber { get; set; } = null!;
         public int? RadioId { get; set; }
+        /// <summary>ID Radio dari master (kolom RadioId di tabel Radios).</summary>
+        public string? RadioMasterRadioId { get; set; }
+        public string? RadioFleet { get; set; }
         public string? RadioCategory { get; set; }
+        public string? EquipmentName { get; set; }
+        public string? PreviewPhotoBase64 { get; set; }
         public string DamageDescription { get; set; } = null!;
         public string Status { get; set; } = null!;
         public int AssignedTechnicianUserId { get; set; }
         public string AssignedTechnicianName { get; set; } = null!;
         public DateTime OpenedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+    }
+
+    public class RadioRepairTicketGroupDto
+    {
+        public string HelpdeskTicketNumber { get; set; } = null!;
+        public int RadioCount { get; set; }
+        public List<RadioRepairJobListDto> Radios { get; set; } = [];
     }
 
     public class RadioRepairJobStatusLogDto
@@ -36,6 +52,34 @@ namespace Pm.DTOs.RadioRepairJob
         public string? Note { get; set; }
         public string UserName { get; set; } = null!;
         public DateTime At { get; set; }
+    }
+
+    public class RadioRepairHandoverAccessoryDto
+    {
+        public string ItemName { get; set; } = null!;
+        public int Quantity { get; set; }
+        public string? Unit { get; set; }
+        public string? Description { get; set; }
+        public string? SerialNumber { get; set; }
+    }
+
+    public class RadioRepairPrimaryHandoverDto
+    {
+        public int Id { get; set; }
+        public string HandoverNumber { get; set; } = null!;
+        public DateTime HandoverAt { get; set; }
+        public string HandedOverByName { get; set; } = null!;
+        public string ReceivedByName { get; set; } = null!;
+        public string Status { get; set; } = null!;
+        public string? EquipmentName { get; set; }
+        public string? UnitNumber { get; set; }
+        public string? RadioOwnerLabel { get; set; }
+        public string? OwnerDivision { get; set; }
+        public string? OwnerDepartment { get; set; }
+        public string RadioSerialNumber { get; set; } = null!;
+        public string? BatterySerialNumber { get; set; }
+        public string DamageDescription { get; set; } = null!;
+        public List<RadioRepairHandoverAccessoryDto> Accessories { get; set; } = [];
     }
 
     public class RadioRepairJobHandoverSummaryDto
@@ -54,9 +98,15 @@ namespace Pm.DTOs.RadioRepairJob
     public class RadioRepairJobDetailDto : RadioRepairJobListDto
     {
         public string? BatterySerialNumber { get; set; }
+        public string? EquipmentName { get; set; }
+        public string? UnitNumber { get; set; }
+        public string? RadioOwnerLabel { get; set; }
+        public string? OwnerDivision { get; set; }
+        public string? OwnerDepartment { get; set; }
         public string OpenedByName { get; set; } = null!;
         public List<RadioRepairJobStatusLogDto> StatusLogs { get; set; } = [];
         public List<RadioRepairJobHandoverSummaryDto> Handovers { get; set; } = [];
+        public RadioRepairPrimaryHandoverDto? PrimaryHandover { get; set; }
     }
 
     public class RadioRepairDashboardDto
@@ -85,5 +135,30 @@ namespace Pm.DTOs.RadioRepairJob
         public RadioRepairJobStatus ResumeStatus { get; set; } = RadioRepairJobStatus.InProgress;
         [MaxLength(500)]
         public string? Note { get; set; }
+    }
+
+    public class UpdateRadioRepairJobDto
+    {
+        [Required, MaxLength(50)]
+        public string HelpdeskTicketNumber { get; set; } = null!;
+        [Required, MaxLength(100)]
+        public string RadioSerialNumber { get; set; } = null!;
+        [MaxLength(100)]
+        public string? BatterySerialNumber { get; set; }
+        [Required, MaxLength(2000)]
+        public string DamageDescription { get; set; } = null!;
+        [Required]
+        public int AssignedTechnicianUserId { get; set; }
+        public int? RadioId { get; set; }
+        [MaxLength(100)]
+        public string? EquipmentName { get; set; }
+        [MaxLength(100)]
+        public string? UnitNumber { get; set; }
+        [MaxLength(200)]
+        public string? RadioOwnerLabel { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDivision { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDepartment { get; set; }
     }
 }

@@ -306,9 +306,19 @@ namespace Pm.Services.Radio
                     Category = r.Category,
                     SerialNumber = r.SerialNumber,
                     Type = r.Type,
+                    Company = r.Company,
                     Division = r.Division,
                     Department = r.Department,
                     NomorAset = r.NomorAset,
+                    NomorUnit = r.NomorUnit,
+                    NomorLv = r.NomorLv,
+                    Fleet = r.Fleet,
+                    Channel = r.Channel,
+                    OwnerLabel = r.Company != null && r.Company != ""
+                        ? (r.Division != null && r.Division != ""
+                            ? r.Company + " · " + r.Division
+                            : r.Company)
+                        : (r.Division ?? r.Department ?? r.Category),
                     Label = $"{r.SerialNumber} — {r.Category}" + (r.NomorAset != null ? $" ({r.NomorAset})" : "")
                 })
                 .ToListAsync();

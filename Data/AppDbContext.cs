@@ -1228,6 +1228,7 @@ namespace Pm.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.JobNumber).IsUnique();
+                entity.HasIndex(e => new { e.IsDeleted, e.HelpdeskTicketNumber, e.RadioSerialNumber });
                 entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
                 entity.HasOne(e => e.AssignedTechnician).WithMany().HasForeignKey(e => e.AssignedTechnicianUserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(e => e.OpenedBy).WithMany().HasForeignKey(e => e.OpenedByUserId).OnDelete(DeleteBehavior.Restrict);
@@ -1246,6 +1247,7 @@ namespace Pm.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.HandoverNumber).IsUnique();
+                entity.HasIndex(e => new { e.IsDeleted, e.HandoverAt });
                 entity.Property(e => e.HandoverType).HasConversion<string>().HasMaxLength(50);
                 entity.Property(e => e.RadioPhotoBase64).HasColumnType("longtext");
                 entity.Property(e => e.HandedOverSignatureBase64).HasColumnType("longtext");

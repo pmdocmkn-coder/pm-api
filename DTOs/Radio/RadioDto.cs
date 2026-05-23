@@ -110,9 +110,15 @@ namespace Pm.DTOs.Radio
         public string Category { get; set; } = null!;
         public string? SerialNumber { get; set; }
         public string? Type { get; set; }
+        public string? Company { get; set; }
         public string? Division { get; set; }
         public string? Department { get; set; }
         public string? NomorAset { get; set; }
+        public string? NomorUnit { get; set; }
+        public string? NomorLv { get; set; }
+        public string? Fleet { get; set; }
+        public string? Channel { get; set; }
+        public string? OwnerLabel { get; set; }
         public string Label { get; set; } = null!;
     }
 }

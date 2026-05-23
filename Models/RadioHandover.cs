@@ -29,6 +29,24 @@ namespace Pm.Models
         [MaxLength(100)]
         public string? BatterySerialNumber { get; set; }
 
+        /// <summary>Tipe/nama alat (dari master Type atau input manual jika belum terdaftar).</summary>
+        [MaxLength(100)]
+        public string? EquipmentName { get; set; }
+
+        /// <summary>Nomor unit — dari master atau input manual.</summary>
+        [MaxLength(100)]
+        public string? UnitNumber { get; set; }
+
+        /// <summary>Pemilik radio (perusahaan / nama user) — master atau input manual.</summary>
+        [MaxLength(200)]
+        public string? RadioOwnerLabel { get; set; }
+
+        [MaxLength(100)]
+        public string? OwnerDivision { get; set; }
+
+        [MaxLength(100)]
+        public string? OwnerDepartment { get; set; }
+
         [Column(TypeName = "longtext")]
         public string? RadioPhotoBase64 { get; set; }
 
@@ -52,11 +70,15 @@ namespace Pm.Models
         public DateTime HandoverAt { get; set; } = DateTime.UtcNow;
         public DateTime? SignedAt { get; set; }
 
-        [Required, MaxLength(20)]
+        [Required, MaxLength(50)]
         public string Status { get; set; } = "Completed";
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public int? DeletedByUserId { get; set; }
 
         public ICollection<RadioHandoverAccessory> Accessories { get; set; } = new List<RadioHandoverAccessory>();
         public ICollection<RadioHandoverPhoto> Photos { get; set; } = new List<RadioHandoverPhoto>();

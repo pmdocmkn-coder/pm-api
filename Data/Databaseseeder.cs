@@ -196,7 +196,10 @@ public static class DatabaseSeeder
                     new() { PermissionName = "radio.repair.view", Description = "Lihat dashboard & detail job perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.repair.update", Description = "Teknisi update status perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.repair.supervise", Description = "Supervisor approve material", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionName = "radio.repair.delete", Description = "Batalkan job perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.delete", Description = "Soft delete pekerjaan perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.edit", Description = "Edit metadata pekerjaan perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.view.archive", Description = "Lihat arsip pekerjaan yang dihapus", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.delete.permanent", Description = "Hapus permanen pekerjaan di arsip", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
 
                     // Radio Handover
                     new() { PermissionName = "radio.handover.menu", Description = "Menu serah terima radio", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
@@ -206,6 +209,10 @@ public static class DatabaseSeeder
                     new() { PermissionName = "radio.handover.create.tek_wh", Description = "Buat serah terima Teknisi → Warehouse", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.handover.create.wh_hd", Description = "Buat serah terima Warehouse → Helpdesk", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.handover.export", Description = "Export serah terima", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.delete", Description = "Soft delete serah terima", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.edit", Description = "Edit catatan serah terima", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.view.archive", Description = "Lihat arsip serah terima dihapus", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.handover.delete.permanent", Description = "Hapus permanen STR di arsip", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },
 
                     // Warehouse Borrow
                     new() { PermissionName = "warehouse.borrow.menu", Description = "Menu peminjaman warehouse", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
@@ -329,7 +336,9 @@ public static class DatabaseSeeder
                 ["Helpdesk"] = new[]
                 {
                     "radio.handover.menu", "radio.handover.view", "radio.handover.create.hd",
-                    "radio.repair.view"
+                    "radio.handover.delete", "radio.handover.edit", "radio.handover.view.archive",
+                    "radio.repair.view", "radio.repair.edit", "radio.repair.delete", "radio.repair.view.archive", "radio.repair.delete.permanent",
+                    "radio.handover.delete.permanent"
                 },
                 ["Teknisi"] = new[]
                 {
@@ -385,6 +394,34 @@ public static class DatabaseSeeder
                     logger.LogInformation("Adding {Count} permissions to role {Role}...", toAdd.Count, roleName);
                     await context.RolePermissions.AddRangeAsync(toAdd);
                     await context.SaveChangesAsync();
+                }
+            }
+
+            // 7. Cabut permission yang tidak boleh dimiliki Helpdesk (mis. dari assign manual / legacy)
+            var helpdeskRole = await context.Roles.FirstOrDefaultAsync(r => r.RoleName == "Helpdesk");
+            if (helpdeskRole != null)
+            {
+                var revokeFromHelpdesk = new[]
+                {
+                    "radio.repair.update",
+                    "radio.handover.create",
+                    "radio.handover.create.tek_wh",
+                    "radio.handover.create.wh_hd"
+                };
+                var revokePermIds = allPermissions
+                    .Where(p => revokeFromHelpdesk.Contains(p.PermissionName))
+                    .Select(p => p.PermissionId)
+                    .ToHashSet();
+                var wrongAssignments = await context.RolePermissions
+                    .Where(rp => rp.RoleId == helpdeskRole.RoleId && revokePermIds.Contains(rp.PermissionId))
+                    .ToListAsync();
+                if (wrongAssignments.Count > 0)
+                {
+                    context.RolePermissions.RemoveRange(wrongAssignments);
+                    await context.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Revoked {Count} inappropriate permissions from Helpdesk role.",
+                        wrongAssignments.Count);
                 }
             }
 

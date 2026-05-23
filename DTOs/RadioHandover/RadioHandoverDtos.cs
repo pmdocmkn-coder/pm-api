@@ -11,6 +11,8 @@ namespace Pm.DTOs.RadioHandover
         public int? ReceivedByUserId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
+        /// <summary>Hanya dengan permission radio.handover.view.archive.</summary>
+        public bool IncludeDeleted { get; set; }
     }
 
     public class HandoverAccessoryItemDto
@@ -38,6 +40,17 @@ namespace Pm.DTOs.RadioHandover
         public string RadioSerialNumber { get; set; } = null!;
         [MaxLength(100)]
         public string? BatterySerialNumber { get; set; }
+        /// <summary>Wajib jika RadioId kosong (belum di master).</summary>
+        [MaxLength(100)]
+        public string? EquipmentName { get; set; }
+        [MaxLength(100)]
+        public string? UnitNumber { get; set; }
+        [MaxLength(200)]
+        public string? RadioOwnerLabel { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDivision { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDepartment { get; set; }
         public string? DamageDescription { get; set; }
         public int? RadioRepairJobId { get; set; }
 
@@ -64,7 +77,16 @@ namespace Pm.DTOs.RadioHandover
         public string HandoverType { get; set; } = null!;
         public int RadioRepairJobId { get; set; }
         public string JobNumber { get; set; } = null!;
+        public string HelpdeskTicketNumber { get; set; } = null!;
         public string RadioSerialNumber { get; set; } = null!;
+        public string? EquipmentName { get; set; }
+        public string? UnitNumber { get; set; }
+        public string? RadioOwnerLabel { get; set; }
+        public string? OwnerDivision { get; set; }
+        public string? OwnerDepartment { get; set; }
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public int ReceivedByUserId { get; set; }
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
         public DateTime HandoverAt { get; set; }
@@ -76,6 +98,12 @@ namespace Pm.DTOs.RadioHandover
         public string? PreviewPhotoBase64 { get; set; }
     }
 
+    public class UpdateRadioHandoverDto
+    {
+        [MaxLength(1000)]
+        public string? Remarks { get; set; }
+    }
+
     public class CompleteReceiverSignatureDto
     {
         [Required]
@@ -85,7 +113,11 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverDetailDto : RadioHandoverListDto
     {
         public int? RadioId { get; set; }
+        public string? RadioOwnerLabel { get; set; }
+        public string? OwnerDivision { get; set; }
+        public string? OwnerDepartment { get; set; }
         public string? BatterySerialNumber { get; set; }
+        public string? DamageDescription { get; set; }
         public string? RadioPhotoBase64 { get; set; }
         public List<string> RadioPhotos { get; set; } = [];
         public string? HandedOverSignatureBase64 { get; set; }

@@ -188,6 +188,12 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "radio.repair.supervise"));
             options.AddPolicy("RadioRepairDelete", policy =>
                 policy.RequireClaim("Permission", "radio.repair.delete"));
+            options.AddPolicy("RadioRepairEdit", policy =>
+                policy.RequireClaim("Permission", "radio.repair.edit"));
+            options.AddPolicy("RadioRepairViewArchive", policy =>
+                policy.RequireClaim("Permission", "radio.repair.view.archive"));
+            options.AddPolicy("RadioRepairDeletePermanent", policy =>
+                policy.RequireClaim("Permission", "radio.repair.delete.permanent"));
 
             // Radio Handover
             options.AddPolicy("RadioHandoverView", policy =>
@@ -207,6 +213,14 @@ namespace Pm.Helper
             options.AddPolicy("RadioHandoverLookup", policy =>
                 policy.RequireAssertion(ctx =>
                     HandoverPermissionHelper.CanLookupRadioSerial(ctx.User)));
+            options.AddPolicy("RadioHandoverDelete", policy =>
+                policy.RequireClaim("Permission", "radio.handover.delete"));
+            options.AddPolicy("RadioHandoverEdit", policy =>
+                policy.RequireClaim("Permission", "radio.handover.edit"));
+            options.AddPolicy("RadioHandoverViewArchive", policy =>
+                policy.RequireClaim("Permission", "radio.handover.view.archive"));
+            options.AddPolicy("RadioHandoverDeletePermanent", policy =>
+                policy.RequireClaim("Permission", "radio.handover.delete.permanent"));
             options.AddPolicy("RadioHandoverExport", policy =>
                 policy.RequireClaim("Permission", "radio.handover.export"));
 
