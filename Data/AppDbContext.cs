@@ -1232,6 +1232,7 @@ namespace Pm.Data
                 entity.HasIndex(e => e.JobNumber).IsUnique();
                 entity.HasIndex(e => new { e.IsDeleted, e.HelpdeskTicketNumber, e.RadioSerialNumber });
                 entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
+                entity.Property(e => e.EquipmentTagType).HasConversion<int>();
                 entity.HasOne(e => e.AssignedTechnician).WithMany().HasForeignKey(e => e.AssignedTechnicianUserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(e => e.OpenedBy).WithMany().HasForeignKey(e => e.OpenedByUserId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(e => e.Radio).WithMany().HasForeignKey(e => e.RadioId).OnDelete(DeleteBehavior.SetNull);

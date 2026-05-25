@@ -354,6 +354,7 @@ public static class DatabaseSeeder
                 },
                 ["Warehouse"] = new[]
                 {
+                    "radio.repair.view",
                     "radio.handover.view", "radio.handover.create.wh_hd",
                     "warehouse.borrow.menu", "warehouse.borrow.view",
                     "warehouse.borrow.issue", "warehouse.borrow.return"

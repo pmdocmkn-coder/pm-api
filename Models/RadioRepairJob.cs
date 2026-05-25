@@ -45,6 +45,38 @@ namespace Pm.Models
         [Required, MaxLength(2000)]
         public string DamageDescription { get; set; } = null!;
 
+        public EquipmentTagType? EquipmentTagType { get; set; }
+
+        [MaxLength(100)]
+        public string? OriginFrom { get; set; }
+        
+        [MaxLength(2000)]
+        public string? RepairDataDescription { get; set; }
+        
+        [MaxLength(100)]
+        public string? RepairedByName { get; set; }
+        
+        [MaxLength(100)]
+        public string? FrequencyError { get; set; }
+        
+        [MaxLength(100)]
+        public string? AfReading { get; set; }
+        
+        [MaxLength(100)]
+        public string? PowerReading { get; set; }
+        
+        [MaxLength(100)]
+        public string? VoltageOutNoLoad { get; set; }
+        
+        [MaxLength(100)]
+        public string? VoltageOutWithLoad { get; set; }
+        
+        [MaxLength(100)]
+        public string? PhysicalCondition { get; set; }
+        
+        [MaxLength(100)]
+        public string? DisplayCondition { get; set; }
+
         public RadioRepairJobStatus Status { get; set; } = RadioRepairJobStatus.Received;
 
         public int AssignedTechnicianUserId { get; set; }

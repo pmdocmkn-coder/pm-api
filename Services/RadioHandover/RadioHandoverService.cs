@@ -43,9 +43,10 @@ namespace Pm.Services.RadioHandover
 
             if (string.Equals(roleName, "Warehouse", StringComparison.OrdinalIgnoreCase))
             {
-                q = q.Where(h => h.HandoverType == RadioHandoverType.TechnicianToWarehouse);
-                if (query.ReceivedByUserId == null)
-                    q = q.Where(h => h.ReceivedByUserId == currentUserId);
+                q = q.Where(h => 
+                    (h.HandoverType == RadioHandoverType.TechnicianToWarehouse && h.ReceivedByUserId == currentUserId) ||
+                    (h.HandoverType == RadioHandoverType.WarehouseToHelpdesk && h.HandedOverByUserId == currentUserId)
+                );
             }
 
             if (query.HandoverType.HasValue)
@@ -319,9 +320,6 @@ namespace Pm.Services.RadioHandover
             if (dto.EquipmentTagType != EquipmentTagType.Damaged)
                 dto.EquipmentTagType = EquipmentTagType.Good;
 
-            if (dto.EquipmentTagType == EquipmentTagType.Good)
-                ValidateGoodTagFields(dto);
-
             await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.WarehouseToHelpdesk);
 
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, true);
@@ -384,6 +382,22 @@ namespace Pm.Services.RadioHandover
             handover.Status = "Completed";
             handover.SignedAt = now;
             handover.UpdatedAt = now;
+
+            if (handover.RadioRepairJob != null)
+            {
+                handover.RadioRepairJob.Status = RadioRepairJobStatus.InProgress;
+                handover.RadioRepairJob.UpdatedAt = now;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = handover.RadioRepairJob.Id,
+                    FromStatus = RadioRepairJobStatus.Received,
+                    ToStatus = RadioRepairJobStatus.InProgress,
+                    Note = "Teknisi melengkapi TTD (Radio diterima)",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
 
             await _activityLog.LogAsync("RadioHandover", handover.Id, "CompleteReceiver",
                 currentUserId, $"STR {handover.HandoverNumber} — TTD teknisi dilengkapi");
@@ -556,8 +570,31 @@ namespace Pm.Services.RadioHandover
                 dto.RepairedByName ??= tech;
             }
 
-            if (handoverType == RadioHandoverType.TechnicianToWarehouse && prev != null)
-                dto.EquipmentTagType = prev.EquipmentTagType;
+            if (handoverType == RadioHandoverType.TechnicianToWarehouse || handoverType == RadioHandoverType.WarehouseToHelpdesk)
+            {
+                var job = await _context.RadioRepairJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId);
+                if (job != null && job.EquipmentTagType.HasValue)
+                {
+                    dto.EquipmentTagType = job.EquipmentTagType.Value;
+                    if (job.EquipmentTagType == EquipmentTagType.Good)
+                    {
+                        dto.OriginFrom ??= job.OriginFrom;
+                        dto.RepairDataDescription ??= job.RepairDataDescription;
+                        dto.RepairedByName ??= job.RepairedByName;
+                        dto.FrequencyError ??= job.FrequencyError;
+                        dto.AfReading ??= job.AfReading;
+                        dto.PowerReading ??= job.PowerReading;
+                        dto.VoltageOutNoLoad ??= job.VoltageOutNoLoad;
+                        dto.VoltageOutWithLoad ??= job.VoltageOutWithLoad;
+                        dto.PhysicalCondition ??= job.PhysicalCondition;
+                        dto.DisplayCondition ??= job.DisplayCondition;
+                    }
+                }
+                else if (prev != null)
+                {
+                    dto.EquipmentTagType = prev.EquipmentTagType;
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(dto.OriginFrom) && prev != null)
                 dto.OriginFrom ??= prev.OriginFrom ?? prev.RadioOwnerLabel;
@@ -781,82 +818,230 @@ namespace Pm.Services.RadioHandover
             }).ToList()
         };
 
-    public async Task<RadioHandoverDetailDto> UpdateAsync(int id, UpdateRadioHandoverDto dto, int userId)
-    {
-        var h = await _context.RadioHandovers.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
-            ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
-
-        h.Remarks = dto.Remarks?.Trim();
-        h.UpdatedAt = DateTime.UtcNow;
-        await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit catatan STR {h.HandoverNumber}");
-        await _context.SaveChangesAsync();
-        return (await GetByIdAsync(id))!;
-    }
-
-    public async Task SoftDeleteAsync(int id, int userId)
-    {
-        var h = await _context.RadioHandovers
-            .Include(x => x.RadioRepairJob)
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
-            ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
-
-        if (h.RadioRepairJob.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
-            throw new InvalidOperationException("Serah terima pada job yang sudah selesai siklus tidak dapat dihapus.");
-
-        var now = DateTime.UtcNow;
-        h.IsDeleted = true;
-        h.DeletedAt = now;
-        h.DeletedByUserId = userId;
-        h.UpdatedAt = now;
-
-        await _activityLog.LogAsync("RadioHandover", h.Id, "SoftDelete", userId,
-            $"Arsip STR {h.HandoverNumber}, tiket {h.RadioRepairJob.HelpdeskTicketNumber}");
-
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task RestoreAsync(int id, int userId)
-    {
-        var h = await _context.RadioHandovers.FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted)
-            ?? throw new KeyNotFoundException("Arsip serah terima tidak ditemukan.");
-
-        h.IsDeleted = false;
-        h.DeletedAt = null;
-        h.DeletedByUserId = null;
-        h.UpdatedAt = DateTime.UtcNow;
-
-        await _activityLog.LogAsync("RadioHandover", h.Id, "Restore", userId, $"Pulihkan STR {h.HandoverNumber}");
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DeletePermanentAsync(int id, int userId)
-    {
-        var h = await _context.RadioHandovers
-            .Include(x => x.Accessories)
-            .Include(x => x.Photos)
-            .Include(x => x.RadioRepairJob)
-            .FirstOrDefaultAsync(x => x.Id == id)
-            ?? throw new KeyNotFoundException("Arsip serah terima tidak ditemukan.");
-
-        if (!h.IsDeleted)
-            throw new InvalidOperationException("Serah terima harus berada di arsip sebelum dihapus permanen.");
-
-        var handoverNumber = h.HandoverNumber;
-
-        if (h.RadioRepairJob.CurrentHandoverId == h.Id)
+        public async Task<RadioHandoverDetailDto> UpdateAsync(int id, UpdateRadioHandoverDto dto, int userId)
         {
-            h.RadioRepairJob.CurrentHandoverId = null;
-            h.RadioRepairJob.UpdatedAt = DateTime.UtcNow;
+            var h = await _context.RadioHandovers
+                .Include(x => x.RadioRepairJob)
+                .Include(x => x.Photos)
+                .Include(x => x.Accessories)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
+
+            if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician)
+            {
+                h.Remarks = dto.Remarks?.Trim();
+            }
+            else
+            {
+                var newTicket = dto.HelpdeskTicketNumber?.Trim();
+                var newSerial = dto.RadioSerialNumber?.Trim();
+                if (!string.IsNullOrEmpty(newTicket) && !string.IsNullOrEmpty(newSerial) &&
+                    (h.RadioRepairJob.HelpdeskTicketNumber != newTicket || h.RadioRepairJob.RadioSerialNumber != newSerial))
+                {
+                    await RadioRepairJobService.ValidateDuplicateTicketSerialAsync(
+                        _context, newTicket, newSerial, h.RadioRepairJobId);
+                    h.RadioRepairJob.HelpdeskTicketNumber = newTicket;
+                    h.RadioRepairJob.RadioSerialNumber = newSerial;
+                    h.RadioRepairJob.JobNumber = Pm.Helper.RepairJobReference.InternalKey(newTicket, newSerial);
+                }
+
+                if (h.Status != "Completed")
+                {
+                    h.ReceivedByUserId = dto.ReceivedByUserId;
+                    h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
+
+                    if (!string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64))
+                    {
+                        var now = DateTime.UtcNow;
+                        h.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+                        h.Status = "Completed";
+                        h.SignedAt = now;
+                        h.RadioRepairJob.Status = RadioRepairJobStatus.InProgress;
+                        
+                        _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                        {
+                            JobId = h.RadioRepairJob.Id,
+                            FromStatus = RadioRepairJobStatus.Received,
+                            ToStatus = RadioRepairJobStatus.InProgress,
+                            Note = "Teknisi melengkapi TTD via edit HD",
+                            UserId = userId,
+                            At = now
+                        });
+                    }
+                }
+
+                h.RadioId = dto.RadioId;
+                h.RadioSerialNumber = dto.RadioSerialNumber.Trim();
+                h.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
+                h.EquipmentName = dto.EquipmentName?.Trim();
+                h.UnitNumber = dto.UnitNumber?.Trim();
+                h.RadioOwnerLabel = dto.RadioOwnerLabel?.Trim();
+                h.OwnerDivision = dto.OwnerDivision?.Trim();
+                h.OwnerDepartment = dto.OwnerDepartment?.Trim();
+                h.Remarks = dto.Remarks?.Trim();
+                h.EquipmentTagType = dto.EquipmentTagType;
+                h.OriginFrom = dto.OriginFrom?.Trim();
+                h.RepairDataDescription = dto.RepairDataDescription?.Trim();
+                h.RepairedByName = dto.RepairedByName?.Trim();
+                h.FrequencyError = dto.FrequencyError?.Trim();
+                h.AfReading = dto.AfReading?.Trim();
+                h.PowerReading = dto.PowerReading?.Trim();
+                h.VoltageOutNoLoad = dto.VoltageOutNoLoad?.Trim();
+                h.VoltageOutWithLoad = dto.VoltageOutWithLoad?.Trim();
+                h.PhysicalCondition = dto.PhysicalCondition?.Trim();
+                h.DisplayCondition = dto.DisplayCondition?.Trim();
+
+                var photos = new List<string>();
+                if (dto.RadioPhotos != null && dto.RadioPhotos.Count > 0)
+                    photos = dto.RadioPhotos.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!).ToList();
+                else if (!string.IsNullOrWhiteSpace(dto.RadioPhotoBase64))
+                    photos = new List<string> { dto.RadioPhotoBase64 };
+
+                if (photos.Any())
+                {
+                    _context.RadioHandoverPhotos.RemoveRange(h.Photos);
+                    h.Photos.Clear();
+                    h.RadioPhotoBase64 = photos[0];
+                    for (var i = 0; i < photos.Count; i++)
+                    {
+                        h.Photos.Add(new RadioHandoverPhoto
+                        {
+                            SortOrder = i,
+                            PhotoBase64 = photos[i]
+                        });
+                    }
+                }
+
+                _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
+                h.Accessories.Clear();
+                if (dto.Accessories != null)
+                {
+                    foreach (var item in dto.Accessories)
+                    {
+                        if (string.IsNullOrWhiteSpace(item.ItemName)) continue;
+                        h.Accessories.Add(new RadioHandoverAccessory
+                        {
+                            ItemName = item.ItemName.Trim(),
+                            Quantity = item.Quantity < 1 ? 1 : item.Quantity,
+                            Unit = string.IsNullOrWhiteSpace(item.Unit) ? "EA" : item.Unit.Trim(),
+                            Description = item.Description?.Trim(),
+                            SerialNumber = item.SerialNumber?.Trim()
+                        });
+                    }
+                }
+
+                if (h.RadioRepairJob != null)
+                {
+                    h.RadioRepairJob.DamageDescription = dto.EquipmentTagType == EquipmentTagType.Damaged
+                        ? dto.DamageDescription?.Trim() ?? h.RadioRepairJob.DamageDescription
+                        : string.IsNullOrWhiteSpace(dto.DamageDescription)
+                            ? dto.RepairDataDescription?.Trim() ?? h.RadioRepairJob.DamageDescription
+                            : dto.DamageDescription.Trim();
+
+                    h.RadioRepairJob.BatterySerialNumber = h.BatterySerialNumber;
+                    h.RadioRepairJob.EquipmentName = h.EquipmentName;
+                    h.RadioRepairJob.UnitNumber = h.UnitNumber;
+                    h.RadioRepairJob.RadioOwnerLabel = h.RadioOwnerLabel;
+                    h.RadioRepairJob.OwnerDivision = h.OwnerDivision;
+                    h.RadioRepairJob.OwnerDepartment = h.OwnerDepartment;
+                    h.RadioRepairJob.RadioId = h.RadioId;
+
+                    if (dto.ReceivedByUserId != 0 && dto.ReceivedByUserId != h.ReceivedByUserId)
+                    {
+                        await ValidateTechnicianReceiverAsync(dto.ReceivedByUserId);
+                        h.ReceivedByUserId = dto.ReceivedByUserId;
+                        h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64) && dto.ReceiverSignatureBase64 != h.ReceiverSignatureBase64)
+                {
+                    _imageValidator.Validate(dto.ReceiverSignatureBase64, Pm.Enums.StoredImageKind.Signature, "TTD penerima");
+                    h.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+                    if (h.Status != "Completed")
+                    {
+                        h.Status = "Completed";
+                        h.SignedAt = DateTime.UtcNow;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.HandedOverSignatureBase64) && dto.HandedOverSignatureBase64 != h.HandedOverSignatureBase64)
+                {
+                    _imageValidator.Validate(dto.HandedOverSignatureBase64, Pm.Enums.StoredImageKind.Signature, "TTD penyerah");
+                    h.HandedOverSignatureBase64 = dto.HandedOverSignatureBase64;
+                }
+            }
+
+            h.UpdatedAt = DateTime.UtcNow;
+            await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit STR {h.HandoverNumber}");
+            await _context.SaveChangesAsync();
+            return (await GetByIdAsync(id))!;
         }
 
-        _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
-        _context.RadioHandoverPhotos.RemoveRange(h.Photos);
-        _context.RadioHandovers.Remove(h);
+        public async Task SoftDeleteAsync(int id, int userId)
+        {
+            var h = await _context.RadioHandovers
+                .Include(x => x.RadioRepairJob)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
 
-        await _activityLog.LogAsync("RadioHandover", id, "PermanentlyDeleted", userId,
-            $"Hapus permanen STR {handoverNumber}");
+            if (h.RadioRepairJob.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
+                throw new InvalidOperationException("Serah terima pada job yang sudah selesai siklus tidak dapat dihapus.");
 
-        await _context.SaveChangesAsync();
-    }
+            var now = DateTime.UtcNow;
+            h.IsDeleted = true;
+            h.DeletedAt = now;
+            h.DeletedByUserId = userId;
+            h.UpdatedAt = now;
+
+            await _activityLog.LogAsync("RadioHandover", h.Id, "SoftDelete", userId,
+                $"Arsip STR {h.HandoverNumber}, tiket {h.RadioRepairJob.HelpdeskTicketNumber}");
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task RestoreAsync(int id, int userId)
+        {
+            var h = await _context.RadioHandovers.FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted)
+                ?? throw new KeyNotFoundException("Arsip serah terima tidak ditemukan.");
+
+            h.IsDeleted = false;
+            h.DeletedAt = null;
+            h.DeletedByUserId = null;
+            h.UpdatedAt = DateTime.UtcNow;
+
+            await _activityLog.LogAsync("RadioHandover", h.Id, "Restore", userId, $"Pulihkan STR {h.HandoverNumber}");
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeletePermanentAsync(int id, int userId)
+        {
+            var h = await _context.RadioHandovers
+                .Include(x => x.Accessories)
+                .Include(x => x.Photos)
+                .Include(x => x.RadioRepairJob)
+                .FirstOrDefaultAsync(x => x.Id == id)
+                ?? throw new KeyNotFoundException("Arsip serah terima tidak ditemukan.");
+
+            if (!h.IsDeleted)
+                throw new InvalidOperationException("Serah terima harus berada di arsip sebelum dihapus permanen.");
+
+            var handoverNumber = h.HandoverNumber;
+
+            if (h.RadioRepairJob.CurrentHandoverId == h.Id)
+            {
+                h.RadioRepairJob.CurrentHandoverId = null;
+                h.RadioRepairJob.UpdatedAt = DateTime.UtcNow;
+            }
+
+            _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
+            _context.RadioHandoverPhotos.RemoveRange(h.Photos);
+            _context.RadioHandovers.Remove(h);
+
+            await _activityLog.LogAsync("RadioHandover", id, "PermanentlyDeleted", userId,
+                $"Hapus permanen STR {handoverNumber}");
+
+            await _context.SaveChangesAsync();
+        }
     }
 }

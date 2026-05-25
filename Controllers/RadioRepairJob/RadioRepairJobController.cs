@@ -191,5 +191,20 @@ namespace Pm.Controllers.RadioRepairJob
             catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
+
+        [HttpDelete("reset-testing-data")]
+        [Authorize(Policy = "CanDeleteAllData")]
+        public async Task<IActionResult> ResetTestingData()
+        {
+            try
+            {
+                await _service.ResetTestingDataAsync(CurrentUserId);
+                return ApiResponse.Success(null, "Semua data serah terima dan pekerjaan perbaikan telah direset.");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse.InternalServerError(ex.Message);
+            }
+        }
     }
 }

@@ -17,5 +17,6 @@ namespace Pm.Services.RadioRepairJob
         Task DeletePermanentAsync(int id, int userId);
         Task<List<RadioRepairTicketGroupDto>> GetGroupedByTicketAsync(
             RadioRepairJobQueryDto query, int currentUserId, string? roleName, bool includeDeleted);
+        Task ResetTestingDataAsync(int userId);
     }
 }

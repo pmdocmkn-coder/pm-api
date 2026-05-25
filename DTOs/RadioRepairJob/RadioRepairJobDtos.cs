@@ -27,6 +27,17 @@ namespace Pm.DTOs.RadioRepairJob
         public string? EquipmentName { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
         public string DamageDescription { get; set; } = null!;
+        public string? EquipmentTagType { get; set; }
+        public string? OriginFrom { get; set; }
+        public string? RepairDataDescription { get; set; }
+        public string? RepairedByName { get; set; }
+        public string? FrequencyError { get; set; }
+        public string? AfReading { get; set; }
+        public string? PowerReading { get; set; }
+        public string? VoltageOutNoLoad { get; set; }
+        public string? VoltageOutWithLoad { get; set; }
+        public string? PhysicalCondition { get; set; }
+        public string? DisplayCondition { get; set; }
         public string Status { get; set; } = null!;
         public int AssignedTechnicianUserId { get; set; }
         public string AssignedTechnicianName { get; set; } = null!;
@@ -180,7 +191,19 @@ namespace Pm.DTOs.RadioRepairJob
     /// </summary>
     public class TechnicianUpdateRepairJobDto
     {
-        [Required, MaxLength(2000)]
-        public string DamageDescription { get; set; } = null!;
+        [MaxLength(2000)]
+        public string? DamageDescription { get; set; }
+
+        public EquipmentTagType? EquipmentTagType { get; set; }
+        [MaxLength(100)] public string? OriginFrom { get; set; }
+        [MaxLength(2000)] public string? RepairDataDescription { get; set; }
+        [MaxLength(100)] public string? RepairedByName { get; set; }
+        [MaxLength(100)] public string? FrequencyError { get; set; }
+        [MaxLength(100)] public string? AfReading { get; set; }
+        [MaxLength(100)] public string? PowerReading { get; set; }
+        [MaxLength(100)] public string? VoltageOutNoLoad { get; set; }
+        [MaxLength(100)] public string? VoltageOutWithLoad { get; set; }
+        [MaxLength(100)] public string? PhysicalCondition { get; set; }
+        [MaxLength(100)] public string? DisplayCondition { get; set; }
     }
 }

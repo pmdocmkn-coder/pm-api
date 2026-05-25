@@ -23,7 +23,9 @@ namespace Pm.Services.RadioRepairJob
             _context.RadioRepairJobs.AsNoTracking()
                 .Include(j => j.AssignedTechnician)
                 .Include(j => j.Radio)
-                .Include(j => j.CustomStatus);
+                .Include(j => j.CustomStatus)
+                .Where(j => !(j.Status == RadioRepairJobStatus.Received && 
+                              j.Handovers.Any(h => h.Id == j.CurrentHandoverId && h.Status != "Completed")));
 
         private static bool IsTechnician(string? roleName) =>
             Pm.Helper.OperationalRoleNames.IsTechnicianRole(roleName);
@@ -88,6 +90,17 @@ namespace Pm.Services.RadioRepairJob
                         .OrderBy(h => h.HandoverAt)
                         .Select(h => h.RadioPhotoBase64)
                         .FirstOrDefault(),
+                    EquipmentTagType = j.EquipmentTagType != null ? j.EquipmentTagType.ToString() : null,
+                    OriginFrom = j.OriginFrom,
+                    RepairDataDescription = j.RepairDataDescription,
+                    RepairedByName = j.RepairedByName,
+                    FrequencyError = j.FrequencyError,
+                    AfReading = j.AfReading,
+                    PowerReading = j.PowerReading,
+                    VoltageOutNoLoad = j.VoltageOutNoLoad,
+                    VoltageOutWithLoad = j.VoltageOutWithLoad,
+                    PhysicalCondition = j.PhysicalCondition,
+                    DisplayCondition = j.DisplayCondition,
                     DamageDescription = j.DamageDescription,
                     Status = j.Status.ToString(),
                     AssignedTechnicianUserId = j.AssignedTechnicianUserId,
@@ -363,13 +376,53 @@ namespace Pm.Services.RadioRepairJob
             if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
                 throw new InvalidOperationException("Job yang sudah ke warehouse atau helpdesk tidak dapat diedit.");
 
-            var newDamage = dto.DamageDescription.Trim();
+            var newDamage = dto.DamageDescription?.Trim() ?? "";
             var changes = new List<string>();
+
+            if (dto.EquipmentTagType.HasValue && job.EquipmentTagType != dto.EquipmentTagType.Value)
+            {
+                changes.Add($"Tag Fisik: \"{job.EquipmentTagType}\" → \"{dto.EquipmentTagType.Value}\"");
+                job.EquipmentTagType = dto.EquipmentTagType.Value;
+            }
 
             if (!string.Equals(job.DamageDescription, newDamage, StringComparison.Ordinal))
             {
                 changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{newDamage}\"");
                 job.DamageDescription = newDamage;
+            }
+            
+            // Map Green tag fields
+            if (dto.EquipmentTagType == EquipmentTagType.Good)
+            {
+                job.OriginFrom = dto.OriginFrom;
+                job.RepairDataDescription = dto.RepairDataDescription;
+                job.RepairedByName = dto.RepairedByName;
+                job.FrequencyError = dto.FrequencyError;
+                job.AfReading = dto.AfReading;
+                job.PowerReading = dto.PowerReading;
+                job.VoltageOutNoLoad = dto.VoltageOutNoLoad;
+                job.VoltageOutWithLoad = dto.VoltageOutWithLoad;
+                job.PhysicalCondition = dto.PhysicalCondition;
+                job.DisplayCondition = dto.DisplayCondition;
+            }
+            else
+            {
+                // Jika kuning, bersihkan data hijau
+                job.OriginFrom = null;
+                job.RepairDataDescription = null;
+                job.RepairedByName = null;
+                job.FrequencyError = null;
+                job.AfReading = null;
+                job.PowerReading = null;
+                job.VoltageOutNoLoad = null;
+                job.VoltageOutWithLoad = null;
+                job.PhysicalCondition = null;
+                job.DisplayCondition = null;
+            }
+
+            if (changes.Count == 0 && dto.EquipmentTagType == EquipmentTagType.Good)
+            {
+                changes.Add("Data perbaikan diupdate");
             }
 
             if (changes.Count == 0)
@@ -624,6 +677,17 @@ namespace Pm.Services.RadioRepairJob
             RadioOwnerLabel = job.RadioOwnerLabel ?? FormatJobOwnerLabel(job.Radio),
             OwnerDivision = job.OwnerDivision ?? job.Radio?.Division,
             OwnerDepartment = job.OwnerDepartment ?? job.Radio?.Department,
+            EquipmentTagType = job.EquipmentTagType?.ToString(),
+            OriginFrom = job.OriginFrom,
+            RepairDataDescription = job.RepairDataDescription,
+            RepairedByName = job.RepairedByName,
+            FrequencyError = job.FrequencyError,
+            AfReading = job.AfReading,
+            PowerReading = job.PowerReading,
+            VoltageOutNoLoad = job.VoltageOutNoLoad,
+            VoltageOutWithLoad = job.VoltageOutWithLoad,
+            PhysicalCondition = job.PhysicalCondition,
+            DisplayCondition = job.DisplayCondition,
             DamageDescription = job.DamageDescription,
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
@@ -756,5 +820,21 @@ namespace Pm.Services.RadioRepairJob
                 SerialNumber = a.SerialNumber
             }).ToList()
         };
+
+        public async Task ResetTestingDataAsync(int userId)
+        {
+            // Menghapus data perbaikan dan handover untuk tujuan testing/reset
+            await _context.RadioHandoverAccessories.ExecuteDeleteAsync();
+            await _context.RadioHandoverPhotos.ExecuteDeleteAsync();
+            
+            // Set CurrentHandoverId null agar tidak terjadi constraint error saat delete handover
+            await _context.RadioRepairJobs.ExecuteUpdateAsync(s => s.SetProperty(j => j.CurrentHandoverId, (int?)null));
+            
+            await _context.RadioHandovers.ExecuteDeleteAsync();
+            await _context.RadioRepairJobStatusLogs.ExecuteDeleteAsync();
+            await _context.RadioRepairJobs.ExecuteDeleteAsync();
+
+            await _activityLog.LogAsync("RadioRepairJob", 0, "ResetTestingData", userId, "Super Admin melakukan reset data serah terima dan perbaikan (testing data)");
+        }
     }
 }

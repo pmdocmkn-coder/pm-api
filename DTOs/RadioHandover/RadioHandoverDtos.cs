@@ -125,6 +125,56 @@ namespace Pm.DTOs.RadioHandover
 
     public class UpdateRadioHandoverDto
     {
+        public string? HelpdeskTicketNumber { get; set; }
+        public int? RadioId { get; set; }
+        [Required, MaxLength(100)]
+        public string RadioSerialNumber { get; set; } = null!;
+        [MaxLength(100)]
+        public string? BatterySerialNumber { get; set; }
+        [MaxLength(100)]
+        public string? EquipmentName { get; set; }
+        [MaxLength(100)]
+        public string? UnitNumber { get; set; }
+        [MaxLength(200)]
+        public string? RadioOwnerLabel { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDivision { get; set; }
+        [MaxLength(100)]
+        public string? OwnerDepartment { get; set; }
+        public string? DamageDescription { get; set; }
+
+        public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
+
+        [MaxLength(200)]
+        public string? OriginFrom { get; set; }
+        [MaxLength(2000)]
+        public string? RepairDataDescription { get; set; }
+        [MaxLength(200)]
+        public string? RepairedByName { get; set; }
+        [MaxLength(100)]
+        public string? FrequencyError { get; set; }
+        [MaxLength(100)]
+        public string? AfReading { get; set; }
+        [MaxLength(100)]
+        public string? PowerReading { get; set; }
+        [MaxLength(100)]
+        public string? VoltageOutNoLoad { get; set; }
+        [MaxLength(100)]
+        public string? VoltageOutWithLoad { get; set; }
+        [MaxLength(500)]
+        public string? PhysicalCondition { get; set; }
+        [MaxLength(500)]
+        public string? DisplayCondition { get; set; }
+
+        [Required]
+        public int ReceivedByUserId { get; set; }
+
+        public string? RadioPhotoBase64 { get; set; }
+        public List<string> RadioPhotos { get; set; } = [];
+        public string? HandedOverSignatureBase64 { get; set; }
+        public string? ReceiverSignatureBase64 { get; set; }
+
+        public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
         [MaxLength(1000)]
         public string? Remarks { get; set; }
     }
