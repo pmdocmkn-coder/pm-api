@@ -12,6 +12,7 @@ namespace Pm.Services.Radio
         Task<IEnumerable<RadioDto>> GetAllUnpagedAsync(string? category = null, bool isScrap = false);
         Task<List<DuplicateSnDto>> GetDuplicateSerialNumbersAsync();
         Task<RadioDto> GetByIdAsync(int id);
+        Task<List<RadioLookupDto>> LookupBySerialAsync(string serialNumber);
         Task<IEnumerable<RadioHistoryDto>> GetHistoryAsync(int id);
         Task<RadioDto> CreateAsync(CreateRadioDto dto, int userId);
         Task<RadioDto> UpdateAsync(int id, UpdateRadioDto dto, int userId);

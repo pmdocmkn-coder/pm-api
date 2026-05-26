@@ -247,7 +247,7 @@ namespace Pm.Services.Radio
 
             var duplicateGroups = await _context.Radios.AsNoTracking()
                 .Where(r => !r.IsScrap && !string.IsNullOrWhiteSpace(r.SerialNumber) && r.SerialNumber != "-" && r.SerialNumber != "n/a" && r.SerialNumber != "N/A")
-                .GroupBy(r => r.SerialNumber.Trim().ToLower())
+                .GroupBy(r => r.SerialNumber!.Trim().ToLower())
                 .Where(g => g.Count() > 1)
                 .Select(g => new
                 {
@@ -288,6 +288,41 @@ namespace Pm.Services.Radio
             var r = await _context.Radios.FindAsync(id);
             if (r == null) throw new KeyNotFoundException("Radio not found");
             return MapToDto(r);
+        }
+
+        public async Task<List<RadioLookupDto>> LookupBySerialAsync(string serialNumber)
+        {
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                return new List<RadioLookupDto>();
+
+            var s = serialNumber.Trim().ToLower();
+            return await _context.Radios.AsNoTracking()
+                .Where(r => !r.IsScrap && r.SerialNumber != null && r.SerialNumber.ToLower().Contains(s))
+                .OrderBy(r => r.SerialNumber)
+                .Take(20)
+                .Select(r => new RadioLookupDto
+                {
+                    Id = r.Id,
+                    RadioId = r.RadioId,
+                    Category = r.Category,
+                    SerialNumber = r.SerialNumber,
+                    Type = r.Type,
+                    Company = r.Company,
+                    Division = r.Division,
+                    Department = r.Department,
+                    NomorAset = r.NomorAset,
+                    NomorUnit = r.NomorUnit,
+                    NomorLv = r.NomorLv,
+                    Fleet = r.Fleet,
+                    Channel = r.Channel,
+                    OwnerLabel = r.Company != null && r.Company != ""
+                        ? (r.Division != null && r.Division != ""
+                            ? r.Company + " · " + r.Division
+                            : r.Company)
+                        : (r.Division ?? r.Department ?? r.Category),
+                    Label = $"{r.SerialNumber} — {r.Category}" + (r.NomorAset != null ? $" ({r.NomorAset})" : "")
+                })
+                .ToListAsync();
         }
 
         public async Task<IEnumerable<RadioHistoryDto>> GetHistoryAsync(int id)

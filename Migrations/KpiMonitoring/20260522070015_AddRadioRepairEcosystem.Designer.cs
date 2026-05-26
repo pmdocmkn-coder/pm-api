@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
 #nullable disable
 
-namespace Pm.Migrations
+namespace Pm.Migrations.KpiMonitoring
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260522070015_AddRadioRepairEcosystem")]
+    partial class AddRadioRepairEcosystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1640,37 +1643,12 @@ namespace Pm.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AfReading")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<string>("BatterySerialNumber")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("DeletedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("DisplayCondition")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("EquipmentName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<int>("EquipmentTagType")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FrequencyError")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.Property<int>("HandedOverByUserId")
                         .HasColumnType("int");
@@ -1691,39 +1669,8 @@ namespace Pm.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("NoJobErp")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OriginFrom")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("PhysicalCondition")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("PowerReading")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
-
-                    b.Property<string>("RadioOwnerLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("RadioPhotoBase64")
                         .HasColumnType("longtext");
@@ -1746,36 +1693,16 @@ namespace Pm.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
 
-                    b.Property<string>("RepairDataDescription")
-                        .HasMaxLength(2000)
-                        .HasColumnType("varchar(2000)");
-
-                    b.Property<string>("RepairedByName")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<string>("UnitNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("VoltageOutNoLoad")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("VoltageOutWithLoad")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.HasKey("Id");
 
@@ -1790,8 +1717,6 @@ namespace Pm.Migrations
 
                     b.HasIndex("ReceivedByUserId");
 
-                    b.HasIndex("IsDeleted", "HandoverAt");
-
                     b.ToTable("RadioHandovers");
                 });
 
@@ -1804,63 +1729,18 @@ namespace Pm.Migrations
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AccessoryCode")
+                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("ItemName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
-
                     b.Property<int>("RadioHandoverId")
                         .HasColumnType("int");
-
-                    b.Property<string>("SerialNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("RadioHandoverId");
 
                     b.ToTable("RadioHandoverAccessories");
-                });
-
-            modelBuilder.Entity("Pm.Models.RadioHandoverPhoto", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("PhotoBase64")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("RadioHandoverId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RadioHandoverId", "SortOrder");
-
-                    b.ToTable("RadioHandoverPhotos");
                 });
 
             modelBuilder.Entity("Pm.Models.RadioHistory", b =>
@@ -1905,10 +1785,6 @@ namespace Pm.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AfReading")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int>("AssignedTechnicianUserId")
                         .HasColumnType("int");
 
@@ -1925,47 +1801,20 @@ namespace Pm.Migrations
                     b.Property<int?>("CurrentHandoverId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("CustomStatusId")
-                        .HasColumnType("int");
-
                     b.Property<string>("DamageDescription")
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("DeletedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("DisplayCondition")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("EquipmentName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<int?>("EquipmentTagType")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FrequencyError")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("HelpdeskTicketNumber")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<string>("JobNumber")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
 
                     b.Property<DateTime>("OpenedAt")
                         .HasColumnType("datetime(6)");
@@ -1973,43 +1822,11 @@ namespace Pm.Migrations
                     b.Property<int>("OpenedByUserId")
                         .HasColumnType("int");
 
-                    b.Property<string>("OriginFrom")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDepartment")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("OwnerDivision")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("PhysicalCondition")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("PowerReading")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<int?>("RadioId")
                         .HasColumnType("int");
 
-                    b.Property<string>("RadioOwnerLabel")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
                     b.Property<string>("RadioSerialNumber")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("RepairDataDescription")
-                        .HasMaxLength(2000)
-                        .HasColumnType("varchar(2000)");
-
-                    b.Property<string>("RepairedByName")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
@@ -2018,26 +1835,12 @@ namespace Pm.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<string>("UnitNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("VoltageOutNoLoad")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("VoltageOutWithLoad")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedTechnicianUserId");
-
-                    b.HasIndex("CustomStatusId");
 
                     b.HasIndex("JobNumber")
                         .IsUnique();
@@ -2045,8 +1848,6 @@ namespace Pm.Migrations
                     b.HasIndex("OpenedByUserId");
 
                     b.HasIndex("RadioId");
-
-                    b.HasIndex("IsDeleted", "HelpdeskTicketNumber", "RadioSerialNumber");
 
                     b.ToTable("RadioRepairJobs");
                 });
@@ -2323,46 +2124,6 @@ namespace Pm.Migrations
                         .HasDatabaseName("IX_RadioTrunkingHistory_RadioId");
 
                     b.ToTable("RadioTrunkingHistories", (string)null);
-                });
-
-            modelBuilder.Entity("Pm.Models.RepairJobCustomStatus", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Color")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.ToTable("RepairJobCustomStatuses");
                 });
 
             modelBuilder.Entity("Pm.Models.Role", b =>
@@ -3092,17 +2853,6 @@ namespace Pm.Migrations
                     b.Navigation("RadioHandover");
                 });
 
-            modelBuilder.Entity("Pm.Models.RadioHandoverPhoto", b =>
-                {
-                    b.HasOne("Pm.Models.RadioHandover", "RadioHandover")
-                        .WithMany("Photos")
-                        .HasForeignKey("RadioHandoverId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("RadioHandover");
-                });
-
             modelBuilder.Entity("Pm.Models.RadioHistory", b =>
                 {
                     b.HasOne("Pm.Models.Radio", "Radio")
@@ -3122,10 +2872,6 @@ namespace Pm.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Pm.Models.RepairJobCustomStatus", "CustomStatus")
-                        .WithMany("ActiveJobs")
-                        .HasForeignKey("CustomStatusId");
-
                     b.HasOne("Pm.Models.User", "OpenedBy")
                         .WithMany()
                         .HasForeignKey("OpenedByUserId")
@@ -3138,8 +2884,6 @@ namespace Pm.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AssignedTechnician");
-
-                    b.Navigation("CustomStatus");
 
                     b.Navigation("OpenedBy");
 
@@ -3232,17 +2976,6 @@ namespace Pm.Migrations
                     b.Navigation("ChangedByUser");
 
                     b.Navigation("RadioTrunking");
-                });
-
-            modelBuilder.Entity("Pm.Models.RepairJobCustomStatus", b =>
-                {
-                    b.HasOne("Pm.Models.User", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CreatedBy");
                 });
 
             modelBuilder.Entity("Pm.Models.RolePermission", b =>
@@ -3396,8 +3129,6 @@ namespace Pm.Migrations
             modelBuilder.Entity("Pm.Models.RadioHandover", b =>
                 {
                     b.Navigation("Accessories");
-
-                    b.Navigation("Photos");
                 });
 
             modelBuilder.Entity("Pm.Models.RadioRepairJob", b =>
@@ -3410,11 +3141,6 @@ namespace Pm.Migrations
             modelBuilder.Entity("Pm.Models.RadioTrunking", b =>
                 {
                     b.Navigation("Histories");
-                });
-
-            modelBuilder.Entity("Pm.Models.RepairJobCustomStatus", b =>
-                {
-                    b.Navigation("ActiveJobs");
                 });
 
             modelBuilder.Entity("Pm.Models.Role", b =>

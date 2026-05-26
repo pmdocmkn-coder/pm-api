@@ -1,0 +1,83 @@
+using System.ComponentModel.DataAnnotations;
+using Pm.DTOs.Common;
+
+namespace Pm.DTOs.WarehousePartBorrow
+{
+    public class WarehousePartBorrowQueryDto : BaseQueryDto
+    {
+        public string? Status { get; set; }
+        public int? BorrowedByUserId { get; set; }
+        public DateTime? FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+    }
+
+    public class CreateWarehousePartBorrowDto
+    {
+        [Required, MaxLength(500)]
+        public string PartDescription { get; set; } = null!;
+        [MaxLength(100)]
+        public string? PartCode { get; set; }
+        [Range(1, 999)]
+        public int Quantity { get; set; } = 1;
+        [MaxLength(1000)]
+        public string? Purpose { get; set; }
+        public int? RelatedRepairJobId { get; set; }
+    }
+
+    public class WarehousePartBorrowListDto
+    {
+        public int Id { get; set; }
+        public string BorrowNumber { get; set; } = null!;
+        public string PartDescription { get; set; } = null!;
+        public string? PartCode { get; set; }
+        public int Quantity { get; set; }
+        public string Status { get; set; } = null!;
+        public string BorrowedByName { get; set; } = null!;
+        public DateTime RequestedAt { get; set; }
+        public string? RelatedJobNumber { get; set; }
+    }
+
+    public class WarehousePartBorrowStatusLogDto
+    {
+        public int Id { get; set; }
+        public string? FromStatus { get; set; }
+        public string ToStatus { get; set; } = null!;
+        public string? Note { get; set; }
+        public string UserName { get; set; } = null!;
+        public DateTime At { get; set; }
+    }
+
+    public class WarehousePartBorrowDetailDto : WarehousePartBorrowListDto
+    {
+        public string? Purpose { get; set; }
+        public int? RelatedRepairJobId { get; set; }
+        public string? ApprovalNote { get; set; }
+        public string? RejectionReason { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public DateTime? IssuedAt { get; set; }
+        public DateTime? ReturnedAt { get; set; }
+        public string? ReturnCondition { get; set; }
+        public string? ReturnNote { get; set; }
+        public List<WarehousePartBorrowStatusLogDto> StatusLogs { get; set; } = [];
+    }
+
+    public class ApproveBorrowDto
+    {
+        [MaxLength(500)]
+        public string? Note { get; set; }
+    }
+
+    public class RejectBorrowDto
+    {
+        [Required, MaxLength(500)]
+        public string Reason { get; set; } = null!;
+    }
+
+    public class ReturnBorrowDto
+    {
+        [MaxLength(200)]
+        public string? ReturnCondition { get; set; }
+        [MaxLength(500)]
+        public string? ReturnNote { get; set; }
+    }
+}
