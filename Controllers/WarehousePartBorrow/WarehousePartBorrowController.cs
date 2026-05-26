@@ -118,7 +118,7 @@ namespace Pm.Controllers.WarehousePartBorrow
         {
             try
             {
-                var data = await _service.ReturnAsync(id, dto, CurrentUserId);
+                var data = await _service.ReturnAsync(id, dto, CurrentUserId, RoleName);
                 return ApiResponse.Success(data);
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }

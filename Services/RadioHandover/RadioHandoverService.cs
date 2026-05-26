@@ -83,6 +83,7 @@ namespace Pm.Services.RadioHandover
                     HandoverType = h.HandoverType.ToString(),
                     RadioRepairJobId = h.RadioRepairJobId,
                     HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
+                    NoJobErp = h.NoJobErp,
                     RadioSerialNumber = h.RadioSerialNumber,
                     EquipmentName = h.EquipmentName,
                     UnitNumber = h.UnitNumber,
@@ -176,6 +177,8 @@ namespace Pm.Services.RadioHandover
             var serial = dto.RadioSerialNumber.Trim();
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
             var now = DateTime.UtcNow;
+
+            await SyncMasterRadioFieldsAsync(dto.RadioId, equipment, currentUserId, strNumber);
 
             var job = new Models.RadioRepairJob
             {
@@ -465,6 +468,7 @@ namespace Pm.Services.RadioHandover
                 RadioId = dto.RadioId,
                 RadioSerialNumber = dto.RadioSerialNumber.Trim(),
                 BatterySerialNumber = dto.BatterySerialNumber?.Trim(),
+                NoJobErp = dto.NoJobErp?.Trim(),
                 EquipmentName = equipment?.EquipmentName,
                 UnitNumber = equipment?.UnitNumber,
                 RadioOwnerLabel = equipment?.RadioOwnerLabel,
@@ -710,6 +714,48 @@ namespace Pm.Services.RadioHandover
             return string.IsNullOrWhiteSpace(u.FullName) ? u.Username! : $"{u.FullName} ({u.Username})";
         }
 
+        private async Task SyncMasterRadioFieldsAsync(int? radioId, EquipmentSnapshot equipment, int currentUserId, string handoverNumber)
+        {
+            if (!radioId.HasValue) return;
+            var radio = await _context.Radios.FirstOrDefaultAsync(r => r.Id == radioId);
+            if (radio == null) return;
+
+            var changed = false;
+            var details = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(equipment.RadioOwnerLabel) && radio.Company != equipment.RadioOwnerLabel)
+            {
+                details.Add($"Pemilik: {radio.Company ?? "-"} -> {equipment.RadioOwnerLabel}");
+                radio.Company = equipment.RadioOwnerLabel;
+                changed = true;
+            }
+            if (!string.IsNullOrWhiteSpace(equipment.OwnerDivision) && radio.Division != equipment.OwnerDivision)
+            {
+                details.Add($"Divisi: {radio.Division ?? "-"} -> {equipment.OwnerDivision}");
+                radio.Division = equipment.OwnerDivision;
+                changed = true;
+            }
+            if (!string.IsNullOrWhiteSpace(equipment.OwnerDepartment) && radio.Department != equipment.OwnerDepartment)
+            {
+                details.Add($"Departemen: {radio.Department ?? "-"} -> {equipment.OwnerDepartment}");
+                radio.Department = equipment.OwnerDepartment;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                radio.UpdatedAt = DateTime.UtcNow;
+                _context.RadioHistories.Add(new RadioHistory
+                {
+                    RadioId = radio.Id,
+                    Action = "Updated",
+                    Details = $"Diupdate otomatis dari Serah Terima {handoverNumber}. Perubahan: {string.Join(", ", details)}",
+                    CreatedBy = await GetUserDisplayNameAsync(currentUserId),
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
         public async Task<List<UserOptionDto>> GetTechniciansAsync() =>
             await GetUsersByRolesAsync(OperationalRoleNames.TechnicianRoles);
 
@@ -764,6 +810,7 @@ namespace Pm.Services.RadioHandover
             HandoverType = h.HandoverType.ToString(),
             RadioRepairJobId = h.RadioRepairJobId,
             HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
+            NoJobErp = h.NoJobErp,
             JobStatus = h.RadioRepairJob.Status.ToString(),
             RadioSerialNumber = h.RadioSerialNumber,
             RadioId = h.RadioId,
@@ -873,6 +920,7 @@ namespace Pm.Services.RadioHandover
                 h.RadioId = dto.RadioId;
                 h.RadioSerialNumber = dto.RadioSerialNumber.Trim();
                 h.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
+                h.NoJobErp = dto.NoJobErp?.Trim();
                 h.EquipmentName = dto.EquipmentName?.Trim();
                 h.UnitNumber = dto.UnitNumber?.Trim();
                 h.RadioOwnerLabel = dto.RadioOwnerLabel?.Trim();

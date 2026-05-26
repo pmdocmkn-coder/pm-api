@@ -20,8 +20,26 @@ namespace Pm.Services.WarehousePartBorrow
             _activityLog = activityLog;
         }
 
-        private static bool IsTechnician(string? roleName) =>
-            string.Equals(roleName, "Teknisi", StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// Cek apakah role ini adalah role non-admin (teknisi/workshop/field).
+        /// Role Warehouse, Supervisor Warehouse, Supervisor, Helpdesk, dan Super Admin 
+        /// dianggap sebagai admin yang bisa melihat semua data.
+        /// </summary>
+        private static bool IsFieldRole(string? roleName)
+        {
+            if (string.IsNullOrWhiteSpace(roleName)) return false;
+            // Jika rolenya teknisi (dari OperationalRoleNames) → pasti field role
+            if (OperationalRoleNames.IsTechnicianRole(roleName)) return true;
+            // Role admin/warehouse/supervisor → bukan field role
+            var adminRoles = new[] { 
+                OperationalRoleNames.Warehouse, 
+                OperationalRoleNames.SupervisorWarehouse, 
+                OperationalRoleNames.SupervisorMkn, 
+                OperationalRoleNames.Helpdesk,
+                "Super Admin", "Admin" 
+            };
+            return !adminRoles.Any(r => string.Equals(r, roleName, StringComparison.OrdinalIgnoreCase));
+        }
 
         public async Task<PagedResultDto<WarehousePartBorrowListDto>> GetAllAsync(
             WarehousePartBorrowQueryDto query, int currentUserId, string? roleName)
@@ -31,8 +49,13 @@ namespace Pm.Services.WarehousePartBorrow
                 .Include(b => b.RelatedRepairJob)
                 .AsQueryable();
 
-            if (IsTechnician(roleName))
+            if (IsFieldRole(roleName))
+            {
                 q = q.Where(b => b.BorrowedByUserId == currentUserId);
+                // Teknisi hanya melihat data setelah WH menyerahkan barang (Issued/Returned)
+                q = q.Where(b => b.Status == WarehousePartBorrowStatus.Issued
+                               || b.Status == WarehousePartBorrowStatus.Returned);
+            }
 
             if (!string.IsNullOrWhiteSpace(query.Status) &&
                 Enum.TryParse<WarehousePartBorrowStatus>(query.Status, true, out var st))
@@ -102,7 +125,7 @@ namespace Pm.Services.WarehousePartBorrow
                 .Include(x => x.StatusLogs).ThenInclude(l => l.User)
                 .FirstOrDefaultAsync(x => x.Id == id);
             if (b == null) return null;
-            if (IsTechnician(roleName) && b.BorrowedByUserId != currentUserId)
+            if (IsFieldRole(roleName) && b.BorrowedByUserId != currentUserId)
                 throw new UnauthorizedAccessException("Akses ditolak.");
             return MapDetail(b);
         }
@@ -179,11 +202,15 @@ namespace Pm.Services.WarehousePartBorrow
             return (await GetByIdAsync(id, userId, null))!;
         }
 
-        public async Task<WarehousePartBorrowDetailDto> ReturnAsync(int id, ReturnBorrowDto dto, int userId)
+        public async Task<WarehousePartBorrowDetailDto> ReturnAsync(int id, ReturnBorrowDto dto, int userId, string? roleName)
         {
             var b = await GetBorrowTrackedAsync(id);
             if (b.Status != WarehousePartBorrowStatus.Issued)
                 throw new InvalidOperationException("Hanya peminjaman Issued yang dapat dikembalikan.");
+            
+            if (IsFieldRole(roleName) && b.BorrowedByUserId != userId)
+                throw new UnauthorizedAccessException("Teknisi hanya dapat mengembalikan part yang mereka pinjam sendiri.");
+                
             var from = b.Status;
             b.Status = WarehousePartBorrowStatus.Returned;
             b.ReturnedAt = DateTime.UtcNow;

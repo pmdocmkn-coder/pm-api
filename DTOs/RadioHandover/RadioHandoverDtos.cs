@@ -57,6 +57,9 @@ namespace Pm.DTOs.RadioHandover
         /// <summary>Tag kuning (rusak) atau hijau (baik). Default rusak untuk HD→Tek.</summary>
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
 
+        [MaxLength(100)]
+        public string? NoJobErp { get; set; }
+
         [MaxLength(200)]
         public string? OriginFrom { get; set; }
         [MaxLength(2000)]
@@ -101,6 +104,7 @@ namespace Pm.DTOs.RadioHandover
         public string HandoverType { get; set; } = null!;
         public int RadioRepairJobId { get; set; }
         public string HelpdeskTicketNumber { get; set; } = null!;
+        public string? NoJobErp { get; set; }
         public string RadioSerialNumber { get; set; } = null!;
         public string? EquipmentName { get; set; }
         public string? UnitNumber { get; set; }
@@ -144,6 +148,9 @@ namespace Pm.DTOs.RadioHandover
         public string? DamageDescription { get; set; }
 
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
+
+        [MaxLength(100)]
+        public string? NoJobErp { get; set; }
 
         [MaxLength(200)]
         public string? OriginFrom { get; set; }

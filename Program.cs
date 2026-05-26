@@ -223,6 +223,9 @@ builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.Cctv
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
+// ===== External Integrations =====
+builder.Services.AddHttpClient<ISihepiIntegrationService, SihepiIntegrationService>();
+
 builder.Services.AddHttpContextAccessor();
 
 // ===== CORS =====

@@ -62,6 +62,9 @@ namespace Pm.Models
         /// <summary>Tag kuning (rusak) atau hijau (baik).</summary>
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
 
+        [MaxLength(100)]
+        public string? NoJobErp { get; set; }
+
         [MaxLength(200)]
         public string? OriginFrom { get; set; }
 
