@@ -212,6 +212,7 @@ builder.Services.AddScoped<Pm.Services.RadioRepairJob.IRadioRepairJobService, Pm
 builder.Services.AddScoped<Pm.Services.RepairJobCustomStatus.IRepairJobCustomStatusService, Pm.Services.RepairJobCustomStatus.RepairJobCustomStatusService>();
 builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
+builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartCatalogService, Pm.Services.WarehousePartBorrow.WarehousePartCatalogService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();

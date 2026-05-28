@@ -46,7 +46,9 @@ namespace Pm.Data
 
         // Warehouse Part Borrow
         public DbSet<WarehousePartBorrow> WarehousePartBorrows { get; set; } = null!;
+        public DbSet<WarehousePartBorrowItem> WarehousePartBorrowItems { get; set; } = null!;
         public DbSet<WarehousePartBorrowStatusLog> WarehousePartBorrowStatusLogs { get; set; } = null!;
+        public DbSet<WarehousePartCatalog> WarehousePartCatalogs { get; set; } = null!;
 
         // Gatepass & Quotation
         public DbSet<Gatepass> Gatepasses { get; set; } = null!;

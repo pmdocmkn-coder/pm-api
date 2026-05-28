@@ -11,30 +11,41 @@ namespace Pm.DTOs.WarehousePartBorrow
         public DateTime? ToDate { get; set; }
     }
 
-    public class CreateWarehousePartBorrowDto
+    public class WarehousePartBorrowItemDto
     {
+        public int? Id { get; set; }
         [Required, MaxLength(500)]
         public string PartDescription { get; set; } = null!;
         [MaxLength(100)]
         public string? PartCode { get; set; }
         [Range(1, 999)]
         public int Quantity { get; set; } = 1;
+    }
+
+    public class CreateWarehousePartBorrowDto
+    {
+        [Required, MinLength(1)]
+        public List<WarehousePartBorrowItemDto> Items { get; set; } = new();
+        
         [MaxLength(1000)]
         public string? Purpose { get; set; }
         public int? RelatedRepairJobId { get; set; }
+        [MaxLength(100)]
+        public string? TicketNumber { get; set; }
     }
 
     public class WarehousePartBorrowListDto
     {
         public int Id { get; set; }
         public string BorrowNumber { get; set; } = null!;
-        public string PartDescription { get; set; } = null!;
-        public string? PartCode { get; set; }
-        public int Quantity { get; set; }
+        
+        public List<WarehousePartBorrowItemDto> Items { get; set; } = new();
+        public int TotalItems => Items.Count;
         public string Status { get; set; } = null!;
         public string BorrowedByName { get; set; } = null!;
         public DateTime RequestedAt { get; set; }
         public string? RelatedJobNumber { get; set; }
+        public string? TicketNumber { get; set; }
     }
 
     public class WarehousePartBorrowStatusLogDto
@@ -58,6 +69,10 @@ namespace Pm.DTOs.WarehousePartBorrow
         public DateTime? ReturnedAt { get; set; }
         public string? ReturnCondition { get; set; }
         public string? ReturnNote { get; set; }
+        public string? IssuerSignatureBase64 { get; set; }
+        public string? ReceiverSignatureBase64 { get; set; }
+        public string? ReturnIssuerSignatureBase64 { get; set; }
+        public string? ReturnReceiverSignatureBase64 { get; set; }
         public List<WarehousePartBorrowStatusLogDto> StatusLogs { get; set; } = [];
     }
 
@@ -65,6 +80,12 @@ namespace Pm.DTOs.WarehousePartBorrow
     {
         [MaxLength(500)]
         public string? Note { get; set; }
+    }
+
+    public class IssueBorrowDto
+    {
+        public string? IssuerSignatureBase64 { get; set; }
+        public string? ReceiverSignatureBase64 { get; set; }
     }
 
     public class RejectBorrowDto
@@ -79,5 +100,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string? ReturnCondition { get; set; }
         [MaxLength(500)]
         public string? ReturnNote { get; set; }
+        public string? ReturnIssuerSignatureBase64 { get; set; }
+        public string? ReturnReceiverSignatureBase64 { get; set; }
     }
 }
