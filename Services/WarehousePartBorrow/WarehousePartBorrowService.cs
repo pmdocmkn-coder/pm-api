@@ -45,8 +45,10 @@ namespace Pm.Services.WarehousePartBorrow
             WarehousePartBorrowQueryDto query, int currentUserId, string? roleName)
         {
             var q = _context.WarehousePartBorrows.AsNoTracking()
+                .Where(b => b.IsActive)
                 .Include(b => b.BorrowedBy)
                 .Include(b => b.RelatedRepairJob)
+                .Include(b => b.Items)
                 .AsQueryable();
 
             if (IsFieldRole(roleName))
@@ -74,8 +76,8 @@ namespace Pm.Services.WarehousePartBorrow
                 var s = query.Search.Trim().ToLower();
                 q = q.Where(b =>
                     b.BorrowNumber.ToLower().Contains(s) ||
-                    b.PartDescription.ToLower().Contains(s) ||
-                    (b.PartCode != null && b.PartCode.ToLower().Contains(s)));
+                    b.Items.Any(i => i.PartDescription.ToLower().Contains(s) || 
+                                     (i.PartCode != null && i.PartCode.ToLower().Contains(s))));
             }
 
             var total = await q.CountAsync();
@@ -86,9 +88,12 @@ namespace Pm.Services.WarehousePartBorrow
                 {
                     Id = b.Id,
                     BorrowNumber = b.BorrowNumber,
-                    PartDescription = b.PartDescription,
-                    PartCode = b.PartCode,
-                    Quantity = b.Quantity,
+                    Items = b.Items.Select(i => new WarehousePartBorrowItemDto { 
+                        Id = i.Id, 
+                        PartDescription = i.PartDescription, 
+                        PartCode = i.PartCode, 
+                        Quantity = i.Quantity 
+                    }).ToList(),
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
@@ -101,15 +106,22 @@ namespace Pm.Services.WarehousePartBorrow
 
         public async Task<List<WarehousePartBorrowListDto>> GetPendingAsync() =>
             await _context.WarehousePartBorrows.AsNoTracking()
+                .Where(b => b.IsActive)
+                .Include(b => b.Items)
+                .Include(b => b.BorrowedBy)
+                .Include(b => b.RelatedRepairJob)
                 .Where(b => b.Status == WarehousePartBorrowStatus.PendingApproval)
                 .OrderBy(b => b.RequestedAt)
                 .Select(b => new WarehousePartBorrowListDto
                 {
                     Id = b.Id,
                     BorrowNumber = b.BorrowNumber,
-                    PartDescription = b.PartDescription,
-                    PartCode = b.PartCode,
-                    Quantity = b.Quantity,
+                    Items = b.Items.Select(i => new WarehousePartBorrowItemDto { 
+                        Id = i.Id, 
+                        PartDescription = i.PartDescription, 
+                        PartCode = i.PartCode, 
+                        Quantity = i.Quantity 
+                    }).ToList(),
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
@@ -120,6 +132,8 @@ namespace Pm.Services.WarehousePartBorrow
         public async Task<WarehousePartBorrowDetailDto?> GetByIdAsync(int id, int currentUserId, string? roleName)
         {
             var b = await _context.WarehousePartBorrows
+                .Where(x => x.IsActive)
+                .Include(x => x.Items)
                 .Include(x => x.BorrowedBy)
                 .Include(x => x.RelatedRepairJob)
                 .Include(x => x.StatusLogs).ThenInclude(l => l.User)
@@ -138,14 +152,17 @@ namespace Pm.Services.WarehousePartBorrow
             {
                 BorrowNumber = number,
                 BorrowedByUserId = userId,
-                PartDescription = dto.PartDescription.Trim(),
-                PartCode = dto.PartCode?.Trim(),
-                Quantity = dto.Quantity,
                 Purpose = dto.Purpose?.Trim(),
                 RelatedRepairJobId = dto.RelatedRepairJobId,
+                TicketNumber = dto.TicketNumber?.Trim(),
                 Status = WarehousePartBorrowStatus.PendingApproval,
                 RequestedAt = now,
-                CreatedAt = now
+                CreatedAt = now,
+                Items = dto.Items.Select(i => new WarehousePartBorrowItem {
+                    PartDescription = i.PartDescription.Trim(),
+                    PartCode = i.PartCode?.Trim(),
+                    Quantity = i.Quantity
+                }).ToList()
             };
             _context.WarehousePartBorrows.Add(borrow);
             await _context.SaveChangesAsync();
@@ -187,7 +204,7 @@ namespace Pm.Services.WarehousePartBorrow
             return (await GetByIdAsync(id, userId, null))!;
         }
 
-        public async Task<WarehousePartBorrowDetailDto> IssueAsync(int id, int userId)
+        public async Task<WarehousePartBorrowDetailDto> IssueAsync(int id, IssueBorrowDto dto, int userId)
         {
             var b = await GetBorrowTrackedAsync(id);
             if (b.Status != WarehousePartBorrowStatus.Approved)
@@ -196,6 +213,8 @@ namespace Pm.Services.WarehousePartBorrow
             b.Status = WarehousePartBorrowStatus.Issued;
             b.IssuedByUserId = userId;
             b.IssuedAt = DateTime.UtcNow;
+            b.IssuerSignatureBase64 = dto.IssuerSignatureBase64;
+            b.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", userId);
             await _context.SaveChangesAsync();
@@ -208,14 +227,17 @@ namespace Pm.Services.WarehousePartBorrow
             if (b.Status != WarehousePartBorrowStatus.Issued)
                 throw new InvalidOperationException("Hanya peminjaman Issued yang dapat dikembalikan.");
             
-            if (IsFieldRole(roleName) && b.BorrowedByUserId != userId)
-                throw new UnauthorizedAccessException("Teknisi hanya dapat mengembalikan part yang mereka pinjam sendiri.");
+            // Catatan: Teknisi lain diperbolehkan mengembalikan part atas nama peminjam asli.
+            // Siapa yang mengembalikan tercatat di status log (userId).
                 
             var from = b.Status;
             b.Status = WarehousePartBorrowStatus.Returned;
             b.ReturnedAt = DateTime.UtcNow;
             b.ReturnCondition = dto.ReturnCondition?.Trim();
             b.ReturnNote = dto.ReturnNote?.Trim();
+            b.ReturnedByName = dto.ReturnedByName?.Trim();
+            b.ReturnIssuerSignatureBase64 = dto.ReturnIssuerSignatureBase64;
+            b.ReturnReceiverSignatureBase64 = dto.ReturnReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Returned, dto.ReturnNote, userId);
             await _context.SaveChangesAsync();
@@ -238,7 +260,7 @@ namespace Pm.Services.WarehousePartBorrow
         }
 
         private async Task<Models.WarehousePartBorrow> GetBorrowTrackedAsync(int id) =>
-            await _context.WarehousePartBorrows.FirstOrDefaultAsync(b => b.Id == id)
+            await _context.WarehousePartBorrows.FirstOrDefaultAsync(b => b.Id == id && b.IsActive)
             ?? throw new KeyNotFoundException("Peminjaman tidak ditemukan.");
 
         private Task AddLogAsync(int borrowId, WarehousePartBorrowStatus? from,
@@ -260,13 +282,17 @@ namespace Pm.Services.WarehousePartBorrow
         {
             Id = b.Id,
             BorrowNumber = b.BorrowNumber,
-            PartDescription = b.PartDescription,
-            PartCode = b.PartCode,
-            Quantity = b.Quantity,
+            Items = b.Items.Select(i => new WarehousePartBorrowItemDto { 
+                Id = i.Id, 
+                PartDescription = i.PartDescription, 
+                PartCode = i.PartCode, 
+                Quantity = i.Quantity 
+            }).ToList(),
             Status = b.Status.ToString(),
             BorrowedByName = b.BorrowedBy.FullName,
             RequestedAt = b.RequestedAt,
             RelatedJobNumber = b.RelatedRepairJob?.HelpdeskTicketNumber,
+            TicketNumber = b.TicketNumber,
             Purpose = b.Purpose,
             RelatedRepairJobId = b.RelatedRepairJobId,
             ApprovalNote = b.ApprovalNote,
@@ -276,6 +302,11 @@ namespace Pm.Services.WarehousePartBorrow
             ReturnedAt = b.ReturnedAt,
             ReturnCondition = b.ReturnCondition,
             ReturnNote = b.ReturnNote,
+            ReturnedByName = b.ReturnedByName,
+            IssuerSignatureBase64 = b.IssuerSignatureBase64,
+            ReceiverSignatureBase64 = b.ReceiverSignatureBase64,
+            ReturnIssuerSignatureBase64 = b.ReturnIssuerSignatureBase64,
+            ReturnReceiverSignatureBase64 = b.ReturnReceiverSignatureBase64,
             StatusLogs = b.StatusLogs.OrderByDescending(l => l.At).Select(l => new WarehousePartBorrowStatusLogDto
             {
                 Id = l.Id,
@@ -286,5 +317,15 @@ namespace Pm.Services.WarehousePartBorrow
                 At = l.At
             }).ToList()
         };
+
+        public async Task DeleteAsync(int id)
+        {
+            var borrow = await _context.WarehousePartBorrows.FindAsync(id);
+            if (borrow == null || !borrow.IsActive)
+                throw new KeyNotFoundException("Peminjaman tidak ditemukan.");
+
+            borrow.IsActive = false;
+            await _context.SaveChangesAsync();
+        }
     }
 }

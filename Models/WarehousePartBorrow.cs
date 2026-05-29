@@ -17,13 +17,7 @@ namespace Pm.Models
         [ForeignKey(nameof(BorrowedByUserId))]
         public User BorrowedBy { get; set; } = null!;
 
-        [Required, MaxLength(500)]
-        public string PartDescription { get; set; } = null!;
-
-        [MaxLength(100)]
-        public string? PartCode { get; set; }
-
-        public int Quantity { get; set; } = 1;
+        public ICollection<WarehousePartBorrowItem> Items { get; set; } = new List<WarehousePartBorrowItem>();
 
         [MaxLength(1000)]
         public string? Purpose { get; set; }
@@ -31,6 +25,9 @@ namespace Pm.Models
         public int? RelatedRepairJobId { get; set; }
         [ForeignKey(nameof(RelatedRepairJobId))]
         public RadioRepairJob? RelatedRepairJob { get; set; }
+
+        [MaxLength(100)]
+        public string? TicketNumber { get; set; }
 
         public WarehousePartBorrowStatus Status { get; set; } = WarehousePartBorrowStatus.PendingApproval;
 
@@ -49,14 +46,32 @@ namespace Pm.Models
         public DateTime? IssuedAt { get; set; }
         public int? IssuedByUserId { get; set; }
 
+        [Column(TypeName = "longtext")]
+        public string? IssuerSignatureBase64 { get; set; }
+
+        [Column(TypeName = "longtext")]
+        public string? ReceiverSignatureBase64 { get; set; }
+
+        [Column(TypeName = "longtext")]
+        public string? ReturnIssuerSignatureBase64 { get; set; }
+
+        [Column(TypeName = "longtext")]
+        public string? ReturnReceiverSignatureBase64 { get; set; }
+
         public DateTime? ReturnedAt { get; set; }
         [MaxLength(200)]
         public string? ReturnCondition { get; set; }
         [MaxLength(500)]
         public string? ReturnNote { get; set; }
 
+        /// <summary>Nama orang yang mengembalikan (jika berbeda dari peminjam asli)</summary>
+        [MaxLength(200)]
+        public string? ReturnedByName { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+        
+        public bool IsActive { get; set; } = true;
 
         public ICollection<WarehousePartBorrowStatusLog> StatusLogs { get; set; } = new List<WarehousePartBorrowStatusLog>();
     }

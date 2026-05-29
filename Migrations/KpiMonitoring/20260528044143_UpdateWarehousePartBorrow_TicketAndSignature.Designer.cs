@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
 #nullable disable
 
-namespace Pm.Migrations
+namespace Pm.Migrations.KpiMonitoring
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260528044143_UpdateWarehousePartBorrow_TicketAndSignature")]
+    partial class UpdateWarehousePartBorrow_TicketAndSignature
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2626,9 +2629,6 @@ namespace Pm.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2638,9 +2638,21 @@ namespace Pm.Migrations
                     b.Property<string>("IssuerSignatureBase64")
                         .HasColumnType("longtext");
 
+                    b.Property<string>("PartCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("PartDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("Purpose")
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
 
                     b.Property<string>("ReceiverSignatureBase64")
                         .HasColumnType("longtext");
@@ -2665,22 +2677,12 @@ namespace Pm.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
-                    b.Property<string>("ReturnIssuerSignatureBase64")
-                        .HasColumnType("longtext");
-
                     b.Property<string>("ReturnNote")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
-                    b.Property<string>("ReturnReceiverSignatureBase64")
-                        .HasColumnType("longtext");
-
                     b.Property<DateTime?>("ReturnedAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ReturnedByName")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2704,36 +2706,6 @@ namespace Pm.Migrations
                     b.HasIndex("RelatedRepairJobId");
 
                     b.ToTable("WarehousePartBorrows");
-                });
-
-            modelBuilder.Entity("Pm.Models.WarehousePartBorrowItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BorrowId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PartCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("PartDescription")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BorrowId");
-
-                    b.ToTable("WarehousePartBorrowItems");
                 });
 
             modelBuilder.Entity("Pm.Models.WarehousePartBorrowStatusLog", b =>
@@ -2796,10 +2768,6 @@ namespace Pm.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("OwnerId")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("PartCode")
                         .IsRequired()
@@ -3404,17 +3372,6 @@ namespace Pm.Migrations
                     b.Navigation("RelatedRepairJob");
                 });
 
-            modelBuilder.Entity("Pm.Models.WarehousePartBorrowItem", b =>
-                {
-                    b.HasOne("Pm.Models.WarehousePartBorrow", "Borrow")
-                        .WithMany("Items")
-                        .HasForeignKey("BorrowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Borrow");
-                });
-
             modelBuilder.Entity("Pm.Models.WarehousePartBorrowStatusLog", b =>
                 {
                     b.HasOne("Pm.Models.WarehousePartBorrow", "Borrow")
@@ -3541,8 +3498,6 @@ namespace Pm.Migrations
 
             modelBuilder.Entity("Pm.Models.WarehousePartBorrow", b =>
                 {
-                    b.Navigation("Items");
-
                     b.Navigation("StatusLogs");
                 });
 #pragma warning restore 612, 618

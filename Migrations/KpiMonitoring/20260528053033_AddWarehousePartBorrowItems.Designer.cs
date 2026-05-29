@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
 #nullable disable
 
-namespace Pm.Migrations
+namespace Pm.Migrations.KpiMonitoring
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260528053033_AddWarehousePartBorrowItems")]
+    partial class AddWarehousePartBorrowItems
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2626,9 +2629,6 @@ namespace Pm.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2677,10 +2677,6 @@ namespace Pm.Migrations
 
                     b.Property<DateTime?>("ReturnedAt")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ReturnedByName")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
 
                     b.Property<string>("Status")
                         .IsRequired()

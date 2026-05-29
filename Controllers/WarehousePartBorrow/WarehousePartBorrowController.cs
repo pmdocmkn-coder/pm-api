@@ -100,11 +100,11 @@ namespace Pm.Controllers.WarehousePartBorrow
 
         [HttpPatch("{id}/issue")]
         [Authorize(Policy = "WarehouseBorrowIssue")]
-        public async Task<IActionResult> Issue(int id)
+        public async Task<IActionResult> Issue(int id, [FromBody] IssueBorrowDto dto)
         {
             try
             {
-                var data = await _service.IssueAsync(id, CurrentUserId);
+                var data = await _service.IssueAsync(id, dto, CurrentUserId);
                 return ApiResponse.Success(data);
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
@@ -126,7 +126,7 @@ namespace Pm.Controllers.WarehousePartBorrow
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
-        [HttpDelete("{id}")]
+        [HttpPost("{id}/cancel")]
         [Authorize(Policy = "WarehouseBorrowCancel")]
         public async Task<IActionResult> Cancel(int id)
         {
@@ -138,6 +138,20 @@ namespace Pm.Controllers.WarehousePartBorrow
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
             catch (InvalidOperationException ex) { return ApiResponse.BadRequest("borrow", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Policy = "WarehouseBorrowCreate")] // Only admins can soft delete
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                await _service.DeleteAsync(id);
+                return ApiResponse.Success(null, "Peminjaman berhasil dihapus.");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
     }
