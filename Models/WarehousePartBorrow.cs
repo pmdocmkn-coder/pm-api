@@ -64,6 +64,10 @@ namespace Pm.Models
         [MaxLength(500)]
         public string? ReturnNote { get; set; }
 
+        /// <summary>Nama orang yang mengembalikan (jika berbeda dari peminjam asli)</summary>
+        [MaxLength(200)]
+        public string? ReturnedByName { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
         

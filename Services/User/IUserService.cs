@@ -7,6 +7,7 @@ namespace Pm.Services
     public interface IUserService
     {
         Task<PagedResultDto<UserDto>> GetUsersAsync(UserQueryDto queryDto);
+        Task<List<UserLookupDto>> LookupUsersAsync();
         Task<UserDto?> GetUserByIdAsync(int userId);
         Task<User?> GetUserEntityByIdAsync(int userId);
         Task<UserDto?> CreateUserAsync(CreateUserDto dto);

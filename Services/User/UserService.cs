@@ -77,6 +77,20 @@ namespace Pm.Services
             return new PagedResultDto<UserDto>(users, queryDto.Page, queryDto.PageSize, totalCount);
         }
 
+        public async Task<List<UserLookupDto>> LookupUsersAsync()
+        {
+            return await _context.Users
+                .Where(u => u.IsActive)
+                .OrderBy(u => u.FullName)
+                .Select(u => new UserLookupDto
+                {
+                    Id = u.UserId,
+                    Name = u.FullName,
+                    Username = u.Username
+                })
+                .ToListAsync();
+        }
+
         public async Task<UserDto?> GetUserByIdAsync(int userId)
         {
             var user = await _context.Users

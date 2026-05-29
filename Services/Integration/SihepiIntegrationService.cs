@@ -40,10 +40,10 @@ namespace Pm.Services
                     return new List<SihepiTicketDto>();
 
                 // Filter out invalid tickets
-                return apiResponse.Rows
+                return apiResponse.Rows?
                     .Where(t => !string.IsNullOrWhiteSpace(t.TicketNo)
                         || (!string.IsNullOrWhiteSpace(t.WoNo) && t.WoNo != ""))
-                    .ToList();
+                    .ToList() ?? new List<SihepiTicketDto>();
             }
             catch (Exception)
             {

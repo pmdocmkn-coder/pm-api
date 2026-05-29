@@ -44,6 +44,15 @@ namespace Pm.Controllers
             return ApiResponse.Success(users, "Daftar user berhasil dimuat");
         }
 
+        [Authorize]
+        [HttpGet("lookup")]
+        [ProducesResponseType(typeof(List<UserLookupDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> LookupUsers()
+        {
+            var users = await _userService.LookupUsersAsync();
+            return ApiResponse.Success(users, "Daftar user berhasil dimuat");
+        }
+
         [Authorize(Policy = "CanViewDetailUsers")]
         [HttpGet("{userId}")]
         [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]

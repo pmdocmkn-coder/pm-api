@@ -227,14 +227,15 @@ namespace Pm.Services.WarehousePartBorrow
             if (b.Status != WarehousePartBorrowStatus.Issued)
                 throw new InvalidOperationException("Hanya peminjaman Issued yang dapat dikembalikan.");
             
-            if (IsFieldRole(roleName) && b.BorrowedByUserId != userId)
-                throw new UnauthorizedAccessException("Teknisi hanya dapat mengembalikan part yang mereka pinjam sendiri.");
+            // Catatan: Teknisi lain diperbolehkan mengembalikan part atas nama peminjam asli.
+            // Siapa yang mengembalikan tercatat di status log (userId).
                 
             var from = b.Status;
             b.Status = WarehousePartBorrowStatus.Returned;
             b.ReturnedAt = DateTime.UtcNow;
             b.ReturnCondition = dto.ReturnCondition?.Trim();
             b.ReturnNote = dto.ReturnNote?.Trim();
+            b.ReturnedByName = dto.ReturnedByName?.Trim();
             b.ReturnIssuerSignatureBase64 = dto.ReturnIssuerSignatureBase64;
             b.ReturnReceiverSignatureBase64 = dto.ReturnReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
@@ -301,6 +302,7 @@ namespace Pm.Services.WarehousePartBorrow
             ReturnedAt = b.ReturnedAt,
             ReturnCondition = b.ReturnCondition,
             ReturnNote = b.ReturnNote,
+            ReturnedByName = b.ReturnedByName,
             IssuerSignatureBase64 = b.IssuerSignatureBase64,
             ReceiverSignatureBase64 = b.ReceiverSignatureBase64,
             ReturnIssuerSignatureBase64 = b.ReturnIssuerSignatureBase64,

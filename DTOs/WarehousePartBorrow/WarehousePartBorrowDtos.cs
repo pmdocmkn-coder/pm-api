@@ -69,6 +69,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public DateTime? ReturnedAt { get; set; }
         public string? ReturnCondition { get; set; }
         public string? ReturnNote { get; set; }
+        public string? ReturnedByName { get; set; }
         public string? IssuerSignatureBase64 { get; set; }
         public string? ReceiverSignatureBase64 { get; set; }
         public string? ReturnIssuerSignatureBase64 { get; set; }
@@ -102,5 +103,8 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string? ReturnNote { get; set; }
         public string? ReturnIssuerSignatureBase64 { get; set; }
         public string? ReturnReceiverSignatureBase64 { get; set; }
+        /// <summary>Nama orang yang mengembalikan (jika diwakilkan)</summary>
+        [MaxLength(200)]
+        public string? ReturnedByName { get; set; }
     }
 }

@@ -36,6 +36,7 @@ namespace Pm.Services.WarehousePartBorrow
                     Id = x.Id,
                     PartCode = x.PartCode,
                     PartName = x.PartName,
+                    OwnerId = x.OwnerId,
                     Category = x.Category,
                     Unit = x.Unit,
                     Description = x.Description
@@ -68,6 +69,7 @@ namespace Pm.Services.WarehousePartBorrow
                     Id = x.Id,
                     PartCode = x.PartCode,
                     PartName = x.PartName,
+                    OwnerId = x.OwnerId,
                     Category = x.Category,
                     Unit = x.Unit,
                     Description = x.Description,
@@ -81,7 +83,7 @@ namespace Pm.Services.WarehousePartBorrow
                 throw new InvalidOperationException("File import wajib dipilih.");
 
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var rows = new List<(string OwnerId, string PartCode, string PartName, string? Category, string? Unit, string? Description)>();
+            var rows = new List<(string? OwnerId, string PartCode, string PartName, string? Category, string? Unit, string? Description)>();
 
             if (ext == ".xlsx" || ext == ".xls")
             {
@@ -101,9 +103,9 @@ namespace Pm.Services.WarehousePartBorrow
                     if (string.IsNullOrWhiteSpace(partCode) && string.IsNullOrWhiteSpace(partName)) continue;
 
                     rows.Add((
-                        ownerId ?? "",
-                        string.IsNullOrWhiteSpace(partCode) ? "-" : partCode,
-                        string.IsNullOrWhiteSpace(partName) ? partCode : partName,
+                        ownerId,
+                        string.IsNullOrWhiteSpace(partCode) ? "-" : partCode!,
+                        string.IsNullOrWhiteSpace(partName) ? (string.IsNullOrWhiteSpace(partCode) ? "-" : partCode!) : partName!,
                         FindValue(headers, values, new[] { "category", "kategori", "group" }),
                         FindValue(headers, values, new[] { "unit", "satuan", "uom" }),
                         FindValue(headers, values, new[] { "description", "keterangan", "remark" })
@@ -128,9 +130,9 @@ namespace Pm.Services.WarehousePartBorrow
                     if (string.IsNullOrWhiteSpace(partCode) && string.IsNullOrWhiteSpace(partName)) continue;
 
                     rows.Add((
-                        ownerId ?? "",
-                        string.IsNullOrWhiteSpace(partCode) ? "-" : partCode,
-                        string.IsNullOrWhiteSpace(partName) ? partCode : partName,
+                        ownerId,
+                        string.IsNullOrWhiteSpace(partCode) ? "-" : partCode!,
+                        string.IsNullOrWhiteSpace(partName) ? (string.IsNullOrWhiteSpace(partCode) ? "-" : partCode!) : partName!,
                         FindValue(headers, values, new[] { "category", "kategori", "group" }),
                         FindValue(headers, values, new[] { "unit", "satuan", "uom" }),
                         FindValue(headers, values, new[] { "description", "keterangan", "remark" })
