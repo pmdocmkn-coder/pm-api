@@ -115,10 +115,10 @@ namespace Pm.Services
                         Channels = sg.Select(x => new SwrChannelMonthlyDto
                         {
                             ChannelName = x.ChannelName,
-                            AvgFpwr = x.AvgFpwr.HasValue ? Math.Round(x.AvgFpwr.Value, 1) : null,
-                            AvgVswr = Math.Round(x.AvgVswr, 1),
+                            AvgFpwr = x.AvgFpwr.HasValue ? Math.Round(x.AvgFpwr.Value, 2) : null,
+                            AvgVswr = Math.Round(x.AvgVswr, 2),
                             Status = GetVswrStatus(x.AvgVswr, x.ExpectedMax),
-                            WarningMessage = GetWarningMessage(Math.Round(x.AvgVswr, 1), x.ExpectedMax)
+                            WarningMessage = GetWarningMessage(Math.Round(x.AvgVswr, 2), x.ExpectedMax)
                         }).OrderBy(c => c.ChannelName).ToList()
                     })
                     .OrderBy(s => s.SiteName)
@@ -195,14 +195,14 @@ namespace Pm.Services
                                     {
                                         MonthlyAvgFpwr = monthlyGroups.ToDictionary(
                                             mg => new DateTime(year, mg.Month, 1).ToString("MMM", CultureInfo.InvariantCulture),
-                                            mg => mg.AvgFpwr != 0 ? (decimal?)Math.Round(mg.AvgFpwr, 1) : null
+                                            mg => mg.AvgFpwr != 0 ? (decimal?)Math.Round(mg.AvgFpwr, 2) : null
                                         ),
                                         MonthlyAvgVswr = monthlyGroups.ToDictionary(
                                             mg => new DateTime(year, mg.Month, 1).ToString("MMM", CultureInfo.InvariantCulture),
-                                            mg => Math.Round(mg.AvgVswr, 1)
+                                            mg => Math.Round(mg.AvgVswr, 2)
                                         ),
-                                        YearlyAvgFpwr = yearlyAvgFpwr.HasValue ? Math.Round(yearlyAvgFpwr.Value, 1) : null,
-                                        YearlyAvgVswr = Math.Round(yearlyAvgVswr, 1),
+                                        YearlyAvgFpwr = yearlyAvgFpwr.HasValue ? Math.Round(yearlyAvgFpwr.Value, 2) : null,
+                                        YearlyAvgVswr = Math.Round(yearlyAvgVswr, 2),
                                         Warnings = monthlyGroups
                                             .Select(mg =>
                                             {
@@ -291,10 +291,10 @@ namespace Pm.Services
                             {
                                 var validFpwr = monthData.Where(x => x.Fpwr.HasValue).ToList();
                                 monthlyFpwr[monthKey] = validFpwr.Any()
-                                    ? Math.Round(validFpwr.Average(x => x.Fpwr!.Value), 1)
+                                    ? Math.Round(validFpwr.Average(x => x.Fpwr!.Value), 2)
                                     : null;
 
-                                monthlyVswr[monthKey] = Math.Round(monthData.Average(x => x.Vswr), 1);
+                                monthlyVswr[monthKey] = Math.Round(monthData.Average(x => x.Vswr), 2);
 
                                 var note = monthData.FirstOrDefault(x => !string.IsNullOrEmpty(x.Notes))?.Notes;
                                 if (!string.IsNullOrEmpty(note))
