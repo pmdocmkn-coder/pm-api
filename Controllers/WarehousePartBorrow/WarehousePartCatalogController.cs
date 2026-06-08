@@ -45,7 +45,8 @@ namespace Pm.Controllers.WarehousePartBorrow
 
         [HttpPost("import")]
         [Authorize(Policy = "WarehouseBorrowCreate")]
-        public async Task<IActionResult> Import([FromForm] IFormFile file)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> Import(IFormFile file)
         {
             try
             {
