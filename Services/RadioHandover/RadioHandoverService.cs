@@ -33,6 +33,8 @@ namespace Pm.Services.RadioHandover
             var q = _context.RadioHandovers.AsNoTracking()
                 .Include(h => h.HandedOverBy)
                 .Include(h => h.ReceivedBy)
+                .Include(h => h.WorkshopTechnician)
+                .Include(h => h.HandedOverByWorkshopTechnician)
                 .Include(h => h.RadioRepairJob)
                 .Include(h => h.Photos)
                 .AsQueryable();
@@ -95,6 +97,10 @@ namespace Pm.Services.RadioHandover
                     ReceivedByUserId = h.ReceivedByUserId,
                     HandedOverByName = h.HandedOverBy.FullName,
                     ReceivedByName = h.ReceivedBy.FullName,
+                    WorkshopTechnicianId = h.WorkshopTechnicianId,
+                    WorkshopTechnicianName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : null,
+                    HandedOverByWorkshopTechnicianId = h.HandedOverByWorkshopTechnicianId,
+                    HandedOverByWorkshopTechnicianName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : null,
                     HandoverAt = h.HandoverAt,
                     SignedAt = h.SignedAt,
                     EquipmentTagType = h.EquipmentTagType.ToString(),
@@ -116,10 +122,13 @@ namespace Pm.Services.RadioHandover
             var h = await _context.RadioHandovers
                 .Include(x => x.HandedOverBy)
                 .Include(x => x.ReceivedBy)
+                .Include(x => x.WorkshopTechnician)
+                .Include(x => x.HandedOverByWorkshopTechnician)
                 .Include(x => x.Radio)
                 .Include(x => x.RadioRepairJob)
                 .Include(x => x.Accessories)
                 .Include(x => x.Photos)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(x => x.Id == id);
             return h == null ? null : MapDetail(h);
         }
@@ -163,6 +172,8 @@ namespace Pm.Services.RadioHandover
         {
             if (string.IsNullOrWhiteSpace(dto.HelpdeskTicketNumber))
                 throw new ArgumentException("No tiket helpdesk wajib diisi.");
+            if (!dto.WorkshopTechnicianId.HasValue)
+                throw new ArgumentException("Teknisi workshop wajib dipilih saat serah terima Helpdesk ke Teknisi.");
             ValidateTagFieldsForCreate(dto);
 
             await ValidateRadioSerialAsync(dto.RadioId, dto.RadioSerialNumber);
@@ -195,6 +206,7 @@ namespace Pm.Services.RadioHandover
                 DamageDescription = ResolveJobDamageDescription(dto),
                 Status = RadioRepairJobStatus.Received,
                 AssignedTechnicianUserId = dto.ReceivedByUserId,
+                WorkshopTechnicianId = dto.WorkshopTechnicianId,
                 OpenedByUserId = currentUserId,
                 OpenedAt = now,
                 CreatedAt = now
@@ -238,6 +250,9 @@ namespace Pm.Services.RadioHandover
         {
             if (!dto.RadioRepairJobId.HasValue)
                 throw new ArgumentException("RadioRepairJobId wajib untuk serah terima Tek→WH.");
+
+            if (!dto.HandedOverByWorkshopTechnicianId.HasValue)
+                throw new ArgumentException("Teknisi yang menyerahkan wajib dipilih saat serah terima Teknisi ke Warehouse.");
 
             var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
@@ -388,15 +403,16 @@ namespace Pm.Services.RadioHandover
 
             if (handover.RadioRepairJob != null)
             {
-                handover.RadioRepairJob.Status = RadioRepairJobStatus.InProgress;
+                // Status tetap Received — radio sudah diterima fisik tapi belum mulai dikerjakan.
+                // Status baru berubah ke InProgress saat supervisor assign teknisi perbaikan.
                 handover.RadioRepairJob.UpdatedAt = now;
 
                 _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
                 {
                     JobId = handover.RadioRepairJob.Id,
                     FromStatus = RadioRepairJobStatus.Received,
-                    ToStatus = RadioRepairJobStatus.InProgress,
-                    Note = "Teknisi melengkapi TTD (Radio diterima)",
+                    ToStatus = RadioRepairJobStatus.Received,
+                    Note = "Teknisi melengkapi TTD penerima (Radio diterima, menunggu assign teknisi)",
                     UserId = currentUserId,
                     At = now
                 });
@@ -474,12 +490,14 @@ namespace Pm.Services.RadioHandover
                 RadioOwnerLabel = equipment?.RadioOwnerLabel,
                 OwnerDivision = equipment?.OwnerDivision,
                 OwnerDepartment = equipment?.OwnerDepartment,
-                RadioPhotoBase64 = photos[0],
+                RadioPhotoBase64 = photos.FirstOrDefault(),
                 HandedOverSignatureBase64 = dto.HandedOverSignatureBase64,
                 ReceiverSignatureBase64 = dto.ReceiverSignatureBase64,
                 Remarks = dto.Remarks?.Trim(),
                 HandedOverByUserId = handedOverByUserId,
                 ReceivedByUserId = receivedByUserId,
+                WorkshopTechnicianId = dto.WorkshopTechnicianId,
+                HandedOverByWorkshopTechnicianId = dto.HandedOverByWorkshopTechnicianId,
                 HandoverAt = now,
                 SignedAt = receiverSignatureComplete ? now : null,
                 Status = receiverSignatureComplete ? "Completed" : "PendingReceiverSignature",
@@ -824,8 +842,12 @@ namespace Pm.Services.RadioHandover
             BatterySerialNumber = h.BatterySerialNumber,
             DamageDescription = h.RadioRepairJob.DamageDescription,
             ReceivedByUserId = h.ReceivedByUserId,
-            HandedOverByName = h.HandedOverBy.FullName,
-            ReceivedByName = h.ReceivedBy.FullName,
+            HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
+            ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
+            WorkshopTechnicianId = h.WorkshopTechnicianId,
+            WorkshopTechnicianName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : null,
+            HandedOverByWorkshopTechnicianId = h.HandedOverByWorkshopTechnicianId,
+            HandedOverByWorkshopTechnicianName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : null,
             HandoverAt = h.HandoverAt,
             SignedAt = h.SignedAt,
             EquipmentTagType = h.EquipmentTagType.ToString(),
@@ -869,6 +891,10 @@ namespace Pm.Services.RadioHandover
         {
             var h = await _context.RadioHandovers
                 .Include(x => x.RadioRepairJob)
+                .Include(x => x.HandedOverBy)
+                .Include(x => x.ReceivedBy)
+                .Include(x => x.WorkshopTechnician)
+                .Include(x => x.HandedOverByWorkshopTechnician)
                 .Include(x => x.Photos)
                 .Include(x => x.Accessories)
                 .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
@@ -918,7 +944,7 @@ namespace Pm.Services.RadioHandover
                 }
 
                 h.RadioId = dto.RadioId;
-                h.RadioSerialNumber = dto.RadioSerialNumber.Trim();
+                h.RadioSerialNumber = dto.RadioSerialNumber?.Trim() ?? string.Empty;
                 h.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
                 h.NoJobErp = dto.NoJobErp?.Trim();
                 h.EquipmentName = dto.EquipmentName?.Trim();
@@ -999,6 +1025,12 @@ namespace Pm.Services.RadioHandover
                         await ValidateTechnicianReceiverAsync(dto.ReceivedByUserId);
                         h.ReceivedByUserId = dto.ReceivedByUserId;
                         h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
+                    }
+
+                    if (dto.WorkshopTechnicianId != null && dto.WorkshopTechnicianId != h.WorkshopTechnicianId)
+                    {
+                        h.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                        h.RadioRepairJob.WorkshopTechnicianId = dto.WorkshopTechnicianId;
                     }
                 }
 

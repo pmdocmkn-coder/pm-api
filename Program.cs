@@ -103,6 +103,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 errorNumbersToAdd: null
             );
             mySqlOptions.CommandTimeout(180);
+            mySqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
         }
     );
 
@@ -213,6 +214,7 @@ builder.Services.AddScoped<Pm.Services.RepairJobCustomStatus.IRepairJobCustomSta
 builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartCatalogService, Pm.Services.WarehousePartBorrow.WarehousePartCatalogService>();
+builder.Services.AddScoped<Pm.Services.WorkshopTechnician.IWorkshopTechnicianService, Pm.Services.WorkshopTechnician.WorkshopTechnicianService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();

@@ -41,6 +41,8 @@ namespace Pm.DTOs.RadioRepairJob
         public string Status { get; set; } = null!;
         public int AssignedTechnicianUserId { get; set; }
         public string AssignedTechnicianName { get; set; } = null!;
+        public int? WorkshopTechnicianId { get; set; }
+        public string? WorkshopTechnicianName { get; set; }
         /// <summary>ID status custom jika job sedang di status custom.</summary>
         public int? CustomStatusId { get; set; }
         /// <summary>Label status custom untuk ditampilkan di UI.</summary>
@@ -151,6 +153,7 @@ namespace Pm.DTOs.RadioRepairJob
         /// Jika null, status custom dihapus dan job kembali ke status enum murni.
         /// </summary>
         public int? CustomStatusId { get; set; }
+        public int? WorkshopTechnicianId { get; set; }
     }
 
     public class ApproveMaterialDto
@@ -158,6 +161,7 @@ namespace Pm.DTOs.RadioRepairJob
         public RadioRepairJobStatus ResumeStatus { get; set; } = RadioRepairJobStatus.InProgress;
         [MaxLength(500)]
         public string? Note { get; set; }
+        public int? WorkshopTechnicianId { get; set; }
     }
 
     public class UpdateRadioRepairJobDto
@@ -172,6 +176,7 @@ namespace Pm.DTOs.RadioRepairJob
         public string DamageDescription { get; set; } = null!;
         [Required]
         public int AssignedTechnicianUserId { get; set; }
+        public int? WorkshopTechnicianId { get; set; }
         public int? RadioId { get; set; }
         [MaxLength(100)]
         public string? EquipmentName { get; set; }

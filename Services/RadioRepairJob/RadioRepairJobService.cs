@@ -22,6 +22,7 @@ namespace Pm.Services.RadioRepairJob
         private IQueryable<Models.RadioRepairJob> BaseQuery() =>
             _context.RadioRepairJobs.AsNoTracking()
                 .Include(j => j.AssignedTechnician)
+                .Include(j => j.WorkshopTechnician)
                 .Include(j => j.Radio)
                 .Include(j => j.CustomStatus)
                 .Where(j => !(j.Status == RadioRepairJobStatus.Received && 
@@ -105,6 +106,8 @@ namespace Pm.Services.RadioRepairJob
                     Status = j.Status.ToString(),
                     AssignedTechnicianUserId = j.AssignedTechnicianUserId,
                     AssignedTechnicianName = j.AssignedTechnician.FullName,
+                    WorkshopTechnicianId = j.WorkshopTechnicianId,
+                    WorkshopTechnicianName = j.WorkshopTechnician != null ? j.WorkshopTechnician.Name : null,
                     CustomStatusId = j.CustomStatusId,
                     CustomStatusLabel = j.CustomStatus != null ? j.CustomStatus.Label : null,
                     CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
@@ -181,6 +184,8 @@ namespace Pm.Services.RadioRepairJob
                 .Include(j => j.Handovers).ThenInclude(h => h.HandedOverBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.ReceivedBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.Accessories)
+                .Include(j => j.Handovers).ThenInclude(h => h.WorkshopTechnician)
+                .Include(j => j.Handovers).ThenInclude(h => h.HandedOverByWorkshopTechnician)
                 .AsSplitQuery()
                 .FirstOrDefaultAsync(j => j.Id == id);
 
@@ -248,6 +253,16 @@ namespace Pm.Services.RadioRepairJob
             ValidateStatusTransition(from, dto.Status, isSupervisor);
 
             job.Status = dto.Status;
+            string? assignedTechName = null;
+            if (dto.WorkshopTechnicianId.HasValue)
+            {
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                assignedTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == dto.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
             job.UpdatedAt = DateTime.UtcNow;
 
             var statusNote = dto.Note;
@@ -256,7 +271,27 @@ namespace Pm.Services.RadioRepairJob
                     ? $"[Override supervisor] {from} → {dto.Status}"
                     : $"[Override supervisor] {statusNote}";
 
-            await AddStatusLogAsync(job.Id, from, dto.Status, statusNote, userId);
+            // Tambahkan info teknisi yang di-assign ke note
+            if (!string.IsNullOrEmpty(assignedTechName))
+            {
+                var techNote = $"Teknisi ditugaskan: {assignedTechName}";
+                statusNote = string.IsNullOrWhiteSpace(statusNote)
+                    ? techNote
+                    : $"{statusNote}. {techNote}";
+            }
+
+            // Ambil nama teknisi saat ini (jika ada) untuk dilampirkan ke log
+            string? currentTechName = assignedTechName;
+            if (string.IsNullOrEmpty(currentTechName) && job.WorkshopTechnicianId.HasValue)
+            {
+                currentTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == job.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            await AddStatusLogAsync(job.Id, from, dto.Status, statusNote, userId, currentTechName);
             await WriteRepairHistoryAsync(job, from, dto.Status, statusNote, userId);
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "StatusChange", userId,
                 $"Status {from} → {dto.Status}{(isSupervisor ? " (supervisor override)" : "")}");
@@ -279,10 +314,38 @@ namespace Pm.Services.RadioRepairJob
 
             var from = job.Status;
             job.Status = dto.ResumeStatus;
+            string? assignedTechName = null;
+            if (dto.WorkshopTechnicianId.HasValue)
+            {
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                assignedTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == dto.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            string? currentTechName = assignedTechName;
+            if (string.IsNullOrEmpty(currentTechName) && job.WorkshopTechnicianId.HasValue)
+            {
+                currentTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == job.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            var note = dto.Note ?? "Material disetujui";
+            if (!string.IsNullOrEmpty(assignedTechName))
+            {
+                var techNote = $"Teknisi ditugaskan: {assignedTechName}";
+                note = $"{note}. {techNote}";
+            }
+
             job.UpdatedAt = DateTime.UtcNow;
-            await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, dto.Note ?? "Material disetujui", userId);
-            await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, dto.Note, userId);
-            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, "Material disetujui");
+            await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, note, userId, currentTechName);
+            await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, note);
 
             await _context.SaveChangesAsync();
             return (await GetByIdAsync(id, userId, null))!;
@@ -326,6 +389,13 @@ namespace Pm.Services.RadioRepairJob
             job.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
             job.DamageDescription = dto.DamageDescription.Trim();
             job.AssignedTechnicianUserId = dto.AssignedTechnicianUserId;
+            if (dto.WorkshopTechnicianId.HasValue && job.WorkshopTechnicianId != dto.WorkshopTechnicianId)
+            {
+                var oldTech = job.WorkshopTechnicianId.HasValue ? await _context.WorkshopTechnicians.AsNoTracking().Where(t => t.Id == job.WorkshopTechnicianId).Select(t => t.Name).FirstOrDefaultAsync() : "None";
+                var newTech = await _context.WorkshopTechnicians.AsNoTracking().Where(t => t.Id == dto.WorkshopTechnicianId).Select(t => t.Name).FirstOrDefaultAsync() ?? "Unknown";
+                changes.Add($"Teknisi Pekerja: \"{oldTech}\" → \"{newTech}\"");
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+            }
             job.RadioId = dto.RadioId;
             if (dto.EquipmentName != null)
                 job.EquipmentName = string.IsNullOrWhiteSpace(dto.EquipmentName) ? null : dto.EquipmentName.Trim();
@@ -602,7 +672,7 @@ namespace Pm.Services.RadioRepairJob
                 throw new InvalidOperationException($"Transisi status dari {from} ke {to} tidak diizinkan.");
         }
 
-        private async Task AddStatusLogAsync(int jobId, RadioRepairJobStatus? from, RadioRepairJobStatus to, string? note, int userId)
+        private async Task AddStatusLogAsync(int jobId, RadioRepairJobStatus? from, RadioRepairJobStatus to, string? note, int userId, string? techName = null)
         {
             _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
             {
@@ -611,6 +681,7 @@ namespace Pm.Services.RadioRepairJob
                 ToStatus = to,
                 Note = note,
                 UserId = userId,
+                WorkshopTechnicianName = techName,
                 At = DateTime.UtcNow
             });
         }
@@ -692,6 +763,8 @@ namespace Pm.Services.RadioRepairJob
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
             AssignedTechnicianName = job.AssignedTechnician.FullName,
+            WorkshopTechnicianId = job.WorkshopTechnicianId,
+            WorkshopTechnicianName = job.WorkshopTechnician?.Name,
             CustomStatusId = job.CustomStatusId,
             CustomStatusLabel = job.CustomStatus?.Label,
             CustomStatusColor = job.CustomStatus?.Color,
@@ -706,7 +779,10 @@ namespace Pm.Services.RadioRepairJob
                 FromStatus = l.FromStatus?.ToString(),
                 ToStatus = l.ToStatus.ToString(),
                 Note = l.Note,
-                UserName = l.User.FullName,
+                UserName = (!string.IsNullOrEmpty(l.WorkshopTechnicianName) && 
+                            (l.User?.FullName?.ToLower().Contains("worskhop") == true || l.User?.Username?.ToLower().Contains("worskhop") == true)) 
+                            ? $"{(l.User?.FullName ?? l.User?.Username ?? "Unknown")} ({l.WorkshopTechnicianName})" 
+                            : (l.User?.FullName ?? l.User?.Username ?? "Unknown"),
                 At = l.At
             }).ToList(),
             Handovers = job.Handovers
@@ -720,8 +796,8 @@ namespace Pm.Services.RadioRepairJob
                 HandoverAt = h.HandoverAt,
                 SignedAt = h.SignedAt,
                 EquipmentTagType = h.EquipmentTagType.ToString(),
-                HandedOverByName = h.HandedOverBy.FullName,
-                ReceivedByName = h.ReceivedBy.FullName,
+                HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
+                ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64)
@@ -800,8 +876,8 @@ namespace Pm.Services.RadioRepairJob
             Id = h.Id,
             HandoverNumber = h.HandoverNumber,
             HandoverAt = h.HandoverAt,
-            HandedOverByName = h.HandedOverBy.FullName,
-            ReceivedByName = h.ReceivedBy.FullName,
+            HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
+            ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
             Status = h.Status,
             EquipmentName = h.EquipmentName,
             UnitNumber = h.UnitNumber,

@@ -43,6 +43,7 @@ namespace Pm.Data
         public DbSet<RadioHandover> RadioHandovers { get; set; } = null!;
         public DbSet<RadioHandoverAccessory> RadioHandoverAccessories { get; set; } = null!;
         public DbSet<RadioHandoverPhoto> RadioHandoverPhotos { get; set; } = null!;
+        public DbSet<WorkshopTechnician> WorkshopTechnicians { get; set; } = null!;
 
         // Warehouse Part Borrow
         public DbSet<WarehousePartBorrow> WarehousePartBorrows { get; set; } = null!;

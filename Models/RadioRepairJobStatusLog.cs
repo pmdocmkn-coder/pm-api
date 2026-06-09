@@ -24,6 +24,9 @@ namespace Pm.Models
         [ForeignKey(nameof(UserId))]
         public User User { get; set; } = null!;
 
+        [MaxLength(100)]
+        public string? WorkshopTechnicianName { get; set; }
+
         public DateTime At { get; set; } = DateTime.UtcNow;
     }
 }

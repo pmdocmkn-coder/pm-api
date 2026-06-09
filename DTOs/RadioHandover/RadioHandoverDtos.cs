@@ -84,6 +84,9 @@ namespace Pm.DTOs.RadioHandover
         [Required]
         public int ReceivedByUserId { get; set; }
 
+        public int? WorkshopTechnicianId { get; set; }
+        public int? HandedOverByWorkshopTechnicianId { get; set; }
+
         /// <summary>Legacy single photo; use <see cref="RadioPhotos"/> for multiple.</summary>
         public string? RadioPhotoBase64 { get; set; }
         public List<string> RadioPhotos { get; set; } = [];
@@ -116,6 +119,10 @@ namespace Pm.DTOs.RadioHandover
         public int ReceivedByUserId { get; set; }
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
+        public int? WorkshopTechnicianId { get; set; }
+        public string? WorkshopTechnicianName { get; set; }
+        public int? HandedOverByWorkshopTechnicianId { get; set; }
+        public string? HandedOverByWorkshopTechnicianName { get; set; }
         public DateTime HandoverAt { get; set; }
         public DateTime? SignedAt { get; set; }
         public string EquipmentTagType { get; set; } = "Damaged";
@@ -175,6 +182,9 @@ namespace Pm.DTOs.RadioHandover
 
         [Required]
         public int ReceivedByUserId { get; set; }
+
+        public int? WorkshopTechnicianId { get; set; }
+        public int? HandedOverByWorkshopTechnicianId { get; set; }
 
         public string? RadioPhotoBase64 { get; set; }
         public List<string> RadioPhotos { get; set; } = [];

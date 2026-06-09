@@ -90,6 +90,10 @@ namespace Pm.Models
         public DateTime OpenedAt { get; set; } = DateTime.UtcNow;
         public DateTime? ClosedAt { get; set; }
 
+        public int? WorkshopTechnicianId { get; set; }
+        [ForeignKey(nameof(WorkshopTechnicianId))]
+        public WorkshopTechnician? WorkshopTechnician { get; set; }
+
         public int? CurrentHandoverId { get; set; }
 
         /// <summary>
