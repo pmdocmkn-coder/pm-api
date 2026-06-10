@@ -521,6 +521,81 @@ namespace Pm.Services.RadioRepairJob
             return (await GetByIdAsync(id, userId, null))!;
         }
 
+        public async Task<RadioRepairJobDetailDto> ApproveScrapAsync(int id, ApproveScrapDto dto, int userId, string? roleName)
+        {
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorMkn, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat menyetujui Scrap.");
+
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Radio)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.ProcessScrap)
+                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap.");
+
+            var from = job.Status;
+            job.Status = RadioRepairJobStatus.Scrapped;
+            job.ClosedAt = DateTime.UtcNow;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            var note = $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {dto.ScrapJobNumber}. Keterangan: {dto.Remarks}";
+
+            if (job.Radio != null)
+            {
+                job.Radio.IsScrap = true;
+                job.Radio.DateScrapped = dto.DateScrapped;
+                job.Radio.ScrapJobNumber = dto.ScrapJobNumber ?? job.HelpdeskTicketNumber;
+                job.Radio.Remarks = dto.Remarks;
+                job.Radio.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
+            await WriteRepairHistoryAsync(job, from, job.Status, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveScrap", userId, note);
+
+            await _context.SaveChangesAsync();
+            return (await GetByIdAsync(id, userId, roleName))!;
+        }
+
+        public async Task<RadioRepairJobDetailDto> CancelScrapAsync(int id, int userId, string? roleName)
+        {
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorMkn, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat membatalkan Scrap.");
+
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Radio)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.Scrapped)
+                throw new InvalidOperationException("Job tidak dalam status Scrap atau menunggu persetujuan Scrap.");
+
+            var from = job.Status;
+            job.Status = RadioRepairJobStatus.InProgress;
+            job.ClosedAt = null;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            var note = "Radio Scrap dibatalkan. Status dikembalikan ke InProgress.";
+
+            if (job.Radio != null)
+            {
+                job.Radio.IsScrap = false;
+                job.Radio.DateScrapped = null;
+                job.Radio.ScrapJobNumber = null;
+                // Remarks on Radio are kept or cleared? Let's leave them or append cancel note.
+                job.Radio.Remarks = $"[Scrap Dibatalkan] {job.Radio.Remarks}";
+                job.Radio.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
+            await WriteRepairHistoryAsync(job, from, job.Status, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "CancelScrap", userId, note);
+
+            await _context.SaveChangesAsync();
+            return (await GetByIdAsync(id, userId, roleName))!;
+        }
+
         public async Task SoftDeleteAsync(int id, int userId)
         {
             var job = await _context.RadioRepairJobs
@@ -662,10 +737,12 @@ namespace Pm.Services.RadioRepairJob
                     RadioRepairJobStatus.WaitingMaterialApproval,
                     RadioRepairJobStatus.Cancelled
                 },
-                RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
-                RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
+                RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
+                RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
                 RadioRepairJobStatus.WaitingMaterialApproval => Array.Empty<RadioRepairJobStatus>(),
                 RadioRepairJobStatus.RepairCompleted => new[] { RadioRepairJobStatus.InProgress }, // teknisi bisa rollback jika salah tekan
+                RadioRepairJobStatus.ProcessScrap => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.Scrapped }, // Supervisor can approve or reject
+                RadioRepairJobStatus.Scrapped => new[] { RadioRepairJobStatus.InProgress }, // Supervisor can cancel scrap
                 _ => Array.Empty<RadioRepairJobStatus>()
             };
             if (!allowed.Contains(to))

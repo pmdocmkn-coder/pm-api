@@ -257,8 +257,8 @@ namespace Pm.Services.RadioHandover
             var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
-            if (job.Status != RadioRepairJobStatus.RepairCompleted)
-                throw new InvalidOperationException("Job harus berstatus RepairCompleted.");
+            if (job.Status != RadioRepairJobStatus.RepairCompleted && job.Status != RadioRepairJobStatus.Scrapped)
+                throw new InvalidOperationException("Job harus berstatus RepairCompleted atau Scrapped.");
 
             var currentRole = await _context.Users.AsNoTracking()
                 .Include(u => u.Role)

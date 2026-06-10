@@ -550,6 +550,39 @@ namespace Pm.Services.Radio
         }
 
         // ============================================
+        // UNSCRAP (batal scrap)
+        // ============================================
+        public async Task<RadioDto> UnscrapRadioAsync(int id, int userId)
+        {
+            var radio = await _context.Radios.FindAsync(id);
+            if (radio == null) throw new KeyNotFoundException("Radio not found");
+
+            if (!radio.IsScrap) throw new InvalidOperationException("Radio tidak dalam status scrap.");
+
+            radio.IsScrap = false;
+            radio.ScrapJobNumber = null;
+            radio.DateScrapped = null;
+            // Optionally prepend a note to Remarks
+            if (!string.IsNullOrWhiteSpace(radio.Remarks))
+                radio.Remarks = $"[Batal Scrap] {radio.Remarks}";
+            radio.UpdatedAt = DateTime.UtcNow;
+
+            _context.RadioHistories.Add(new RadioHistory
+            {
+                RadioId = radio.Id,
+                Action = "Unscrapped",
+                Details = "Radio dikembalikan dari status Scrap",
+                CreatedBy = await GetUserDisplayNameAsync(userId),
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+            await _activityLog.LogAsync("Radio", radio.Id, "Unscrap", userId, $"Radio {radio.NomorAset ?? radio.SerialNumber} dikembalikan dari Scrap");
+
+            return await GetByIdAsync(radio.Id);
+        }
+
+        // ============================================
         // IMPORT: Radio Internal
         // Kolom: NO, Nomor Aset, Nomor Unit, Serial Number, Type,
         //        TRUNGKING, KONV, DIV, Dept, Channel, Tanggal,

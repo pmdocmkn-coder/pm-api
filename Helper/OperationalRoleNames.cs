@@ -10,7 +10,7 @@ namespace Pm.Helper
         public const string Technician = "Teknisi WSK";
         public const string Warehouse = "Warehouse";
         public const string SupervisorWarehouse = "Supervisor Warehouse";
-        public const string SupervisorMkn = "Supervisor";
+        public const string SupervisorMkn = "Supv MKN";
 
         /// <summary>Role yang dianggap "teknisi" untuk filter job & handover.</summary>
         public static readonly string[] TechnicianRoles = { Technician, "Teknisi WSK" };

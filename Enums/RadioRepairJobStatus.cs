@@ -9,6 +9,8 @@ namespace Pm.Enums
         RepairCompleted,
         HandedToWarehouse,
         ReturnedToHelpdesk,
-        Cancelled
+        Cancelled,
+        ProcessScrap,
+        Scrapped
     }
 }

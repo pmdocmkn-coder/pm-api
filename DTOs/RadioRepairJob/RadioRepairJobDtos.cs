@@ -211,4 +211,16 @@ namespace Pm.DTOs.RadioRepairJob
         [MaxLength(100)] public string? PhysicalCondition { get; set; }
         [MaxLength(100)] public string? DisplayCondition { get; set; }
     }
+
+    public class ApproveScrapDto
+    {
+        [Required]
+        public DateTime DateScrapped { get; set; }
+        
+        [MaxLength(100)]
+        public string? ScrapJobNumber { get; set; }
+        
+        [MaxLength(1000)]
+        public string? Remarks { get; set; }
+    }
 }

@@ -336,6 +336,30 @@ namespace Pm.Controllers.Radio
             }
         }
 
+        [HttpPost("{id}/unscrap")]
+        [Authorize(Policy = "RadioScrapUpdate")]
+        public async Task<IActionResult> UnscrapRadio(int id)
+        {
+            try
+            {
+                var data = await _radioService.UnscrapRadioAsync(id, CurrentUserId);
+                return ApiResponse.Success(data, "Radio berhasil dikembalikan dari scrap");
+            }
+            catch (KeyNotFoundException)
+            {
+                return ApiResponse.NotFound("Radio tidak ditemukan");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ApiResponse.BadRequest("radio", new[] { ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unscrapping radio: {Id}", id);
+                return ApiResponse.InternalServerError("Gagal batal scrap radio: " + ex.Message);
+            }
+        }
+
         // ============================================
         // IMPORT
         // ============================================
