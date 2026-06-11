@@ -78,6 +78,9 @@ namespace Pm.Data
         // Password Reset
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
+        // Notification
+        public DbSet<Notification> Notifications { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -130,6 +133,19 @@ namespace Pm.Data
                     .WithMany(r => r.Users)
                     .HasForeignKey(u => u.RoleId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===========================================
+            // ✅ NOTIFICATION CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("Notifications");
+
+                entity.HasIndex(e => e.RecipientUserId);
+                entity.HasIndex(e => e.RecipientRoleName);
+                entity.HasIndex(e => e.IsRead);
             });
 
             // ===========================================

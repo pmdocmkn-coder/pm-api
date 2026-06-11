@@ -51,6 +51,8 @@ namespace Pm.DTOs.RadioRepairJob
         public string? CustomStatusColor { get; set; }
         public DateTime OpenedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
+        public DateTime? FirstInProgressAt { get; set; }
+        public DateTime? WorkshopCompletedAt { get; set; }
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
     }

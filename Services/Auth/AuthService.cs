@@ -47,13 +47,13 @@ namespace Pm.Services
                 throw new UnauthorizedAccessException("WRONG_PASSWORD");
             }
 
-            // Get user permissions
+            // Get user permissions (untuk response body saja, BUKAN untuk token)
             var permissions = user.Role?.RolePermissions
                 .Select(rp => rp.Permission.PermissionName)
                 .ToList() ?? new List<string>();
 
-            // Generate JWT token
-            var token = _jwtService.GenerateToken(user, permissions);
+            // Generate JWT token (lean — tanpa permissions)
+            var token = _jwtService.GenerateToken(user);
             var expiresIn = _jwtService.GetTokenExpirationTime();
 
             var trueUtcTime = DateTimeOffset.UtcNow.DateTime;
@@ -95,8 +95,7 @@ namespace Pm.Services
                     RoleId = user.RoleId,
                     RoleName = user.Role?.RoleName,
                     LastLogin = user.LastLogin,
-                    CreatedAt = user.CreatedAt,
-                    Permissions = permissions
+                    CreatedAt = user.CreatedAt
                 },
                 Permissions = permissions
             };

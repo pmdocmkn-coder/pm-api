@@ -5,6 +5,8 @@ using Pm.DTOs.RadioRepairJob;
 using Pm.Enums;
 using Pm.Models;
 using Pm.Services;
+using Pm.Services.Notification;
+using Pm.DTOs.Notification;
 
 namespace Pm.Services.RadioRepairJob
 {
@@ -12,11 +14,13 @@ namespace Pm.Services.RadioRepairJob
     {
         private readonly AppDbContext _context;
         private readonly IActivityLogService _activityLog;
+        private readonly INotificationService _notificationService;
 
-        public RadioRepairJobService(AppDbContext context, IActivityLogService activityLog)
+        public RadioRepairJobService(AppDbContext context, IActivityLogService activityLog, INotificationService notificationService)
         {
             _context = context;
             _activityLog = activityLog;
+            _notificationService = notificationService;
         }
 
         private IQueryable<Models.RadioRepairJob> BaseQuery() =>
@@ -113,6 +117,8 @@ namespace Pm.Services.RadioRepairJob
                     CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
                     OpenedAt = j.OpenedAt,
                     ClosedAt = j.ClosedAt,
+                    FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+                    WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     IsDeleted = j.IsDeleted,
                     DeletedAt = j.DeletedAt
                 })
@@ -241,6 +247,7 @@ namespace Pm.Services.RadioRepairJob
                 await _activityLog.LogAsync("RadioRepairJob", job.Id, "CustomStatusChange", userId,
                     $"Custom status → {customStatus.Label}");
                 await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
                 return (await GetByIdAsync(id, userId, roleName))!;
             }
 
@@ -297,6 +304,115 @@ namespace Pm.Services.RadioRepairJob
                 $"Status {from} → {dto.Status}{(isSupervisor ? " (supervisor override)" : "")}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // === Trigger Notifications ===
+            // Notifikasi Khusus (Supervisor / Warehouse)
+            if (dto.Status == RadioRepairJobStatus.Monitoring)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.SupervisorMkn, new CreateNotificationDto
+                {
+                    Title = "Monitoring Radio",
+                    Message = $"Radio SN {job.RadioSerialNumber} masuk ke status Monitoring.",
+                    Category = "repair",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.ProcessScrap)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.SupervisorMkn, new CreateNotificationDto
+                {
+                    Title = "Pengajuan Scrap Radio",
+                    Message = $"Radio SN {job.RadioSerialNumber} diajukan untuk Scrap.",
+                    Category = "scrap",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.WaitingMaterialApproval)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.SupervisorMkn, new CreateNotificationDto
+                {
+                    Title = "Menunggu Material Approval",
+                    Message = $"Radio SN {job.RadioSerialNumber} membutuhkan persetujuan part.",
+                    Category = "repair",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.RepairCompleted)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.SupervisorMkn, new CreateNotificationDto
+                {
+                    Title = "Perbaikan Selesai",
+                    Message = $"Radio SN {job.RadioSerialNumber} telah selesai diperbaiki.",
+                    Category = "repair",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+                {
+                    Title = "Radio Masuk Warehouse",
+                    Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan ke Warehouse.",
+                    Category = "handover",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
+            // Notifikasi untuk Helpdesk (Selalu menerima notifikasi untuk seluruh alur status)
+            string hdTitle = "Update Status Radio";
+            string hdMessage = $"Radio SN {job.RadioSerialNumber} berubah status menjadi {dto.Status}.";
+            
+            if (dto.Status == RadioRepairJobStatus.RepairCompleted)
+            {
+                hdTitle = "Perbaikan Selesai";
+                hdMessage = $"Radio SN {job.RadioSerialNumber} telah selesai diperbaiki.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
+            {
+                hdTitle = "Diserahkan ke Warehouse";
+                hdMessage = $"Radio SN {job.RadioSerialNumber} telah diserahkan ke Warehouse.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.ReturnedToHelpdesk)
+            {
+                hdTitle = "Dikembalikan ke Helpdesk";
+                hdMessage = $"Radio SN {job.RadioSerialNumber} dikembalikan ke Helpdesk.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.Received)
+            {
+                hdTitle = "Radio Diterima";
+                hdMessage = $"Radio SN {job.RadioSerialNumber} telah diterima.";
+            }
+
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = hdTitle,
+                Message = hdMessage,
+                Category = dto.Status == RadioRepairJobStatus.HandedToWarehouse || dto.Status == RadioRepairJobStatus.ReturnedToHelpdesk ? "handover" : "repair",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            // Jika assign teknisi berubah/baru, beri notifikasi ke teknisi yang bersangkutan
+            if (dto.Status == RadioRepairJobStatus.InProgress && job.AssignedTechnicianUserId != 0)
+            {
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = "Perbaikan Radio",
+                    Message = $"Anda ditugaskan memperbaiki Radio SN {job.RadioSerialNumber}.{(statusNote != null ? " Note: " + statusNote : "")}",
+                    Category = "repair",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            // =============================
+
             return (await GetByIdAsync(id, userId, roleName))!;
         }
 
@@ -348,6 +464,7 @@ namespace Pm.Services.RadioRepairJob
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, note);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, null))!;
         }
 
@@ -430,6 +547,7 @@ namespace Pm.Services.RadioRepairJob
             await WriteEditHistoryAsync(job, changes, $"supervisor ({tech.FullName})", userId);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, null))!;
         }
 
@@ -518,6 +636,7 @@ namespace Pm.Services.RadioRepairJob
             await WriteEditHistoryAsync(job, changes, "teknisi", userId);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, null))!;
         }
 
@@ -555,6 +674,7 @@ namespace Pm.Services.RadioRepairJob
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveScrap", userId, note);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, roleName))!;
         }
 
@@ -593,6 +713,7 @@ namespace Pm.Services.RadioRepairJob
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "CancelScrap", userId, note);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, roleName))!;
         }
 
@@ -624,6 +745,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Arsip pekerjaan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         public async Task RestoreAsync(int id, int userId)
@@ -642,6 +764,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Pulihkan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         public async Task DeletePermanentAsync(int id, int userId)
@@ -674,6 +797,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Hapus permanen tiket {ticket}, SN {sn}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         internal static async Task ValidateDuplicateTicketSerialAsync(

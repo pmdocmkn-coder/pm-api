@@ -8,6 +8,8 @@ using Pm.Models;
 using Pm.Services;
 using Pm.Services.Media;
 using Pm.Services.RadioRepairJob;
+using Pm.Services.Notification;
+using Pm.DTOs.Notification;
 
 namespace Pm.Services.RadioHandover
 {
@@ -16,15 +18,18 @@ namespace Pm.Services.RadioHandover
         private readonly AppDbContext _context;
         private readonly IActivityLogService _activityLog;
         private readonly IImageBase64Validator _imageValidator;
+        private readonly INotificationService _notificationService;
 
         public RadioHandoverService(
             AppDbContext context,
             IActivityLogService activityLog,
-            IImageBase64Validator imageValidator)
+            IImageBase64Validator imageValidator,
+            INotificationService notificationService)
         {
             _context = context;
             _activityLog = activityLog;
             _imageValidator = imageValidator;
+            _notificationService = notificationService;
         }
 
         public async Task<PagedResultDto<RadioHandoverListDto>> GetAllAsync(
@@ -213,6 +218,7 @@ namespace Pm.Services.RadioHandover
             };
             _context.RadioRepairJobs.Add(job);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
 
             _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
             {
@@ -228,6 +234,7 @@ namespace Pm.Services.RadioHandover
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, receiverComplete, equipment);
             _context.RadioHandovers.Add(handover);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
 
             job.CurrentHandoverId = handover.Id;
             job.UpdatedAt = now;
@@ -242,6 +249,28 @@ namespace Pm.Services.RadioHandover
                 currentUserId, $"STR {strNumber} HD→Tek ({statusNote}), tiket {job.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+
+            // Get Technician Name
+            var technicianName = "Teknisi";
+            if (dto.WorkshopTechnicianId.HasValue)
+            {
+                var techUser = await _context.WorkshopTechnicians.FindAsync(dto.WorkshopTechnicianId.Value);
+                if (techUser != null) technicianName = techUser.Name;
+            }
+
+            // Trigger Notification
+            await _notificationService.CreateAsync(new CreateNotificationDto
+            {
+                RecipientUserId = dto.ReceivedByUserId,
+                RecipientRoleName = OperationalRoleNames.Technician,
+                Title = "Radio Masuk Workshop",
+                Message = $"Radio SN {serial} diserahkan ke Workshop dari Helpdesk (Tiket {ticket}) untuk: {technicianName}.",
+                Category = "handover",
+                ReferenceId = handover.Id,
+                ReferenceType = "RadioHandover"
+            });
+
             return (await GetByIdAsync(handover.Id))!;
         }
 
@@ -301,6 +330,7 @@ namespace Pm.Services.RadioHandover
             });
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
 
             if (job.RadioId.HasValue)
                 await AddRepairWarehouseHistoryAsync(job, handover, currentUserId);
@@ -309,6 +339,32 @@ namespace Pm.Services.RadioHandover
                 currentUserId, $"STR {strNumber} Tek→WH, tiket {job.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
+
+            var technicianName = "Teknisi";
+            if (dto.HandedOverByWorkshopTechnicianId.HasValue)
+            {
+                var tech = await _context.WorkshopTechnicians.FindAsync(dto.HandedOverByWorkshopTechnicianId.Value);
+                if (tech != null) technicianName = tech.Name;
+            }
+
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+            {
+                Title = "Radio Masuk Warehouse",
+                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse.",
+                Category = "handover",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "Diserahkan ke Warehouse",
+                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse.",
+                Category = "handover",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(handover.Id))!;
         }
 
@@ -365,6 +421,7 @@ namespace Pm.Services.RadioHandover
             });
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
 
             if (job.RadioId.HasValue)
                 await AddRepairReturnedToHelpdeskHistoryAsync(job, handover, currentUserId);
@@ -373,6 +430,28 @@ namespace Pm.Services.RadioHandover
                 currentUserId, $"STR {strNumber} WH→HD, tiket {job.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
+
+            var warehouseUser = await _context.Users.FindAsync(currentUserId);
+            var warehouseName = warehouseUser?.FullName ?? "Warehouse";
+
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+            {
+                Title = "Radio Keluar Warehouse",
+                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh {warehouseName} ke Helpdesk.",
+                Category = "handover",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "Dikembalikan ke Helpdesk",
+                Message = $"Radio SN {job.RadioSerialNumber} telah dikembalikan oleh {warehouseName} dari Warehouse.",
+                Category = "handover",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(handover.Id))!;
         }
 
@@ -422,6 +501,7 @@ namespace Pm.Services.RadioHandover
                 currentUserId, $"STR {handover.HandoverNumber} — TTD teknisi dilengkapi");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(handover.Id))!;
         }
 
@@ -1055,6 +1135,7 @@ namespace Pm.Services.RadioHandover
             h.UpdatedAt = DateTime.UtcNow;
             await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit STR {h.HandoverNumber}");
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(id))!;
         }
 
@@ -1078,6 +1159,7 @@ namespace Pm.Services.RadioHandover
                 $"Arsip STR {h.HandoverNumber}, tiket {h.RadioRepairJob.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
         }
 
         public async Task RestoreAsync(int id, int userId)
@@ -1092,6 +1174,7 @@ namespace Pm.Services.RadioHandover
 
             await _activityLog.LogAsync("RadioHandover", h.Id, "Restore", userId, $"Pulihkan STR {h.HandoverNumber}");
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
         }
 
         public async Task DeletePermanentAsync(int id, int userId)
@@ -1122,6 +1205,7 @@ namespace Pm.Services.RadioHandover
                 $"Hapus permanen STR {handoverNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
         }
     }
 }

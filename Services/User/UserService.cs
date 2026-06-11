@@ -101,17 +101,7 @@ namespace Pm.Services
 
             var dto = MapToDto(user);
 
-            // Add permissions from role
-            if (user.RoleId > 0)
-            {
-                var permissions = await _context.RolePermissions
-                    .Where(rp => rp.RoleId == user.RoleId)
-                    .Include(rp => rp.Permission)
-                    .Select(rp => rp.Permission.PermissionName)
-                    .ToListAsync();
-
-                dto.Permissions = permissions;
-            }
+            // Permissions are now loaded at runtime by PermissionClaimsTransformer
 
             return dto;
         }
@@ -449,8 +439,7 @@ namespace Pm.Services
                 LastLogin = user.LastLogin,
                 LastLoginText = user.LastLogin?.ToString("dd MMM yyyy HH:mm") ?? "Belum pernah login",
                 CreatedAt = user.CreatedAt,
-                CreatedAtText = user.CreatedAt.ToString("dd MMM yyyy HH:mm"),
-                Permissions = new List<string>()
+                CreatedAtText = user.CreatedAt.ToString("dd MMM yyyy HH:mm")
             };
         }
 

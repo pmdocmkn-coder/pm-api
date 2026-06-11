@@ -17,6 +17,9 @@ namespace Pm.Models
         [ForeignKey(nameof(BorrowedByUserId))]
         public User BorrowedBy { get; set; } = null!;
 
+        [MaxLength(200)]
+        public string? BorrowerName { get; set; }
+
         public ICollection<WarehousePartBorrowItem> Items { get; set; } = new List<WarehousePartBorrowItem>();
 
         [MaxLength(1000)]

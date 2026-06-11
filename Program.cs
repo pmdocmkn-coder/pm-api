@@ -156,6 +156,23 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            
+            // If the request is for our hub...
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                // Read the token out of the query string
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 // ===== Authorization =====
@@ -223,6 +240,10 @@ builder.Services.AddScoped<Pm.Services.PmSchedule.IPmScheduleService, Pm.Service
 // ===== CCTV KPC =====
 builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.CctvKpc.CctvKpcService>();
 
+// ===== Notification =====
+builder.Services.AddScoped<Pm.Services.Notification.INotificationService, Pm.Services.Notification.NotificationService>();
+builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
@@ -230,6 +251,10 @@ builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection(
 builder.Services.AddHttpClient<ISihepiIntegrationService, SihepiIntegrationService>();
 
 builder.Services.AddHttpContextAccessor();
+
+// ===== Permission Claims (DB-based, bukan dari JWT token) =====
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, PermissionClaimsTransformer>();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -307,6 +332,9 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 1073741824;
 });
 
+// ===== SignalR =====
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
 // ===== Middleware =====
@@ -353,6 +381,9 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// ===== Map SignalR Hub =====
+app.MapHub<Pm.Hubs.NotificationHub>("/hubs/notification");
 
 app.Logger.LogInformation("Environment: {Env}", app.Environment.EnvironmentName);
 app.Logger.LogInformation("DB Connection String: {Conn}", builder.Configuration.GetConnectionString("DefaultConnection"));

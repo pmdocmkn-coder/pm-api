@@ -14,6 +14,9 @@ using Pm.DTOs.Radio;
 using Pm.Models;
 using Pm.Services;
 
+using Microsoft.AspNetCore.SignalR;
+using Pm.Hubs;
+
 namespace Pm.Services.Radio
 {
     public class RadioService : IRadioService
@@ -21,12 +24,14 @@ namespace Pm.Services.Radio
         private readonly AppDbContext _context;
         private readonly IActivityLogService _activityLog;
         private readonly ILogger<RadioService> _logger;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public RadioService(AppDbContext context, IActivityLogService activityLog, ILogger<RadioService> logger)
+        public RadioService(AppDbContext context, IActivityLogService activityLog, ILogger<RadioService> logger, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _activityLog = activityLog;
             _logger = logger;
+            _hubContext = hubContext;
         }
 
         /// <summary>
@@ -379,6 +384,7 @@ namespace Pm.Services.Radio
 
             _context.Radios.Add(radio);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
 
             _context.RadioHistories.Add(new RadioHistory
             {
@@ -388,6 +394,7 @@ namespace Pm.Services.Radio
                 CreatedAt = DateTime.UtcNow
             });
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
 
             await _activityLog.LogAsync("Radio", radio.Id, "Create", userId, $"Radio {radio.NomorAset ?? radio.NomorLv ?? radio.SerialNumber} dibuat (Category: {radio.Category})");
 
@@ -477,6 +484,7 @@ namespace Pm.Services.Radio
             });
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
             await _activityLog.LogAsync("Radio", radio.Id, "Update", userId,
                 $"Radio {radio.NomorAset ?? radio.SerialNumber} diupdate ({diffs.Count} perubahan)");
 
@@ -494,6 +502,7 @@ namespace Pm.Services.Radio
             var identifier = radio.NomorAset ?? radio.NomorLv ?? radio.SerialNumber ?? id.ToString();
             _context.Radios.Remove(radio);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
 
             await _activityLog.LogAsync("Radio", id, "Delete", userId, $"Radio {identifier} dihapus");
         }
@@ -503,6 +512,7 @@ namespace Pm.Services.Radio
             var allRadios = await _context.Radios.ToListAsync();
             _context.Radios.RemoveRange(allRadios);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
             await _activityLog.LogAsync("Radio", 0, "DeleteAll", userId, $"Seluruh data radio dihapus");
         }
 
@@ -515,6 +525,7 @@ namespace Pm.Services.Radio
             int count = radios.Count;
             _context.Radios.RemoveRange(radios);
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
             await _activityLog.LogAsync("Radio", 0, "DeleteByCategory", userId,
                 $"Seluruh data radio kategori '{category}' dihapus ({count} records)");
             return count;
@@ -544,6 +555,7 @@ namespace Pm.Services.Radio
             });
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
             await _activityLog.LogAsync("Radio", radio.Id, "Scrap", userId, $"Radio {radio.NomorAset ?? radio.SerialNumber} di-scrap, Job: {dto.ScrapJobNumber}");
 
             return await GetByIdAsync(radio.Id);
@@ -577,6 +589,7 @@ namespace Pm.Services.Radio
             });
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
             await _activityLog.LogAsync("Radio", radio.Id, "Unscrap", userId, $"Radio {radio.NomorAset ?? radio.SerialNumber} dikembalikan dari Scrap");
 
             return await GetByIdAsync(radio.Id);
@@ -779,6 +792,7 @@ namespace Pm.Services.Radio
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
 
             try
             {
@@ -1000,6 +1014,7 @@ namespace Pm.Services.Radio
             }
 
             await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
 
             try
             {

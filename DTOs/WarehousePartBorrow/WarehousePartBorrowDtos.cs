@@ -32,6 +32,9 @@ namespace Pm.DTOs.WarehousePartBorrow
         public int? RelatedRepairJobId { get; set; }
         [MaxLength(100)]
         public string? TicketNumber { get; set; }
+        
+        [MaxLength(200)]
+        public string? BorrowerName { get; set; }
     }
 
     public class WarehousePartBorrowListDto
@@ -46,6 +49,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public DateTime RequestedAt { get; set; }
         public string? RelatedJobNumber { get; set; }
         public string? TicketNumber { get; set; }
+        public string? BorrowerName { get; set; }
     }
 
     public class WarehousePartBorrowStatusLogDto
