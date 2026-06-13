@@ -219,6 +219,7 @@ namespace Pm.Services.RadioHandover
             _context.RadioRepairJobs.Add(job);
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
 
             _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
             {
@@ -250,6 +251,7 @@ namespace Pm.Services.RadioHandover
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
 
             // Get Technician Name
             var technicianName = "Teknisi";
@@ -259,17 +261,33 @@ namespace Pm.Services.RadioHandover
                 if (techUser != null) technicianName = techUser.Name;
             }
 
-            // Trigger Notification
+            // Trigger Notification ke Teknisi yang menerima (personal — hanya 1 orang)
             await _notificationService.CreateAsync(new CreateNotificationDto
             {
                 RecipientUserId = dto.ReceivedByUserId,
-                RecipientRoleName = OperationalRoleNames.Technician,
-                Title = "Radio Masuk Workshop",
-                Message = $"Radio SN {serial} diserahkan ke Workshop dari Helpdesk (Tiket {ticket}) untuk: {technicianName}.",
+                Title = "Radio Masuk Workshop — Untuk Anda",
+                Message = $"Radio SN {serial} diserahkan ke Workshop dari Helpdesk (Tiket {ticket}). Anda ditunjuk sebagai penerima: {technicianName}.",
                 Category = "handover",
+                LinkUrl = "/radio-handover",
                 ReferenceId = handover.Id,
                 ReferenceType = "RadioHandover"
             });
+
+            // Notif ke Helpdesk & Supv WKS via permission HD→Tek
+            // excludeUserIds: skip teknisi penerima agar tidak dapat 2 notif (sudah dapat personal di atas)
+            await _notificationService.CreateForPermissionAsync(
+                Pm.Helper.NotificationPermissions.RadioHandoverHdTek,
+                new CreateNotificationDto
+                {
+                    Title = "Radio Masuk Workshop",
+                    Message = $"Radio SN {serial} diserahkan ke Workshop (Tiket {ticket}) untuk teknisi: {technicianName}. Menunggu TTD penerima.",
+                    Category = "handover",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                },
+                excludeUserIds: new[] { dto.ReceivedByUserId } // skip teknisi penerima
+            );
 
             return (await GetByIdAsync(handover.Id))!;
         }
@@ -331,6 +349,7 @@ namespace Pm.Services.RadioHandover
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
 
             if (job.RadioId.HasValue)
                 await AddRepairWarehouseHistoryAsync(job, handover, currentUserId);
@@ -347,19 +366,23 @@ namespace Pm.Services.RadioHandover
                 if (tech != null) technicianName = tech.Name;
             }
 
-            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+            // Notif ke Warehouse & Supv WKS via permission Tek→WH
+            await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioHandoverTekWh, new CreateNotificationDto
             {
                 Title = "Radio Masuk Warehouse",
-                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse.",
+                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse. Menunggu serah terima ke Helpdesk.",
                 Category = "handover",
+                LinkUrl = "/radio-handover/warehouse",
                 ReferenceId = job.Id,
                 ReferenceType = "RadioRepairJob"
             });
+            // Notif ke Helpdesk (role fix)
             await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
             {
-                Title = "Diserahkan ke Warehouse",
+                Title = "Radio Diserahkan ke Warehouse",
                 Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse.",
                 Category = "handover",
+                LinkUrl = "/radio-repair-dashboard",
                 ReferenceId = job.Id,
                 ReferenceType = "RadioRepairJob"
             });
@@ -422,6 +445,7 @@ namespace Pm.Services.RadioHandover
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
 
             if (job.RadioId.HasValue)
                 await AddRepairReturnedToHelpdeskHistoryAsync(job, handover, currentUserId);
@@ -434,24 +458,34 @@ namespace Pm.Services.RadioHandover
             var warehouseUser = await _context.Users.FindAsync(currentUserId);
             var warehouseName = warehouseUser?.FullName ?? "Warehouse";
 
-            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+            // Notif ke Helpdesk, Warehouse & Supv WKS via permission WH→HD
+            await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioHandoverWhHd, new CreateNotificationDto
             {
-                Title = "Radio Keluar Warehouse",
-                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh {warehouseName} ke Helpdesk.",
+                Title = "Radio Diserahkan ke Helpdesk",
+                Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan dari Warehouse ke Helpdesk oleh {warehouseName}. Proses perbaikan selesai.",
                 Category = "handover",
-                ReferenceId = job.Id,
-                ReferenceType = "RadioRepairJob"
-            });
-            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
-            {
-                Title = "Dikembalikan ke Helpdesk",
-                Message = $"Radio SN {job.RadioSerialNumber} telah dikembalikan oleh {warehouseName} dari Warehouse.",
-                Category = "handover",
+                LinkUrl = "/radio-handover",
                 ReferenceId = job.Id,
                 ReferenceType = "RadioRepairJob"
             });
 
+            // Notif ke Teknisi workshop yang mengerjakan radio ini
+            if (job.AssignedTechnicianUserId != 0)
+            {
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = "Radio Sudah Kembali ke Helpdesk",
+                    Message = $"Radio SN {job.RadioSerialNumber} yang Anda kerjakan telah diserahkan kembali ke Helpdesk oleh Warehouse. Proses selesai.",
+                    Category = "handover",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
             return (await GetByIdAsync(handover.Id))!;
         }
 
@@ -501,7 +535,42 @@ namespace Pm.Services.RadioHandover
                 currentUserId, $"STR {handover.HandoverNumber} — TTD teknisi dilengkapi");
 
             await _context.SaveChangesAsync();
+
+            // Broadcast refresh ke semua halaman yang relevan
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // Ambil info untuk notifikasi
+            var serial = handover.RadioRepairJob?.RadioSerialNumber ?? "-";
+            var strNumber = handover.HandoverNumber ?? $"#{handover.Id}";
+
+            // Notif ke Helpdesk — TTD penerima sudah lengkap, radio sudah diterima di workshop
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "TTD Penerima Lengkap",
+                Message = $"Teknisi sudah menandatangani STR {strNumber} (SN: {serial}). Radio diterima di Workshop.",
+                Category = "handover",
+                LinkUrl = "/radio-handover",
+                ReferenceId = handover.Id,
+                ReferenceType = "RadioHandover"
+            });
+
+            // Notif ke Supv WKS via permission HD→Tek (TTD selesai = HD→Tek complete)
+            // excludeUserIds: skip teknisi yang TTD agar tidak dapat 2 notif
+            await _notificationService.CreateForPermissionAsync(
+                Pm.Helper.NotificationPermissions.RadioHandoverHdTek,
+                new CreateNotificationDto
+                {
+                    Title = "Radio Siap Dikerjakan",
+                    Message = $"STR {strNumber} (SN: {serial}) sudah ditandatangani kedua pihak. Radio menunggu di Workshop.",
+                    Category = "handover",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                },
+                excludeUserIds: new[] { currentUserId } // skip teknisi yang baru saja TTD
+            );
+
             return (await GetByIdAsync(handover.Id))!;
         }
 

@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pm.DTOs.WorkshopTechnician;
-using Pm.Services.WorkshopTechnician;
+using Pm.DTOs;
+using Pm.Helper;
+using Pm.Services;
 
-namespace Pm.Controllers.WorkshopTechnician
+namespace Pm.Controllers
 {
     [ApiController]
     [Route("api/workshop-technicians")]
@@ -16,6 +17,11 @@ namespace Pm.Controllers.WorkshopTechnician
         {
             _service = service;
         }
+
+        private int CurrentUserId =>
+            int.Parse(User.FindFirst("UserId")?.Value
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? throw new UnauthorizedAccessException());
 
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false)
@@ -33,44 +39,27 @@ namespace Pm.Controllers.WorkshopTechnician
         }
 
         [HttpPost]
-        [Authorize(Policy = "radio.repair.supervise")]
+        [Authorize(Policy = "RadioRepairSupervise")]
         public async Task<IActionResult> Create([FromBody] CreateWorkshopTechnicianDto dto)
         {
-            var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-            var result = await _service.CreateAsync(dto, userId);
+            var result = await _service.CreateAsync(dto, CurrentUserId);
             return Ok(new { data = result, message = "Teknisi berhasil ditambahkan" });
         }
 
         [HttpPut("{id}")]
-        [Authorize(Policy = "radio.repair.supervise")]
+        [Authorize(Policy = "RadioRepairSupervise")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateWorkshopTechnicianDto dto)
         {
-            try
-            {
-                var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-                var result = await _service.UpdateAsync(id, dto, userId);
-                return Ok(new { data = result, message = "Teknisi berhasil diupdate" });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { message = ex.Message });
-            }
+            var result = await _service.UpdateAsync(id, dto, CurrentUserId);
+            return Ok(new { data = result, message = "Teknisi berhasil diupdate" });
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Policy = "radio.repair.supervise")]
+        [Authorize(Policy = "RadioRepairSupervise")]
         public async Task<IActionResult> Delete(int id)
         {
-            try
-            {
-                var userId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
-                await _service.DeleteAsync(id, userId);
-                return Ok(new { message = "Teknisi berhasil dihapus" });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { message = ex.Message });
-            }
+            await _service.DeleteAsync(id, CurrentUserId);
+            return Ok(new { message = "Teknisi berhasil dihapus" });
         }
     }
 }

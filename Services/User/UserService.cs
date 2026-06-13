@@ -81,12 +81,14 @@ namespace Pm.Services
         {
             return await _context.Users
                 .Where(u => u.IsActive)
+                .Include(u => u.Role)
                 .OrderBy(u => u.FullName)
                 .Select(u => new UserLookupDto
                 {
                     Id = u.UserId,
                     Name = u.FullName,
-                    Username = u.Username
+                    Username = u.Username,
+                    RoleName = u.Role != null ? u.Role.RoleName : null
                 })
                 .ToListAsync();
         }

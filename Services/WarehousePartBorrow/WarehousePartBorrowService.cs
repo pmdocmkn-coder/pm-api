@@ -38,7 +38,7 @@ namespace Pm.Services.WarehousePartBorrow
             var adminRoles = new[] { 
                 OperationalRoleNames.Warehouse, 
                 OperationalRoleNames.SupervisorWarehouse, 
-                OperationalRoleNames.SupervisorMkn, 
+                OperationalRoleNames.SupervisorWorkshop, 
                 OperationalRoleNames.Helpdesk,
                 "Super Admin", "Admin" 
             };
@@ -101,8 +101,11 @@ namespace Pm.Services.WarehousePartBorrow
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
+                    IssuedAt = b.IssuedAt,
                     RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null,
-                    BorrowerName = b.BorrowerName
+                    TicketNumber = b.TicketNumber,
+                    BorrowerName = b.BorrowerName,
+                    Purpose = b.Purpose
                 })
                 .ToListAsync();
 
@@ -130,8 +133,11 @@ namespace Pm.Services.WarehousePartBorrow
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
                     RequestedAt = b.RequestedAt,
+                    IssuedAt = b.IssuedAt,
                     RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null,
-                    BorrowerName = b.BorrowerName
+                    TicketNumber = b.TicketNumber,
+                    BorrowerName = b.BorrowerName,
+                    Purpose = b.Purpose
                 })
                 .ToListAsync();
 
@@ -176,21 +182,53 @@ namespace Pm.Services.WarehousePartBorrow
             await AddLogAsync(borrow.Id, null, WarehousePartBorrowStatus.PendingApproval, "Permintaan dibuat", userId);
             await _activityLog.LogAsync("WarehousePartBorrow", borrow.Id, "Create", userId, number);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
-            // Notifikasi ke Supervisor Warehouse, Warehouse, Admin, Supv MKN
-            var notifDto = new CreateNotificationDto
+            // Ambil info peminjam dan rolenya untuk personalisasi notif
+            var borrower = await _context.Users.Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+            var borrowerRoleName = borrower?.Role?.RoleName ?? "";
+            var borrowerDisplayName = dto.BorrowerName?.Trim() ?? borrower?.FullName ?? "Teknisi";
+            var isTechnician = OperationalRoleNames.IsTechnicianRole(borrowerRoleName);
+
+            // Notif konfirmasi ke peminjam — pengajuan berhasil dibuat
+            await _notificationService.CreateAsync(new CreateNotificationDto
+            {
+                RecipientUserId = userId,
+                Title = "Pengajuan Dikirim ✓",
+                Message = $"Pengajuan peminjaman part ({number}) berhasil dikirim dan menunggu persetujuan.",
+                Category = "Warehouse",
+                LinkUrl = "/warehouse/borrow-history",
+                ReferenceId = borrow.Id,
+                ReferenceType = "WarehouseBorrow"
+            });
+
+            // Notifikasi ke Supervisor Warehouse & Warehouse untuk persetujuan
+            var pendingNotifDto = new CreateNotificationDto
             {
                 Title = "Permintaan Part Baru",
-                Message = $"Permintaan peminjaman part ({number}) oleh {(dto.BorrowerName?.Trim() ?? "teknisi")} membutuhkan persetujuan.",
+                Message = $"Permintaan peminjaman part ({number}) dari {borrowerDisplayName} membutuhkan persetujuan.",
                 Category = "Warehouse",
                 LinkUrl = "/warehouse/supervision",
                 ReferenceId = borrow.Id,
                 ReferenceType = "WarehouseBorrow"
             };
-            await _notificationService.CreateForRoleAsync("Supervisor Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Supv MKN", notifDto);
-            await _notificationService.CreateForRoleAsync("Admin", notifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, pendingNotifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, pendingNotifDto);
+
+            // Notif ke Supv MKN hanya jika peminjam adalah Teknisi WSK
+            if (isTechnician)
+            {
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, new CreateNotificationDto
+                {
+                    Title = "Teknisi Ajukan Peminjaman Part",
+                    Message = $"Teknisi {borrowerDisplayName} mengajukan peminjaman part ({number}). Menunggu persetujuan Supervisor Warehouse.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/supervision",
+                    ReferenceId = borrow.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
+            }
 
             return (await GetByIdAsync(borrow.Id, userId, null))!;
         }
@@ -208,6 +246,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Approved, dto.Note, userId);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             // Notifikasi ke peminjam
             await _notificationService.CreateAsync(new CreateNotificationDto
@@ -222,7 +261,7 @@ namespace Pm.Services.WarehousePartBorrow
             });
 
             // Notifikasi ke Warehouse agar segera menyiapkan barang
-            await _notificationService.CreateForRoleAsync("Warehouse", new CreateNotificationDto
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, new CreateNotificationDto
             {
                 Title = "Part Siap Diserahkan",
                 Message = $"Peminjaman ({b.BorrowNumber}) telah disetujui. Silakan siapkan part untuk diserahkan.",
@@ -231,6 +270,22 @@ namespace Pm.Services.WarehousePartBorrow
                 ReferenceId = b.Id,
                 ReferenceType = "WarehouseBorrow"
             });
+
+            // Notif ke Supv MKN jika peminjam adalah Teknisi WSK
+            var borrowerForApprove = await _context.Users.Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == b.BorrowedByUserId);
+            if (OperationalRoleNames.IsTechnicianRole(borrowerForApprove?.Role?.RoleName))
+            {
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, new CreateNotificationDto
+                {
+                    Title = "Peminjaman Part Teknisi Disetujui",
+                    Message = $"Peminjaman part ({b.BorrowNumber}) oleh {b.BorrowerName ?? borrowerForApprove?.FullName ?? "teknisi"} telah disetujui.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/supervision",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
+            }
 
             return (await GetByIdAsync(id, userId, null))!;
         }
@@ -248,6 +303,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Rejected, dto.Reason, userId);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             // Notifikasi ke peminjam
             await _notificationService.CreateAsync(new CreateNotificationDto
@@ -262,7 +318,7 @@ namespace Pm.Services.WarehousePartBorrow
             });
 
             // Notifikasi ke Supv MKN
-            await _notificationService.CreateForRoleAsync("Supv MKN", new CreateNotificationDto
+            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, new CreateNotificationDto
             {
                 Title = "Peminjaman Part Ditolak",
                 Message = $"Permintaan part ({b.BorrowNumber}) ditolak: {dto.Reason}",
@@ -289,6 +345,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", userId);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             // Notifikasi ke peminjam
             await _notificationService.CreateAsync(new CreateNotificationDto
@@ -312,8 +369,8 @@ namespace Pm.Services.WarehousePartBorrow
                 ReferenceId = b.Id,
                 ReferenceType = "WarehouseBorrow"
             };
-            await _notificationService.CreateForRoleAsync("Supervisor Warehouse", issueNotifDto);
-            await _notificationService.CreateForRoleAsync("Supv MKN", issueNotifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, issueNotifDto);
+            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, issueNotifDto);
 
             return (await GetByIdAsync(id, userId, null))!;
         }
@@ -338,6 +395,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.UpdatedAt = DateTime.UtcNow;
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Returned, dto.ReturnNote, userId);
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             // Notifikasi ke Warehouse, Supervisor Warehouse, Supv MKN, Admin
             var notifDto = new CreateNotificationDto
@@ -349,10 +407,9 @@ namespace Pm.Services.WarehousePartBorrow
                 ReferenceId = b.Id,
                 ReferenceType = "WarehouseBorrow"
             };
-            await _notificationService.CreateForRoleAsync("Supervisor Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Supv MKN", notifDto);
-            await _notificationService.CreateForRoleAsync("Admin", notifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, notifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, notifDto);
+            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, notifDto);
 
             // Notifikasi ke peminjam (akun yang membuat peminjaman)
             await _notificationService.CreateAsync(new CreateNotificationDto
@@ -382,6 +439,7 @@ namespace Pm.Services.WarehousePartBorrow
             await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Cancelled, "Dibatalkan", userId);
             await _activityLog.LogAsync("WarehousePartBorrow", b.Id, "Cancel", userId, $"Batalkan {b.BorrowNumber}");
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             var notifDto = new CreateNotificationDto
             {
@@ -392,10 +450,9 @@ namespace Pm.Services.WarehousePartBorrow
                 ReferenceId = b.Id,
                 ReferenceType = "WarehouseBorrow"
             };
-            await _notificationService.CreateForRoleAsync("Supervisor Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Warehouse", notifDto);
-            await _notificationService.CreateForRoleAsync("Supv MKN", notifDto);
-            await _notificationService.CreateForRoleAsync("Admin", notifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, notifDto);
+            await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, notifDto);
+            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, notifDto);
         }
 
         private async Task<Models.WarehousePartBorrow> GetBorrowTrackedAsync(int id) =>
@@ -466,6 +523,7 @@ namespace Pm.Services.WarehousePartBorrow
 
             borrow.IsActive = false;
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
         }
     }
 }

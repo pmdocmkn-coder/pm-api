@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Pm.Data;
 using Pm.DTOs.Notification;
 using Pm.Hubs;
@@ -11,11 +12,13 @@ namespace Pm.Services.Notification
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly ILogger<NotificationService> _logger;
 
-        public NotificationService(AppDbContext context, IHubContext<NotificationHub> hubContext)
+        public NotificationService(AppDbContext context, IHubContext<NotificationHub> hubContext, ILogger<NotificationService> logger)
         {
             _context = context;
             _hubContext = hubContext;
+            _logger = logger;
         }
 
         public async Task CreateAsync(CreateNotificationDto dto)
@@ -53,15 +56,67 @@ namespace Pm.Services.Notification
 
             if (targetGroups.Count > 0)
             {
+                _logger.LogInformation("📣 Sending notification '{Title}' to groups: {Groups}", dto.Title, string.Join(", ", targetGroups));
                 await _hubContext.Clients.Groups(targetGroups).SendAsync("ReceiveNotification", notificationDto);
             }
         }
 
         public async Task CreateForRoleAsync(string roleName, CreateNotificationDto dto)
         {
+            _logger.LogInformation("📢 CreateForRoleAsync — Role: '{RoleName}', Title: '{Title}'", roleName, dto.Title);
             dto.RecipientRoleName = roleName;
             dto.RecipientUserId = null;
             await CreateAsync(dto);
+        }
+
+        /// <summary>
+        /// Kirim notifikasi ke semua user aktif yang memiliki permission tertentu.
+        /// Notif disimpan per-user (bukan per-role) agar setiap orang bisa baca/hapus sendiri.
+        /// Gunakan excludeUserIds untuk skip user yang sudah dapat notif personal agar tidak duplikat.
+        /// </summary>
+        public async Task CreateForPermissionAsync(string permissionName, CreateNotificationDto dto, IEnumerable<int>? excludeUserIds = null)
+        {
+            _logger.LogInformation("📢 CreateForPermissionAsync — Permission: '{Permission}', Title: '{Title}'", permissionName, dto.Title);
+
+            var excludeSet = excludeUserIds?.ToHashSet() ?? new HashSet<int>();
+
+            // Query via join: Permission → RolePermission → Role → User
+            // Lebih reliable dari navigation property chaining di EF Core
+            var userIds = await (
+                from u in _context.Users
+                join rp in _context.RolePermissions on u.RoleId equals rp.RoleId
+                join p in _context.Permissions on rp.PermissionId equals p.PermissionId
+                where u.IsActive && p.PermissionName == permissionName
+                select u.UserId
+            ).Distinct().ToListAsync();
+
+            // Filter out user yang sudah dapat notif personal
+            userIds = userIds.Where(id => !excludeSet.Contains(id)).ToList();
+
+            if (!userIds.Any())
+            {
+                _logger.LogWarning("⚠️ CreateForPermissionAsync — Tidak ada user dengan permission '{Permission}' (setelah exclude). Total sebelum exclude: {Count}",
+                    permissionName, userIds.Count);
+                return;
+            }
+
+            _logger.LogInformation("📣 Sending '{Title}' to {Count} users with permission '{Permission}'",
+                dto.Title, userIds.Count, permissionName);
+
+            foreach (var userId in userIds)
+            {
+                var perUserDto = new CreateNotificationDto
+                {
+                    RecipientUserId = userId,
+                    Title = dto.Title,
+                    Message = dto.Message,
+                    Category = dto.Category,
+                    LinkUrl = dto.LinkUrl,
+                    ReferenceId = dto.ReferenceId,
+                    ReferenceType = dto.ReferenceType
+                };
+                await CreateAsync(perUserDto);
+            }
         }
 
         public async Task<List<NotificationDto>> GetMyNotificationsAsync(int userId, string roleName, bool unreadOnly = false, int take = 20)

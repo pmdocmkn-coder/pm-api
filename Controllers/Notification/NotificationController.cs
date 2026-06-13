@@ -16,13 +16,18 @@ namespace Pm.Controllers.Notification
 
         private int GetCurrentUserId()
         {
-            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            // Cek custom claim "UserId" dulu, fallback ke ClaimTypes.NameIdentifier
+            var userIdStr = User.FindFirstValue("UserId")
+                         ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
             return int.TryParse(userIdStr, out var userId) ? userId : 0;
         }
 
         private string GetCurrentUserRole()
         {
-            return User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            // Cek custom claim "RoleName" dulu, fallback ke ClaimTypes.Role
+            return User.FindFirstValue("RoleName")
+                ?? User.FindFirstValue(ClaimTypes.Role)
+                ?? string.Empty;
         }
 
         [HttpGet]

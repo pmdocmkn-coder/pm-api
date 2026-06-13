@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
-using Pm.DTOs.WorkshopTechnician;
+using Pm.DTOs;
 
-namespace Pm.Services.WorkshopTechnician
+namespace Pm.Services
 {
     public class WorkshopTechnicianService : IWorkshopTechnicianService
     {
@@ -30,7 +30,8 @@ namespace Pm.Services.WorkshopTechnician
                     Name = t.Name,
                     IsActive = t.IsActive,
                     CreatedAt = t.CreatedAt,
-                    UpdatedAt = t.UpdatedAt
+                    UpdatedAt = t.UpdatedAt,
+                    UserId = t.UserId
                 })
                 .ToListAsync();
         }
@@ -48,7 +49,8 @@ namespace Pm.Services.WorkshopTechnician
                 Name = t.Name,
                 IsActive = t.IsActive,
                 CreatedAt = t.CreatedAt,
-                UpdatedAt = t.UpdatedAt
+                UpdatedAt = t.UpdatedAt,
+                UserId = t.UserId
             };
         }
 
@@ -58,6 +60,7 @@ namespace Pm.Services.WorkshopTechnician
             {
                 Name = dto.Name.Trim(),
                 IsActive = dto.IsActive,
+                UserId = dto.UserId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -77,6 +80,7 @@ namespace Pm.Services.WorkshopTechnician
 
             tech.Name = dto.Name.Trim();
             tech.IsActive = dto.IsActive;
+            tech.UserId = dto.UserId;
             tech.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

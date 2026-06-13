@@ -138,7 +138,8 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = true;
+    // Di development (localhost), matikan HTTPS requirement agar SignalR bisa connect via ws://
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
     options.SaveToken = true;
 
     options.TokenValidationParameters = new TokenValidationParameters
@@ -231,7 +232,7 @@ builder.Services.AddScoped<Pm.Services.RepairJobCustomStatus.IRepairJobCustomSta
 builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartCatalogService, Pm.Services.WarehousePartBorrow.WarehousePartCatalogService>();
-builder.Services.AddScoped<Pm.Services.WorkshopTechnician.IWorkshopTechnicianService, Pm.Services.WorkshopTechnician.WorkshopTechnicianService>();
+builder.Services.AddScoped<Pm.Services.IWorkshopTechnicianService, Pm.Services.WorkshopTechnicianService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();
@@ -349,7 +350,11 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-app.UseHttpsRedirection();
+// Jangan redirect HTTPS di development — menyebabkan SignalR WebSocket gagal di localhost
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // ===== SEEDING (Development Only) =====
 if (app.Environment.IsDevelopment())
@@ -384,6 +389,18 @@ app.MapControllers();
 
 // ===== Map SignalR Hub =====
 app.MapHub<Pm.Hubs.NotificationHub>("/hubs/notification");
+
+// ===== Debug endpoint — test broadcast SignalR (development only) =====
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/debug/signalr-broadcast/{entity}", async (
+        string entity,
+        Pm.Services.Notification.INotificationService notifService) =>
+    {
+        await notifService.BroadcastRefreshDataAsync(entity);
+        return Results.Ok(new { message = $"Broadcast '{entity}' sent to all clients", at = DateTime.UtcNow });
+    });
+}
 
 app.Logger.LogInformation("Environment: {Env}", app.Environment.EnvironmentName);
 app.Logger.LogInformation("DB Connection String: {Conn}", builder.Configuration.GetConnectionString("DefaultConnection"));

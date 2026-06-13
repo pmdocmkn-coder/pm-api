@@ -221,7 +221,17 @@ public static class DatabaseSeeder
                     new() { PermissionName = "warehouse.borrow.supervise", Description = "Supervisi Warehouse approve", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "warehouse.borrow.issue", Description = "Tandai part keluar", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "warehouse.borrow.return", Description = "Tandai part kembali", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
-                    new() { PermissionName = "warehouse.borrow.cancel", Description = "Batalkan permintaan pinjam", Group = "Warehouse", CreatedAt = DateTime.UtcNow }
+                    new() { PermissionName = "warehouse.borrow.cancel", Description = "Batalkan permintaan pinjam", Group = "Warehouse", CreatedAt = DateTime.UtcNow },
+
+                    // ── Notification Permissions ─────────────────────────────────────────
+                    // Assign permission ini ke role yang perlu menerima notif dari modul tertentu.
+                    // Gunakan dengan INotificationService.CreateForPermissionAsync()
+                    new() { PermissionName = "notification.radio.repair", Description = "Terima notif perubahan status perbaikan radio", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    // Serah terima dipecah per alur agar kontrol lebih granular
+                    new() { PermissionName = "notification.radio.handover.hd_tek", Description = "Terima notif serah terima Helpdesk → Teknisi", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "notification.radio.handover.tek_wh", Description = "Terima notif serah terima Teknisi → Warehouse", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "notification.radio.handover.wh_hd", Description = "Terima notif serah terima Warehouse → Helpdesk", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "notification.warehouse.borrow", Description = "Terima notif pengajuan & peminjaman part warehouse", Group = "Notification", CreatedAt = DateTime.UtcNow },
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();

@@ -1,6 +1,6 @@
-using Pm.DTOs.WorkshopTechnician;
+using Pm.DTOs;
 
-namespace Pm.Services.WorkshopTechnician
+namespace Pm.Services
 {
     public interface IWorkshopTechnicianService
     {
