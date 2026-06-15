@@ -119,8 +119,11 @@ namespace Pm.Services.RadioRepairJob
                     ClosedAt = j.ClosedAt,
                     FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+                    AccumulatedProgressDurationMinutes = j.AccumulatedProgressDurationMinutes,
+                    CurrentProgressStartedAt = j.CurrentProgressStartedAt,
                     IsDeleted = j.IsDeleted,
-                    DeletedAt = j.DeletedAt
+                    DeletedAt = j.DeletedAt,
+                    HasBorrowRequest = j.PartBorrows.Any()
                 })
                 .ToListAsync();
 
@@ -289,6 +292,11 @@ namespace Pm.Services.RadioRepairJob
                 StringComparison.OrdinalIgnoreCase);
             ValidateStatusTransition(from, dto.Status, isSupervisor);
 
+            if (dto.Status == RadioRepairJobStatus.RepairCompleted && job.EquipmentTagType == null)
+            {
+                throw new InvalidOperationException("Mohon lengkapi data perbaikan dan pilih jenis Tag (Hijau/Kuning) terlebih dahulu sebelum mengubah status menjadi Selesai.");
+            }
+
             job.Status = dto.Status;
             string? assignedTechName = null;
             if (dto.WorkshopTechnicianId.HasValue)
@@ -301,6 +309,25 @@ namespace Pm.Services.RadioRepairJob
                     .FirstOrDefaultAsync();
             }
             job.UpdatedAt = DateTime.UtcNow;
+
+            // --- Duration Calculation Logic ---
+            if (from == RadioRepairJobStatus.InProgress && dto.Status != RadioRepairJobStatus.InProgress)
+            {
+                // Pause duration
+                if (job.CurrentProgressStartedAt.HasValue)
+                {
+                    job.AccumulatedProgressDurationMinutes += (int)(DateTime.UtcNow - job.CurrentProgressStartedAt.Value).TotalMinutes;
+                    job.CurrentProgressStartedAt = null;
+                }
+            }
+            else if (dto.Status == RadioRepairJobStatus.InProgress && from != RadioRepairJobStatus.InProgress)
+            {
+                // Start or resume duration
+                // Per user request: if coming back to progress (e.g., from material approval), reset to 0
+                job.AccumulatedProgressDurationMinutes = 0; 
+                job.CurrentProgressStartedAt = DateTime.UtcNow;
+            }
+            // ----------------------------------
 
             var statusNote = dto.Note;
             if (isSupervisor && from != dto.Status)
@@ -586,6 +613,15 @@ namespace Pm.Services.RadioRepairJob
             }
 
             job.UpdatedAt = DateTime.UtcNow;
+
+            // --- Duration Calculation Logic ---
+            if (dto.ResumeStatus == RadioRepairJobStatus.InProgress)
+            {
+                // Reset duration to 0 and start
+                job.AccumulatedProgressDurationMinutes = 0;
+                job.CurrentProgressStartedAt = DateTime.UtcNow;
+            }
+            // ----------------------------------
             await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, note, userId, currentTechName);
             await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, note, userId);
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, note);

@@ -112,7 +112,12 @@ namespace Pm.Models
         public DateTime? DeletedAt { get; set; }
         public int? DeletedByUserId { get; set; }
 
+        public int AccumulatedProgressDurationMinutes { get; set; } = 0;
+        public DateTime? CurrentProgressStartedAt { get; set; }
+
         public ICollection<RadioRepairJobStatusLog> StatusLogs { get; set; } = new List<RadioRepairJobStatusLog>();
         public ICollection<RadioHandover> Handovers { get; set; } = new List<RadioHandover>();
+        [InverseProperty("RelatedRepairJob")]
+        public ICollection<WarehousePartBorrow> PartBorrows { get; set; } = new List<WarehousePartBorrow>();
     }
 }

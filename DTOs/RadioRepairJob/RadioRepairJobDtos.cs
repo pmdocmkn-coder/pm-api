@@ -53,8 +53,11 @@ namespace Pm.DTOs.RadioRepairJob
         public DateTime? ClosedAt { get; set; }
         public DateTime? FirstInProgressAt { get; set; }
         public DateTime? WorkshopCompletedAt { get; set; }
+        public int AccumulatedProgressDurationMinutes { get; set; }
+        public DateTime? CurrentProgressStartedAt { get; set; }
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
+        public bool HasBorrowRequest { get; set; }
     }
 
     public class RadioRepairTicketGroupDto

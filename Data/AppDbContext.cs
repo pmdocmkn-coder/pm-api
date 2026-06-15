@@ -1300,7 +1300,7 @@ namespace Pm.Data
                 entity.HasIndex(e => e.BorrowNumber).IsUnique();
                 entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50);
                 entity.HasOne(e => e.BorrowedBy).WithMany().HasForeignKey(e => e.BorrowedByUserId).OnDelete(DeleteBehavior.Restrict);
-                entity.HasOne(e => e.RelatedRepairJob).WithMany().HasForeignKey(e => e.RelatedRepairJobId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(e => e.RelatedRepairJob).WithMany(j => j.PartBorrows).HasForeignKey(e => e.RelatedRepairJobId).OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<WarehousePartBorrowStatusLog>(entity =>
