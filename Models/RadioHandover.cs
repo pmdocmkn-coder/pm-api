@@ -103,6 +103,14 @@ namespace Pm.Models
         [ForeignKey(nameof(ReceivedByUserId))]
         public User ReceivedBy { get; set; } = null!;
 
+        public int? WorkshopTechnicianId { get; set; }
+        [ForeignKey(nameof(WorkshopTechnicianId))]
+        public WorkshopTechnician? WorkshopTechnician { get; set; }
+
+        public int? HandedOverByWorkshopTechnicianId { get; set; }
+        [ForeignKey(nameof(HandedOverByWorkshopTechnicianId))]
+        public WorkshopTechnician? HandedOverByWorkshopTechnician { get; set; }
+
         public DateTime HandoverAt { get; set; } = DateTime.UtcNow;
         public DateTime? SignedAt { get; set; }
 

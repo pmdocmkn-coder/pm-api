@@ -103,6 +103,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 errorNumbersToAdd: null
             );
             mySqlOptions.CommandTimeout(180);
+            mySqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
         }
     );
 
@@ -137,7 +138,8 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = true;
+    // Di development (localhost), matikan HTTPS requirement agar SignalR bisa connect via ws://
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
     options.SaveToken = true;
 
     options.TokenValidationParameters = new TokenValidationParameters
@@ -154,6 +156,23 @@ builder.Services.AddAuthentication(options =>
 
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            
+            // If the request is for our hub...
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                // Read the token out of the query string
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -213,6 +232,7 @@ builder.Services.AddScoped<Pm.Services.RepairJobCustomStatus.IRepairJobCustomSta
 builder.Services.AddScoped<Pm.Services.RadioHandover.IRadioHandoverService, Pm.Services.RadioHandover.RadioHandoverService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartBorrowService, Pm.Services.WarehousePartBorrow.WarehousePartBorrowService>();
 builder.Services.AddScoped<Pm.Services.WarehousePartBorrow.IWarehousePartCatalogService, Pm.Services.WarehousePartBorrow.WarehousePartCatalogService>();
+builder.Services.AddScoped<Pm.Services.IWorkshopTechnicianService, Pm.Services.WorkshopTechnicianService>();
 
 // PM Schedule
 builder.Services.AddScoped<Pm.Services.PmSchedule.IPmSiteService, Pm.Services.PmSchedule.PmSiteService>();
@@ -221,6 +241,10 @@ builder.Services.AddScoped<Pm.Services.PmSchedule.IPmScheduleService, Pm.Service
 // ===== CCTV KPC =====
 builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.CctvKpc.CctvKpcService>();
 
+// ===== Notification =====
+builder.Services.AddScoped<Pm.Services.Notification.INotificationService, Pm.Services.Notification.NotificationService>();
+builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 
@@ -228,6 +252,10 @@ builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection(
 builder.Services.AddHttpClient<ISihepiIntegrationService, SihepiIntegrationService>();
 
 builder.Services.AddHttpContextAccessor();
+
+// ===== Permission Claims (DB-based, bukan dari JWT token) =====
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authentication.IClaimsTransformation, PermissionClaimsTransformer>();
 
 // ===== CORS =====
 builder.Services.AddCors(options =>
@@ -305,6 +333,9 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 1073741824;
 });
 
+// ===== SignalR =====
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
 // ===== Middleware =====
@@ -319,7 +350,11 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-app.UseHttpsRedirection();
+// Jangan redirect HTTPS di development — menyebabkan SignalR WebSocket gagal di localhost
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // ===== SEEDING (Development Only) =====
 if (app.Environment.IsDevelopment())
@@ -351,6 +386,21 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// ===== Map SignalR Hub =====
+app.MapHub<Pm.Hubs.NotificationHub>("/hubs/notification");
+
+// ===== Debug endpoint — test broadcast SignalR (development only) =====
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/debug/signalr-broadcast/{entity}", async (
+        string entity,
+        Pm.Services.Notification.INotificationService notifService) =>
+    {
+        await notifService.BroadcastRefreshDataAsync(entity);
+        return Results.Ok(new { message = $"Broadcast '{entity}' sent to all clients", at = DateTime.UtcNow });
+    });
+}
 
 app.Logger.LogInformation("Environment: {Env}", app.Environment.EnvironmentName);
 app.Logger.LogInformation("DB Connection String: {Conn}", builder.Configuration.GetConnectionString("DefaultConnection"));

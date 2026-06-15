@@ -15,7 +15,12 @@ namespace Pm.Services
             _configuration = configuration;
         }
 
-        public string GenerateToken(User user, List<string> permissions)
+        /// <summary>
+        /// Generate JWT token yang lean — hanya berisi identitas user.
+        /// Permissions TIDAK disimpan di token, melainkan di-load dari DB
+        /// oleh PermissionClaimsTransformer pada setiap request.
+        /// </summary>
+        public string GenerateToken(User user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
             var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
@@ -37,11 +42,8 @@ namespace Pm.Services
                 new("RoleName", user.Role?.RoleName ?? "")
             };
 
-            // Add permissions as claims
-            foreach (var permission in permissions)
-            {
-                claims.Add(new Claim("Permission", permission));
-            }
+            // ❌ Permissions TIDAK lagi ditambahkan ke token
+            // Sekarang di-handle oleh PermissionClaimsTransformer (IClaimsTransformation)
 
             var token = new JwtSecurityToken(
                 issuer: issuer,

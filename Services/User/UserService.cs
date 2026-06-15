@@ -81,12 +81,14 @@ namespace Pm.Services
         {
             return await _context.Users
                 .Where(u => u.IsActive)
+                .Include(u => u.Role)
                 .OrderBy(u => u.FullName)
                 .Select(u => new UserLookupDto
                 {
                     Id = u.UserId,
                     Name = u.FullName,
-                    Username = u.Username
+                    Username = u.Username,
+                    RoleName = u.Role != null ? u.Role.RoleName : null
                 })
                 .ToListAsync();
         }
@@ -101,17 +103,7 @@ namespace Pm.Services
 
             var dto = MapToDto(user);
 
-            // Add permissions from role
-            if (user.RoleId > 0)
-            {
-                var permissions = await _context.RolePermissions
-                    .Where(rp => rp.RoleId == user.RoleId)
-                    .Include(rp => rp.Permission)
-                    .Select(rp => rp.Permission.PermissionName)
-                    .ToListAsync();
-
-                dto.Permissions = permissions;
-            }
+            // Permissions are now loaded at runtime by PermissionClaimsTransformer
 
             return dto;
         }
@@ -449,8 +441,7 @@ namespace Pm.Services
                 LastLogin = user.LastLogin,
                 LastLoginText = user.LastLogin?.ToString("dd MMM yyyy HH:mm") ?? "Belum pernah login",
                 CreatedAt = user.CreatedAt,
-                CreatedAtText = user.CreatedAt.ToString("dd MMM yyyy HH:mm"),
-                Permissions = new List<string>()
+                CreatedAtText = user.CreatedAt.ToString("dd MMM yyyy HH:mm")
             };
         }
 

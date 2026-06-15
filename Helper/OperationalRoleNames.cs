@@ -10,7 +10,24 @@ namespace Pm.Helper
         public const string Technician = "Teknisi WSK";
         public const string Warehouse = "Warehouse";
         public const string SupervisorWarehouse = "Supervisor Warehouse";
-        public const string SupervisorMkn = "Supervisor";
+
+        /// <summary>
+        /// Supervisor Workshop — menerima notifikasi radio management, serah terima, dan warehouse.
+        /// Role ini menggantikan "Supv MKN" yang terlalu luas cakupannya.
+        /// </summary>
+        public const string SupervisorWorkshop = "Supv WKS";
+
+        /// <summary>
+        /// Supervisor MKN — role lama, dipertahankan untuk backward compatibility.
+        /// Sebaiknya gunakan SupervisorWorkshop untuk notif operasional.
+        /// </summary>
+        public const string SupervisorMkn = "Supv MKN";
+
+        /// <summary>
+        /// Role-role yang menerima notifikasi operasional radio dan workshop.
+        /// Helpdesk, Teknisi WSK, dan Supervisor Workshop.
+        /// </summary>
+        public static readonly string[] RadioOperationalRoles = { Helpdesk, Technician, SupervisorWorkshop, Warehouse };
 
         /// <summary>Role yang dianggap "teknisi" untuk filter job & handover.</summary>
         public static readonly string[] TechnicianRoles = { Technician, "Teknisi WSK" };

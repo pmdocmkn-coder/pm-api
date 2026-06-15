@@ -20,6 +20,7 @@ namespace Pm.Services.Radio
         Task DeleteAllAsync(int userId);
         Task<int> DeleteByCategoryAsync(string category, int userId);
         Task<RadioDto> ScrapRadioAsync(int id, ScrapRadioDto dto, int userId);
+        Task<RadioDto> UnscrapRadioAsync(int id, int userId);
         
         // Import endpoints - return detailed result
         Task<ImportResultDto> ImportInternalAsync(IFormFile file, int userId);

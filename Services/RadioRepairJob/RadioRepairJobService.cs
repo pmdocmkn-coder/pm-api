@@ -5,6 +5,8 @@ using Pm.DTOs.RadioRepairJob;
 using Pm.Enums;
 using Pm.Models;
 using Pm.Services;
+using Pm.Services.Notification;
+using Pm.DTOs.Notification;
 
 namespace Pm.Services.RadioRepairJob
 {
@@ -12,16 +14,19 @@ namespace Pm.Services.RadioRepairJob
     {
         private readonly AppDbContext _context;
         private readonly IActivityLogService _activityLog;
+        private readonly INotificationService _notificationService;
 
-        public RadioRepairJobService(AppDbContext context, IActivityLogService activityLog)
+        public RadioRepairJobService(AppDbContext context, IActivityLogService activityLog, INotificationService notificationService)
         {
             _context = context;
             _activityLog = activityLog;
+            _notificationService = notificationService;
         }
 
         private IQueryable<Models.RadioRepairJob> BaseQuery() =>
             _context.RadioRepairJobs.AsNoTracking()
                 .Include(j => j.AssignedTechnician)
+                .Include(j => j.WorkshopTechnician)
                 .Include(j => j.Radio)
                 .Include(j => j.CustomStatus)
                 .Where(j => !(j.Status == RadioRepairJobStatus.Received && 
@@ -105,11 +110,15 @@ namespace Pm.Services.RadioRepairJob
                     Status = j.Status.ToString(),
                     AssignedTechnicianUserId = j.AssignedTechnicianUserId,
                     AssignedTechnicianName = j.AssignedTechnician.FullName,
+                    WorkshopTechnicianId = j.WorkshopTechnicianId,
+                    WorkshopTechnicianName = j.WorkshopTechnician != null ? j.WorkshopTechnician.Name : null,
                     CustomStatusId = j.CustomStatusId,
                     CustomStatusLabel = j.CustomStatus != null ? j.CustomStatus.Label : null,
                     CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
                     OpenedAt = j.OpenedAt,
                     ClosedAt = j.ClosedAt,
+                    FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+                    WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     IsDeleted = j.IsDeleted,
                     DeletedAt = j.DeletedAt
                 })
@@ -181,6 +190,8 @@ namespace Pm.Services.RadioRepairJob
                 .Include(j => j.Handovers).ThenInclude(h => h.HandedOverBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.ReceivedBy)
                 .Include(j => j.Handovers).ThenInclude(h => h.Accessories)
+                .Include(j => j.Handovers).ThenInclude(h => h.WorkshopTechnician)
+                .Include(j => j.Handovers).ThenInclude(h => h.HandedOverByWorkshopTechnician)
                 .AsSplitQuery()
                 .FirstOrDefaultAsync(j => j.Id == id);
 
@@ -228,7 +239,7 @@ namespace Pm.Services.RadioRepairJob
                     JobId = job.Id,
                     FromStatus = fromStatus,
                     ToStatus = RadioRepairJobStatus.InProgress,
-                    Note = $"[Custom] {fromCustomLabel} → {customStatus.Label}. {note}",
+                    Note = $"Status diubah ke: {customStatus.Label}{(string.IsNullOrWhiteSpace(dto.Note) ? "" : $". {dto.Note}")}",
                     UserId = userId,
                     At = DateTime.UtcNow
                 });
@@ -236,6 +247,37 @@ namespace Pm.Services.RadioRepairJob
                 await _activityLog.LogAsync("RadioRepairJob", job.Id, "CustomStatusChange", userId,
                     $"Custom status → {customStatus.Label}");
                 await _context.SaveChangesAsync();
+                await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+                // Notifikasi custom status ke Supv MKN
+                var customAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
+                var customTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
+                var customTechName = await _context.WorkshopTechnicians.AsNoTracking()
+                    .Where(t => t.Id == job.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync() ?? "Teknisi";
+
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioRepair, new CreateNotificationDto
+                {
+                    Title = $"Status: {customStatus.Label}",
+                    Message = $"Radio SN {job.RadioSerialNumber}{customAlatInfo} kini dalam status \"{customStatus.Label}\" oleh {customTechName}{customTiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+
+                // Notifikasi ke Helpdesk
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+                {
+                    Title = $"Status Perbaikan: {customStatus.Label}",
+                    Message = $"Radio SN {job.RadioSerialNumber}{customAlatInfo} dalam status \"{customStatus.Label}\"{customTiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+
                 return (await GetByIdAsync(id, userId, roleName))!;
             }
 
@@ -243,25 +285,261 @@ namespace Pm.Services.RadioRepairJob
             job.CustomStatusId = null;
 
             var from = job.Status;
-            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorMkn,
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop,
                 StringComparison.OrdinalIgnoreCase);
             ValidateStatusTransition(from, dto.Status, isSupervisor);
 
             job.Status = dto.Status;
+            string? assignedTechName = null;
+            if (dto.WorkshopTechnicianId.HasValue)
+            {
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                assignedTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == dto.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
             job.UpdatedAt = DateTime.UtcNow;
 
             var statusNote = dto.Note;
             if (isSupervisor && from != dto.Status)
                 statusNote = string.IsNullOrWhiteSpace(statusNote)
-                    ? $"[Override supervisor] {from} → {dto.Status}"
-                    : $"[Override supervisor] {statusNote}";
+                    ? $"Diubah oleh Supervisor MKN"
+                    : statusNote; // pakai note dari supervisor langsung, tidak perlu prefix
 
-            await AddStatusLogAsync(job.Id, from, dto.Status, statusNote, userId);
+            // Tambahkan info teknisi yang di-assign ke note
+            if (!string.IsNullOrEmpty(assignedTechName))
+            {
+                var techNote = $"Dikerjakan oleh: {assignedTechName}";
+                statusNote = string.IsNullOrWhiteSpace(statusNote)
+                    ? techNote
+                    : $"{statusNote}. {techNote}";
+            }
+
+            // Ambil nama teknisi saat ini (jika ada) untuk dilampirkan ke log
+            string? currentTechName = assignedTechName;
+            if (string.IsNullOrEmpty(currentTechName) && job.WorkshopTechnicianId.HasValue)
+            {
+                currentTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == job.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            await AddStatusLogAsync(job.Id, from, dto.Status, statusNote, userId, currentTechName);
             await WriteRepairHistoryAsync(job, from, dto.Status, statusNote, userId);
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "StatusChange", userId,
                 $"Status {from} → {dto.Status}{(isSupervisor ? " (supervisor override)" : "")}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // === Trigger Notifications ===
+            // Variabel info untuk semua pesan notifikasi
+            var alatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
+            var tiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
+
+            // Notifikasi Khusus (Supervisor / Warehouse)
+            if (dto.Status == RadioRepairJobStatus.InProgress)
+            {
+                var techDisplayName = assignedTechName ?? currentTechName ?? "Teknisi";
+                // Cek apakah ini lanjutan dari Monitoring — jika iya, sebut teknisi monitoring sebelumnya
+                var fromMonitoring = from == RadioRepairJobStatus.Monitoring;
+                string inProgressMsg;
+                string inProgressTitle;
+                if (fromMonitoring && !string.IsNullOrEmpty(currentTechName) && currentTechName != techDisplayName)
+                {
+                    // Teknisi berbeda — lanjutan dari monitoring oleh orang lain
+                    inProgressTitle = "Perbaikan Dilanjutkan Pasca Monitoring";
+                    inProgressMsg = $"Radio SN {job.RadioSerialNumber}{alatInfo} dilanjutkan perbaikannya oleh {techDisplayName} (sebelumnya dimonitoring oleh {currentTechName}){tiketInfo}.";
+                }
+                else if (fromMonitoring)
+                {
+                    // Teknisi sama atau tidak berubah — lanjutan monitoring oleh orang yang sama
+                    inProgressTitle = "Perbaikan Dilanjutkan Pasca Monitoring";
+                    inProgressMsg = $"Radio SN {job.RadioSerialNumber}{alatInfo} selesai dimonitoring dan kini dilanjutkan perbaikannya oleh {techDisplayName}{tiketInfo}.";
+                }
+                else
+                {
+                    inProgressTitle = "Radio Mulai Diperbaiki";
+                    inProgressMsg = $"Radio SN {job.RadioSerialNumber}{alatInfo} sedang diperbaiki oleh {techDisplayName}{tiketInfo}.";
+                }
+
+                await _notificationService.CreateForPermissionAsync(
+                    Pm.Helper.NotificationPermissions.RadioRepair,
+                    new CreateNotificationDto
+                    {
+                        Title = inProgressTitle,
+                        Message = inProgressMsg,
+                        Category = "repair",
+                        LinkUrl = "/radio-repair-dashboard",
+                        ReferenceId = job.Id,
+                        ReferenceType = "RadioRepairJob"
+                    },
+                    // Skip teknisi yang mengerjakan agar tidak duplikat dengan notif personal di bawah
+                    excludeUserIds: job.AssignedTechnicianUserId != 0
+                        ? new[] { job.AssignedTechnicianUserId }
+                        : null
+                );
+            }
+            else if (dto.Status == RadioRepairJobStatus.Monitoring)
+            {
+                var techForMonitoring = assignedTechName ?? currentTechName ?? "Teknisi";
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioRepair, new CreateNotificationDto
+                {
+                    Title = "Radio Sedang Dimonitoring",
+                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} sedang dalam tahap monitoring oleh {techForMonitoring}{tiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.ProcessScrap)
+            {
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioRepair, new CreateNotificationDto
+                {
+                    Title = "Pengajuan Scrap Radio",
+                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} diajukan untuk di-scrap{tiketInfo}. Mohon ditinjau.",
+                    Category = "scrap",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.WaitingMaterialApproval)
+            {
+                var techForMaterial = assignedTechName ?? currentTechName ?? "Teknisi";
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioRepair, new CreateNotificationDto
+                {
+                    Title = "Persetujuan Material Diperlukan",
+                    Message = $"{techForMaterial} membutuhkan persetujuan material untuk Radio SN {job.RadioSerialNumber}{alatInfo}{tiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.RepairCompleted)
+            {
+                var techForCompleted = assignedTechName ?? currentTechName ?? "Teknisi";
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioRepair, new CreateNotificationDto
+                {
+                    Title = "Perbaikan Radio Selesai",
+                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah selesai diperbaiki oleh {techForCompleted}{tiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
+            {
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
+                {
+                    Title = "Radio Masuk Warehouse",
+                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah diserahkan ke Warehouse{tiketInfo}.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover/warehouse",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
+            // Notifikasi untuk Helpdesk (Selalu menerima notifikasi untuk seluruh alur status)
+            string hdTitle = "Update Status Radio";
+            string hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} sedang diproses.";
+
+            if (dto.Status == RadioRepairJobStatus.InProgress)
+            {
+                var techForHd = assignedTechName ?? currentTechName ?? "teknisi";
+                if (from == RadioRepairJobStatus.Monitoring && !string.IsNullOrEmpty(currentTechName) && currentTechName != techForHd)
+                {
+                    hdTitle = "Perbaikan Dilanjutkan Pasca Monitoring";
+                    hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} kini diperbaiki oleh {techForHd} (sebelumnya dimonitoring oleh {currentTechName}){tiketInfo}.";
+                }
+                else if (from == RadioRepairJobStatus.Monitoring)
+                {
+                    hdTitle = "Perbaikan Dilanjutkan Pasca Monitoring";
+                    hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} selesai dimonitoring dan perbaikan dilanjutkan oleh {techForHd}{tiketInfo}.";
+                }
+                else
+                {
+                    hdTitle = "Radio Mulai Diperbaiki";
+                    hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} sedang diperbaiki oleh {techForHd}{tiketInfo}.";
+                }
+            }
+            else if (dto.Status == RadioRepairJobStatus.Monitoring)
+            {
+                hdTitle = "Radio Sedang Dimonitoring";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} sedang dalam tahap monitoring{tiketInfo}.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.WaitingMaterialApproval)
+            {
+                hdTitle = "Menunggu Persetujuan Material";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} membutuhkan persetujuan material untuk melanjutkan perbaikan{tiketInfo}.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.RepairCompleted)
+            {
+                hdTitle = "Perbaikan Selesai";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah selesai diperbaiki{tiketInfo}.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
+            {
+                hdTitle = "Radio Diserahkan ke Warehouse";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah diserahkan ke Warehouse{tiketInfo}.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.ReturnedToHelpdesk)
+            {
+                hdTitle = "Radio Dikembalikan ke Helpdesk";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah dikembalikan ke Helpdesk{tiketInfo}.";
+            }
+            else if (dto.Status == RadioRepairJobStatus.Received)
+            {
+                hdTitle = "Radio Diterima di Workshop";
+                hdMessage = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah diterima di Workshop{tiketInfo}.";
+            }
+
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = hdTitle,
+                Message = hdMessage,
+                Category = dto.Status == RadioRepairJobStatus.HandedToWarehouse || dto.Status == RadioRepairJobStatus.ReturnedToHelpdesk ? "handover" : "repair",
+                LinkUrl = "/radio-repair-dashboard",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            // Notif ke teknisi yang ditugaskan saat InProgress
+            if (dto.Status == RadioRepairJobStatus.InProgress && job.AssignedTechnicianUserId != 0)
+            {
+                var techDisplayForNotif = assignedTechName ?? currentTechName ?? "Teknisi";
+                string tekTitle, tekMsg;
+                if (from == RadioRepairJobStatus.Monitoring)
+                {
+                    tekTitle = "Lanjutkan Perbaikan Pasca Monitoring";
+                    tekMsg = $"Radio SN {job.RadioSerialNumber}{alatInfo} selesai dimonitoring. Silakan lanjutkan perbaikan, {techDisplayForNotif}{tiketInfo}.";
+                }
+                else
+                {
+                    tekTitle = "Perbaikan Radio Dimulai";
+                    tekMsg = $"Radio SN {job.RadioSerialNumber}{alatInfo} mulai dikerjakan oleh {techDisplayForNotif}{tiketInfo}.";
+                }
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = tekTitle,
+                    Message = tekMsg,
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+            // =============================
+
             return (await GetByIdAsync(id, userId, roleName))!;
         }
 
@@ -279,12 +557,71 @@ namespace Pm.Services.RadioRepairJob
 
             var from = job.Status;
             job.Status = dto.ResumeStatus;
+            string? assignedTechName = null;
+            if (dto.WorkshopTechnicianId.HasValue)
+            {
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                assignedTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == dto.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            string? currentTechName = assignedTechName;
+            if (string.IsNullOrEmpty(currentTechName) && job.WorkshopTechnicianId.HasValue)
+            {
+                currentTechName = await _context.WorkshopTechnicians
+                    .AsNoTracking()
+                    .Where(t => t.Id == job.WorkshopTechnicianId)
+                    .Select(t => t.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            var note = dto.Note ?? "Material disetujui";
+            if (!string.IsNullOrEmpty(assignedTechName))
+            {
+                var techNote = $"Dikerjakan oleh: {assignedTechName}";
+                note = $"{note}. {techNote}";
+            }
+
             job.UpdatedAt = DateTime.UtcNow;
-            await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, dto.Note ?? "Material disetujui", userId);
-            await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, dto.Note, userId);
-            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, "Material disetujui");
+            await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, note, userId, currentTechName);
+            await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, note);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // Notif ke teknisi bahwa material disetujui dan bisa lanjut perbaikan
+            if (job.AssignedTechnicianUserId != 0)
+            {
+                var techName = assignedTechName ?? currentTechName ?? "Anda";
+                var approveAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
+                var approveTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = "Material Disetujui",
+                    Message = $"Material untuk Radio SN {job.RadioSerialNumber}{approveAlatInfo} telah disetujui. Silakan lanjutkan perbaikan, {techName}{approveTiketInfo}.",
+                    Category = "repair",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
+            // Notif ke Helpdesk
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "Material Perbaikan Disetujui",
+                Message = $"Material untuk Radio SN {job.RadioSerialNumber} telah disetujui. Perbaikan dilanjutkan.",
+                Category = "repair",
+                LinkUrl = "/radio-repair-dashboard",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
             return (await GetByIdAsync(id, userId, null))!;
         }
 
@@ -326,6 +663,13 @@ namespace Pm.Services.RadioRepairJob
             job.BatterySerialNumber = dto.BatterySerialNumber?.Trim();
             job.DamageDescription = dto.DamageDescription.Trim();
             job.AssignedTechnicianUserId = dto.AssignedTechnicianUserId;
+            if (dto.WorkshopTechnicianId.HasValue && job.WorkshopTechnicianId != dto.WorkshopTechnicianId)
+            {
+                var oldTech = job.WorkshopTechnicianId.HasValue ? await _context.WorkshopTechnicians.AsNoTracking().Where(t => t.Id == job.WorkshopTechnicianId).Select(t => t.Name).FirstOrDefaultAsync() : "None";
+                var newTech = await _context.WorkshopTechnicians.AsNoTracking().Where(t => t.Id == dto.WorkshopTechnicianId).Select(t => t.Name).FirstOrDefaultAsync() ?? "Unknown";
+                changes.Add($"Teknisi Pekerja: \"{oldTech}\" → \"{newTech}\"");
+                job.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+            }
             job.RadioId = dto.RadioId;
             if (dto.EquipmentName != null)
                 job.EquipmentName = string.IsNullOrWhiteSpace(dto.EquipmentName) ? null : dto.EquipmentName.Trim();
@@ -360,6 +704,7 @@ namespace Pm.Services.RadioRepairJob
             await WriteEditHistoryAsync(job, changes, $"supervisor ({tech.FullName})", userId);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, null))!;
         }
 
@@ -448,7 +793,142 @@ namespace Pm.Services.RadioRepairJob
             await WriteEditHistoryAsync(job, changes, "teknisi", userId);
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id, userId, null))!;
+        }
+
+        public async Task<RadioRepairJobDetailDto> ApproveScrapAsync(int id, ApproveScrapDto dto, int userId, string? roleName)
+        {
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat menyetujui Scrap.");
+
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Radio)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.ProcessScrap)
+                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap.");
+
+            var from = job.Status;
+            job.Status = RadioRepairJobStatus.Scrapped;
+            job.ClosedAt = DateTime.UtcNow;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            var note = $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {dto.ScrapJobNumber}. Keterangan: {dto.Remarks}";
+
+            if (job.Radio != null)
+            {
+                job.Radio.IsScrap = true;
+                job.Radio.DateScrapped = dto.DateScrapped;
+                job.Radio.ScrapJobNumber = dto.ScrapJobNumber ?? job.HelpdeskTicketNumber;
+                job.Radio.Remarks = dto.Remarks;
+                job.Radio.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
+            await WriteRepairHistoryAsync(job, from, job.Status, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveScrap", userId, note);
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // Notif ke Helpdesk — radio disetujui scrap
+            var scrapAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
+            var scrapTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "Radio Disetujui untuk Scrap",
+                Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap oleh Supervisor MKN{scrapTiketInfo}.",
+                Category = "scrap",
+                LinkUrl = "/radio-repair-dashboard",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            // Notif ke Teknisi (akun yang handle job ini)
+            if (job.AssignedTechnicianUserId != 0)
+            {
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = "Radio Disetujui untuk Scrap",
+                    Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap{scrapTiketInfo}.",
+                    Category = "scrap",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
+            return (await GetByIdAsync(id, userId, roleName))!;
+        }
+
+        public async Task<RadioRepairJobDetailDto> CancelScrapAsync(int id, int userId, string? roleName)
+        {
+            var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat membatalkan Scrap.");
+
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Radio)
+                .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.Scrapped)
+                throw new InvalidOperationException("Job tidak dalam status Scrap atau menunggu persetujuan Scrap.");
+
+            var from = job.Status;
+            job.Status = RadioRepairJobStatus.InProgress;
+            job.ClosedAt = null;
+            job.UpdatedAt = DateTime.UtcNow;
+
+            var note = "Pengajuan scrap dibatalkan oleh Supervisor. Perbaikan dilanjutkan.";
+
+            if (job.Radio != null)
+            {
+                job.Radio.IsScrap = false;
+                job.Radio.DateScrapped = null;
+                job.Radio.ScrapJobNumber = null;
+                job.Radio.Remarks = $"[Scrap Dibatalkan] {job.Radio.Remarks}";
+                job.Radio.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
+            await WriteRepairHistoryAsync(job, from, job.Status, note, userId);
+            await _activityLog.LogAsync("RadioRepairJob", job.Id, "CancelScrap", userId, note);
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            // Notif ke Helpdesk — scrap dibatalkan
+            var cancelAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
+            var cancelTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
+            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+            {
+                Title = "Pengajuan Scrap Radio Dibatalkan",
+                Message = $"Pengajuan scrap untuk Radio SN {job.RadioSerialNumber}{cancelAlatInfo} dibatalkan. Radio kembali dalam proses perbaikan{cancelTiketInfo}.",
+                Category = "scrap",
+                LinkUrl = "/radio-repair-dashboard",
+                ReferenceId = job.Id,
+                ReferenceType = "RadioRepairJob"
+            });
+
+            // Notif ke Teknisi
+            if (job.AssignedTechnicianUserId != 0)
+            {
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = job.AssignedTechnicianUserId,
+                    Title = "Pengajuan Scrap Dibatalkan",
+                    Message = $"Pengajuan scrap untuk Radio SN {job.RadioSerialNumber}{cancelAlatInfo} telah dibatalkan. Silakan lanjutkan perbaikan{cancelTiketInfo}.",
+                    Category = "scrap",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
+
+            return (await GetByIdAsync(id, userId, roleName))!;
         }
 
         public async Task SoftDeleteAsync(int id, int userId)
@@ -479,6 +959,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Arsip pekerjaan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         public async Task RestoreAsync(int id, int userId)
@@ -497,6 +978,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Pulihkan tiket {job.HelpdeskTicketNumber}, SN {job.RadioSerialNumber}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         public async Task DeletePermanentAsync(int id, int userId)
@@ -529,6 +1011,7 @@ namespace Pm.Services.RadioRepairJob
                 $"Hapus permanen tiket {ticket}, SN {sn}");
 
             await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
 
         internal static async Task ValidateDuplicateTicketSerialAsync(
@@ -592,17 +1075,19 @@ namespace Pm.Services.RadioRepairJob
                     RadioRepairJobStatus.WaitingMaterialApproval,
                     RadioRepairJobStatus.Cancelled
                 },
-                RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
-                RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted },
+                RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
+                RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
                 RadioRepairJobStatus.WaitingMaterialApproval => Array.Empty<RadioRepairJobStatus>(),
                 RadioRepairJobStatus.RepairCompleted => new[] { RadioRepairJobStatus.InProgress }, // teknisi bisa rollback jika salah tekan
+                RadioRepairJobStatus.ProcessScrap => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.Scrapped }, // Supervisor can approve or reject
+                RadioRepairJobStatus.Scrapped => new[] { RadioRepairJobStatus.InProgress }, // Supervisor can cancel scrap
                 _ => Array.Empty<RadioRepairJobStatus>()
             };
             if (!allowed.Contains(to))
                 throw new InvalidOperationException($"Transisi status dari {from} ke {to} tidak diizinkan.");
         }
 
-        private async Task AddStatusLogAsync(int jobId, RadioRepairJobStatus? from, RadioRepairJobStatus to, string? note, int userId)
+        private async Task AddStatusLogAsync(int jobId, RadioRepairJobStatus? from, RadioRepairJobStatus to, string? note, int userId, string? techName = null)
         {
             _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
             {
@@ -611,6 +1096,7 @@ namespace Pm.Services.RadioRepairJob
                 ToStatus = to,
                 Note = note,
                 UserId = userId,
+                WorkshopTechnicianName = techName,
                 At = DateTime.UtcNow
             });
         }
@@ -692,6 +1178,8 @@ namespace Pm.Services.RadioRepairJob
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
             AssignedTechnicianName = job.AssignedTechnician.FullName,
+            WorkshopTechnicianId = job.WorkshopTechnicianId,
+            WorkshopTechnicianName = job.WorkshopTechnician?.Name,
             CustomStatusId = job.CustomStatusId,
             CustomStatusLabel = job.CustomStatus?.Label,
             CustomStatusColor = job.CustomStatus?.Color,
@@ -706,7 +1194,10 @@ namespace Pm.Services.RadioRepairJob
                 FromStatus = l.FromStatus?.ToString(),
                 ToStatus = l.ToStatus.ToString(),
                 Note = l.Note,
-                UserName = l.User.FullName,
+                UserName = (!string.IsNullOrEmpty(l.WorkshopTechnicianName) && 
+                            (l.User?.FullName?.ToLower().Contains("worskhop") == true || l.User?.Username?.ToLower().Contains("worskhop") == true)) 
+                            ? $"{(l.User?.FullName ?? l.User?.Username ?? "Unknown")} ({l.WorkshopTechnicianName})" 
+                            : (l.User?.FullName ?? l.User?.Username ?? "Unknown"),
                 At = l.At
             }).ToList(),
             Handovers = job.Handovers
@@ -720,8 +1211,8 @@ namespace Pm.Services.RadioRepairJob
                 HandoverAt = h.HandoverAt,
                 SignedAt = h.SignedAt,
                 EquipmentTagType = h.EquipmentTagType.ToString(),
-                HandedOverByName = h.HandedOverBy.FullName,
-                ReceivedByName = h.ReceivedBy.FullName,
+                HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
+                ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64)
@@ -800,8 +1291,8 @@ namespace Pm.Services.RadioRepairJob
             Id = h.Id,
             HandoverNumber = h.HandoverNumber,
             HandoverAt = h.HandoverAt,
-            HandedOverByName = h.HandedOverBy.FullName,
-            ReceivedByName = h.ReceivedBy.FullName,
+            HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
+            ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
             Status = h.Status,
             EquipmentName = h.EquipmentName,
             UnitNumber = h.UnitNumber,

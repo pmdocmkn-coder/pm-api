@@ -15,6 +15,25 @@ namespace Pm.Controllers.RadioRepairJob
 
         public RadioRepairJobController(IRadioRepairJobService service) => _service = service;
 
+        /// <summary>TEMP DEBUG — hapus setelah testing</summary>
+        [HttpGet("debug-claims")]
+        public IActionResult DebugClaims()
+        {
+            var all = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+            var perms = User.Claims.Where(c => c.Type == "Permission").Select(c => c.Value).ToList();
+            var scrapPerms = perms.Where(p => p.Contains("scrap", StringComparison.OrdinalIgnoreCase)).ToList();
+            var repairPerms = perms.Where(p => p.Contains("repair", StringComparison.OrdinalIgnoreCase)).ToList();
+            return Ok(new {
+                userId = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+                roleName = User.FindFirst("RoleName")?.Value,
+                totalClaims = all.Count,
+                totalPermissions = perms.Count,
+                scrapPermissions = scrapPerms,
+                repairPermissions = repairPerms,
+                allPermissions = perms
+            });
+        }
+
         private int CurrentUserId =>
             int.Parse(User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                 ?? throw new UnauthorizedAccessException());
@@ -147,6 +166,36 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(data);
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/approve-scrap")]
+        [Authorize(Policy = "RadioScrapCreate")]
+        public async Task<IActionResult> ApproveScrap(int id, [FromBody] ApproveScrapDto dto)
+        {
+            try
+            {
+                var data = await _service.ApproveScrapAsync(id, dto, CurrentUserId, RoleName);
+                return ApiResponse.Success(data, "Radio telah di-scrap");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/cancel-scrap")]
+        [Authorize(Policy = "RadioScrapUpdate")]
+        public async Task<IActionResult> CancelScrap(int id)
+        {
+            try
+            {
+                var data = await _service.CancelScrapAsync(id, CurrentUserId, RoleName);
+                return ApiResponse.Success(data, "Scrap dibatalkan");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
             catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }

@@ -32,6 +32,9 @@ namespace Pm.DTOs.WarehousePartBorrow
         public int? RelatedRepairJobId { get; set; }
         [MaxLength(100)]
         public string? TicketNumber { get; set; }
+        
+        [MaxLength(200)]
+        public string? BorrowerName { get; set; }
     }
 
     public class WarehousePartBorrowListDto
@@ -44,8 +47,12 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string Status { get; set; } = null!;
         public string BorrowedByName { get; set; } = null!;
         public DateTime RequestedAt { get; set; }
+        /// <summary>Waktu barang benar-benar diserahkan (Issued). Dipakai untuk hitung durasi peminjaman.</summary>
+        public DateTime? IssuedAt { get; set; }
         public string? RelatedJobNumber { get; set; }
         public string? TicketNumber { get; set; }
+        public string? BorrowerName { get; set; }
+        public string? Purpose { get; set; }
     }
 
     public class WarehousePartBorrowStatusLogDto
@@ -60,12 +67,12 @@ namespace Pm.DTOs.WarehousePartBorrow
 
     public class WarehousePartBorrowDetailDto : WarehousePartBorrowListDto
     {
-        public string? Purpose { get; set; }
+        public new string? Purpose { get; set; }
         public int? RelatedRepairJobId { get; set; }
         public string? ApprovalNote { get; set; }
         public string? RejectionReason { get; set; }
         public DateTime? ApprovedAt { get; set; }
-        public DateTime? IssuedAt { get; set; }
+        public new DateTime? IssuedAt { get; set; }
         public DateTime? ReturnedAt { get; set; }
         public string? ReturnCondition { get; set; }
         public string? ReturnNote { get; set; }

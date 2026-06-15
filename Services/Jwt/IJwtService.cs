@@ -4,7 +4,7 @@ namespace Pm.Services
 {
     public interface IJwtService
     {
-        string GenerateToken(User user, List<string> permissions);
+        string GenerateToken(User user);
         int GetTokenExpirationTime();
     }
 }
