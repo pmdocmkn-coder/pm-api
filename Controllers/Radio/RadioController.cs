@@ -13,16 +13,10 @@ namespace Pm.Controllers.Radio
     [ApiController]
     [Route("api/radios")]
     [Authorize]
-    public class RadioController : ControllerBase
+    public class RadioController(IRadioService radioService, ILogger<RadioController> logger) : ControllerBase
     {
-        private readonly IRadioService _radioService;
-        private readonly ILogger<RadioController> _logger;
-
-        public RadioController(IRadioService radioService, ILogger<RadioController> logger)
-        {
-            _radioService = radioService;
-            _logger = logger;
-        }
+        private readonly IRadioService _radioService = radioService;
+        private readonly ILogger<RadioController> _logger = logger;
 
         private int CurrentUserId
         {
@@ -351,12 +345,41 @@ namespace Pm.Controllers.Radio
             }
             catch (InvalidOperationException ex)
             {
-                return ApiResponse.BadRequest("radio", new[] { ex.Message });
+                return ApiResponse.BadRequest("radio", [ex.Message]);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error unscrapping radio: {Id}", id);
                 return ApiResponse.InternalServerError("Gagal batal scrap radio: " + ex.Message);
+            }
+        }
+
+        // ============================================
+        // TRANSFER CATEGORY
+        // ============================================
+
+        [HttpPatch("{id}/transfer-category")]
+        [Authorize(Policy = "RadioUpdate")]
+        public async Task<IActionResult> TransferCategory(int id, [FromBody] TransferCategoryRequest request)
+        {
+            try
+            {
+                var data = await _radioService.TransferCategoryAsync(id, request.TargetCategory, CurrentUserId);
+                var label = request.TargetCategory == "Internal" ? "KPC" : request.TargetCategory;
+                return ApiResponse.Success(data, $"Radio berhasil dipindahkan ke {label}");
+            }
+            catch (KeyNotFoundException)
+            {
+                return ApiResponse.NotFound("Radio tidak ditemukan");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ApiResponse.BadRequest("radio", [ex.Message]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error transferring radio category: {Id}", id);
+                return ApiResponse.InternalServerError("Gagal memindahkan radio: " + ex.Message);
             }
         }
 
@@ -451,5 +474,10 @@ namespace Pm.Controllers.Radio
                 return ApiResponse.InternalServerError("Gagal import radio scrap legacy: " + ex.Message);
             }
         }
+    }
+
+    public class TransferCategoryRequest
+    {
+        public string TargetCategory { get; set; } = string.Empty;
     }
 }

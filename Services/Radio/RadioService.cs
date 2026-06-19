@@ -19,20 +19,12 @@ using Pm.Hubs;
 
 namespace Pm.Services.Radio
 {
-    public class RadioService : IRadioService
+    public class RadioService(AppDbContext context, IActivityLogService activityLog, ILogger<RadioService> logger, IHubContext<NotificationHub> hubContext) : IRadioService
     {
-        private readonly AppDbContext _context;
-        private readonly IActivityLogService _activityLog;
-        private readonly ILogger<RadioService> _logger;
-        private readonly IHubContext<NotificationHub> _hubContext;
-
-        public RadioService(AppDbContext context, IActivityLogService activityLog, ILogger<RadioService> logger, IHubContext<NotificationHub> hubContext)
-        {
-            _context = context;
-            _activityLog = activityLog;
-            _logger = logger;
-            _hubContext = hubContext;
-        }
+        private readonly AppDbContext _context = context;
+        private readonly IActivityLogService _activityLog = activityLog;
+        private readonly ILogger<RadioService> _logger = logger;
+        private readonly IHubContext<NotificationHub> _hubContext = hubContext;
 
         /// <summary>
         /// Resolves a userId to a display name: "FullName (Username)" or falls back to userId string.
@@ -95,18 +87,18 @@ namespace Pm.Services.Radio
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
-                var s = query.Search.Trim().ToLower();
+                var s = query.Search.Trim();
                 q = q.Where(r =>
-                    (r.NomorAset != null && r.NomorAset.ToLower().Contains(s)) ||
-                    (r.NomorUnit != null && r.NomorUnit.ToLower().Contains(s)) ||
-                    (r.NomorLv != null && r.NomorLv.ToLower().Contains(s)) ||
-                    (r.SerialNumber != null && r.SerialNumber.ToLower().Contains(s)) ||
-                    (r.RadioId != null && r.RadioId.ToLower().Contains(s)) ||
-                    (r.Division != null && r.Division.ToLower().Contains(s)) ||
-                    (r.Type != null && r.Type.ToLower().Contains(s)) ||
-                    (r.Fleet != null && r.Fleet.ToLower().Contains(s)) ||
-                    (r.Company != null && r.Company.ToLower().Contains(s)) ||
-                    (r.Department != null && r.Department.ToLower().Contains(s)));
+                    (r.NomorAset != null && r.NomorAset.Contains(s)) ||
+                    (r.NomorUnit != null && r.NomorUnit.Contains(s)) ||
+                    (r.NomorLv != null && r.NomorLv.Contains(s)) ||
+                    (r.SerialNumber != null && r.SerialNumber.Contains(s)) ||
+                    (r.RadioId != null && r.RadioId.Contains(s)) ||
+                    (r.Division != null && r.Division.Contains(s)) ||
+                    (r.Type != null && r.Type.Contains(s)) ||
+                    (r.Fleet != null && r.Fleet.Contains(s)) ||
+                    (r.Company != null && r.Company.Contains(s)) ||
+                    (r.Department != null && r.Department.Contains(s)));
             }
 
             if (!string.IsNullOrWhiteSpace(query.Division))
@@ -129,8 +121,8 @@ namespace Pm.Services.Radio
             if (query.IsNoGrafir == true)
                 q = q.Where(r => string.IsNullOrWhiteSpace(r.NomorAset) ||
                                  r.NomorAset == "-" ||
-                                 r.NomorAset.ToLower() == "no graf" ||
-                                 r.NomorAset.ToLower() == "no grafir");
+                                 r.NomorAset.Equals("no graf", StringComparison.OrdinalIgnoreCase) ||
+                                 r.NomorAset.Equals("no grafir", StringComparison.OrdinalIgnoreCase));
 
             if (query.DateFrom.HasValue)
                 q = q.Where(r => r.DateScrapped >= query.DateFrom.Value);
@@ -170,7 +162,7 @@ namespace Pm.Services.Radio
             {
                 if (duplicateRadioIdList.Count == 0)
                 {
-                    return new PagedResultDto<RadioDto>(new List<RadioDto>(), query, 0);
+                    return new PagedResultDto<RadioDto>([], query, 0);
                 }
 
                 // Ambil semua record yang sudah kena filter (search, divisi, dll),
@@ -188,10 +180,9 @@ namespace Pm.Services.Radio
                     .ToList();
 
                 totalCount = dupFiltered.Count;
-                radios = dupFiltered
+                radios = [.. dupFiltered
                     .Skip((query.Page - 1) * query.PageSize)
-                    .Take(query.PageSize)
-                    .ToList();
+                    .Take(query.PageSize)];
             }
             else
             {
@@ -290,19 +281,18 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<RadioDto> GetByIdAsync(int id)
         {
-            var r = await _context.Radios.FindAsync(id);
-            if (r == null) throw new KeyNotFoundException("Radio not found");
+            var r = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
             return MapToDto(r);
         }
 
         public async Task<List<RadioLookupDto>> LookupBySerialAsync(string serialNumber)
         {
             if (string.IsNullOrWhiteSpace(serialNumber))
-                return new List<RadioLookupDto>();
+                return [];
 
-            var s = serialNumber.Trim().ToLower();
+            var s = serialNumber.Trim();
             return await _context.Radios.AsNoTracking()
-                .Where(r => !r.IsScrap && r.SerialNumber != null && r.SerialNumber.ToLower().Contains(s))
+                .Where(r => !r.IsScrap && r.SerialNumber != null && r.SerialNumber.Contains(s))
                 .OrderBy(r => r.SerialNumber)
                 .Take(20)
                 .Select(r => new RadioLookupDto
@@ -332,9 +322,7 @@ namespace Pm.Services.Radio
 
         public async Task<IEnumerable<RadioHistoryDto>> GetHistoryAsync(int id)
         {
-            var radio = await _context.Radios.FindAsync(id);
-            if (radio == null)
-                throw new KeyNotFoundException($"Radio with ID {id} not found");
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException($"Radio with ID {id} not found");
 
             var histories = await _context.RadioHistories
                 .Where(h => h.RadioId == id)
@@ -406,8 +394,7 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<RadioDto> UpdateAsync(int id, UpdateRadioDto dto, int userId)
         {
-            var radio = await _context.Radios.FindAsync(id);
-            if (radio == null) throw new KeyNotFoundException("Radio not found");
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
 
             // ── Build diff before applying changes ──────────────────────────
             var diffs = new List<string>();
@@ -496,8 +483,7 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task DeleteAsync(int id, int userId)
         {
-            var radio = await _context.Radios.FindAsync(id);
-            if (radio == null) throw new KeyNotFoundException("Radio not found");
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
 
             var identifier = radio.NomorAset ?? radio.NomorLv ?? radio.SerialNumber ?? id.ToString();
             _context.Radios.Remove(radio);
@@ -536,8 +522,7 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<RadioDto> ScrapRadioAsync(int id, ScrapRadioDto dto, int userId)
         {
-            var radio = await _context.Radios.FindAsync(id);
-            if (radio == null) throw new KeyNotFoundException("Radio not found");
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
 
             radio.IsScrap = true;
             radio.ScrapJobNumber = dto.ScrapJobNumber;
@@ -566,8 +551,7 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<RadioDto> UnscrapRadioAsync(int id, int userId)
         {
-            var radio = await _context.Radios.FindAsync(id);
-            if (radio == null) throw new KeyNotFoundException("Radio not found");
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
 
             if (!radio.IsScrap) throw new InvalidOperationException("Radio tidak dalam status scrap.");
 
@@ -780,7 +764,7 @@ namespace Pm.Services.Radio
 
                     var scrapVal = GetCellValue(ws, row, colMap, "Scrap");
                     if (!string.IsNullOrEmpty(scrapVal))
-                        radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.ToLower() == "yes" || scrapVal.ToLower() == "true" || scrapVal == "1";
+                        radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.Equals("yes", StringComparison.OrdinalIgnoreCase) || scrapVal.Equals("true", StringComparison.OrdinalIgnoreCase) || scrapVal == "1";
 
                     _context.Radios.Add(radio);
                     sheetImported++;
@@ -998,7 +982,7 @@ namespace Pm.Services.Radio
 
                     var scrapVal = GetCellValue(ws, row, colMap, "Scrap");
                     if (!string.IsNullOrEmpty(scrapVal))
-                        radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.ToLower() == "yes" || scrapVal.ToLower() == "true" || scrapVal == "1";
+                        radio.IsScrap = scrapVal == "✓" || scrapVal == "√" || scrapVal.Equals("yes", StringComparison.OrdinalIgnoreCase) || scrapVal.Equals("true", StringComparison.OrdinalIgnoreCase) || scrapVal == "1";
 
                     _context.Radios.Add(radio);
                     sheetImported++;
@@ -1197,6 +1181,49 @@ namespace Pm.Services.Radio
                 SheetCount = sheetDetails.Count,
                 SheetDetails = sheetDetails
             };
+        }
+
+        // ============================================
+        // TRANSFER CATEGORY (Internal ↔ Unit)
+        // ============================================
+        public async Task<RadioDto> TransferCategoryAsync(int id, string targetCategory, int userId)
+        {
+            var allowedCategories = new[] { "Internal", "Unit" };
+            if (!allowedCategories.Contains(targetCategory))
+                throw new InvalidOperationException($"Transfer hanya diperbolehkan antara KPC (Internal) dan Unit.");
+
+            var radio = await _context.Radios.FindAsync(id) ?? throw new KeyNotFoundException("Radio not found");
+
+            if (!allowedCategories.Contains(radio.Category))
+                throw new InvalidOperationException($"Radio kategori '{radio.Category}' tidak dapat dipindahkan. Hanya KPC dan Unit yang bisa dipindahkan.");
+
+            if (string.Equals(radio.Category, targetCategory, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Radio sudah berada di kategori {targetCategory}.");
+
+            var oldCategory = radio.Category;
+            var oldLabel = oldCategory == "Internal" ? "KPC" : oldCategory;
+            var newLabel = targetCategory == "Internal" ? "KPC" : targetCategory;
+
+            radio.Category = targetCategory;
+            radio.UpdatedAt = DateTime.UtcNow;
+
+            _context.RadioHistories.Add(new RadioHistory
+            {
+                RadioId = radio.Id,
+                Action = "Transferred",
+                Details = $"Dipindahkan dari {oldLabel} ke {newLabel}",
+                CreatedBy = await GetUserDisplayNameAsync(userId),
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("RefreshData", "RadioUnit");
+
+            var identifier = radio.NomorAset ?? radio.NomorLv ?? radio.SerialNumber ?? id.ToString();
+            await _activityLog.LogAsync("Radio", radio.Id, "Transfer", userId,
+                $"Radio {identifier} dipindahkan dari {oldLabel} ke {newLabel}");
+
+            return await GetByIdAsync(radio.Id);
         }
 
         // ============================================

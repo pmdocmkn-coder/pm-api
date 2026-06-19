@@ -12,6 +12,7 @@ namespace Pm.Services.WarehousePartBorrow
         Task<WarehousePartBorrowDetailDto> ApproveAsync(int id, ApproveBorrowDto dto, int userId);
         Task<WarehousePartBorrowDetailDto> RejectAsync(int id, RejectBorrowDto dto, int userId);
         Task<WarehousePartBorrowDetailDto> IssueAsync(int id, IssueBorrowDto dto, int userId);
+        Task<WarehousePartBorrowDetailDto> SignReceiverAsync(int id, SignReceiverBorrowDto dto, int userId);
         Task<WarehousePartBorrowDetailDto> ReturnAsync(int id, ReturnBorrowDto dto, int userId, string? roleName);
         Task CancelAsync(int id, int userId);
         Task DeleteAsync(int id);

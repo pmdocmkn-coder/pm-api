@@ -58,9 +58,6 @@ namespace Pm.Services.WarehousePartBorrow
             if (IsFieldRole(roleName))
             {
                 q = q.Where(b => b.BorrowedByUserId == currentUserId);
-                // Teknisi hanya melihat data setelah WH menyerahkan barang (Issued/Returned)
-                q = q.Where(b => b.Status == WarehousePartBorrowStatus.Issued
-                               || b.Status == WarehousePartBorrowStatus.Returned);
             }
 
             if (!string.IsNullOrWhiteSpace(query.Status) &&
@@ -371,6 +368,20 @@ namespace Pm.Services.WarehousePartBorrow
             };
             await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, issueNotifDto);
             await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, issueNotifDto);
+
+            return (await GetByIdAsync(id, userId, null))!;
+        }
+
+        public async Task<WarehousePartBorrowDetailDto> SignReceiverAsync(int id, SignReceiverBorrowDto dto, int userId)
+        {
+            var b = await GetBorrowTrackedAsync(id);
+            if (b.Status != WarehousePartBorrowStatus.Issued)
+                throw new InvalidOperationException("Hanya dapat menandatangani peminjaman yang sudah diserahkan (Issued).");
+            
+            b.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+            b.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
             return (await GetByIdAsync(id, userId, null))!;
         }
