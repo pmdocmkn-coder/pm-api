@@ -85,6 +85,10 @@ namespace Pm.Services.RadioRepairJob
                     RadioFleet = j.Radio != null ? j.Radio.Fleet : null,
                     RadioCategory = j.Radio != null ? j.Radio.Category : null,
                     EquipmentName = j.EquipmentName ?? (j.Radio != null ? j.Radio.Type : null),
+                    UnitNumber = j.UnitNumber ?? (j.Radio != null ? j.Radio.NomorUnit : null),
+                    RadioOwnerLabel = j.RadioOwnerLabel ?? (j.Radio != null ? j.Radio.Company : null),
+                    OwnerDivision = j.OwnerDivision ?? (j.Radio != null ? j.Radio.Division : null),
+                    OwnerDepartment = j.OwnerDepartment ?? (j.Radio != null ? j.Radio.Department : null),
                     PreviewPhotoBase64 = j.Handovers
                         .Where(h => h.HandoverType == RadioHandoverType.HelpdeskToTechnician && !h.IsDeleted)
                         .OrderBy(h => h.HandoverAt)
@@ -118,7 +122,9 @@ namespace Pm.Services.RadioRepairJob
                     CurrentProgressStartedAt = j.CurrentProgressStartedAt,
                     IsDeleted = j.IsDeleted,
                     DeletedAt = j.DeletedAt,
-                    HasBorrowRequest = j.PartBorrows.Any()
+                    HasBorrowRequest = j.PartBorrows.Any(),
+                    HasActiveBorrowedPart = j.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
+                    HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned)
                 })
                 .ToListAsync();
 
@@ -1222,16 +1228,19 @@ namespace Pm.Services.RadioRepairJob
             ClosedAt = job.ClosedAt,
             IsDeleted = job.IsDeleted,
             DeletedAt = job.DeletedAt,
+            HasBorrowRequest = job.PartBorrows.Any(),
+            HasActiveBorrowedPart = job.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
+            HasReturnedBorrowedPart = job.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
                 FromStatus = l.FromStatus?.ToString(),
                 ToStatus = l.ToStatus.ToString(),
                 Note = l.Note,
-                UserName = (!string.IsNullOrEmpty(l.WorkshopTechnicianName) && 
-                            (l.User?.FullName?.Contains("workshop", StringComparison.OrdinalIgnoreCase) == true || l.User?.Username?.Contains("workshop", StringComparison.OrdinalIgnoreCase) == true)) 
+                UserName = !string.IsNullOrEmpty(l.WorkshopTechnicianName)
                             ? $"{(l.User?.FullName ?? l.User?.Username ?? "Unknown")} ({l.WorkshopTechnicianName})" 
                             : (l.User?.FullName ?? l.User?.Username ?? "Unknown"),
+                WorkshopTechnicianName = l.WorkshopTechnicianName,
                 At = l.At
             })],
             Handovers = [.. job.Handovers

@@ -88,6 +88,7 @@ namespace Pm.Services
                             QuotationDate = dto.QuotationDate.Date,
                             Notes = dto.Notes?.Trim(),
                             Status = dto.Status,
+                            Nominal = dto.Nominal,
                             CreatedBy = userId,
                             CreatedAt = DateTime.UtcNow
                         };
@@ -180,6 +181,7 @@ namespace Pm.Services
                         CustomerName = q.CustomerName,
                         Description = q.Description.Length > 100 ? q.Description.Substring(0, 100) + "..." : q.Description,
                         Status = q.Status.ToString(),
+                        Nominal = q.Nominal,
                         CreatedByName = q.CreatedByUser != null ? q.CreatedByUser.FullName : null
                     })
                     .ToListAsync();
@@ -215,6 +217,7 @@ namespace Pm.Services
                         QuotationDate = q.QuotationDate,
                         Notes = q.Notes,
                         Status = q.Status.ToString(),
+                        Nominal = q.Nominal,
                         CreatedAt = q.CreatedAt,
                         UpdatedAt = q.UpdatedAt,
                         Customer = q.Customer != null ? new CompanyListDto
@@ -268,6 +271,7 @@ namespace Pm.Services
                 quotation.Description = dto.Description.Trim();
                 quotation.Notes = dto.Notes?.Trim();
                 quotation.Status = dto.Status;
+                quotation.Nominal = dto.Nominal;
                 quotation.UpdatedBy = userId;
                 quotation.UpdatedAt = DateTime.UtcNow;
 
@@ -352,6 +356,91 @@ namespace Pm.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting quotation");
+                throw;
+            }
+        }
+
+        public async Task<byte[]> ExportQuotationsAsync(QuotationQueryDto query)
+        {
+            try
+            {
+                var queryable = _context.Quotations
+                    .Include(q => q.Customer)
+                    .Include(q => q.CreatedByUser)
+                    .AsQueryable();
+
+                // Filters
+                if (query.CustomerId.HasValue)
+                    queryable = queryable.Where(q => q.CustomerId == query.CustomerId.Value);
+
+                if (query.Status.HasValue)
+                    queryable = queryable.Where(q => q.Status == query.Status.Value);
+
+                if (query.Year.HasValue)
+                    queryable = queryable.Where(q => q.Year == query.Year.Value);
+
+                if (query.Month.HasValue)
+                    queryable = queryable.Where(q => q.Month == query.Month.Value);
+
+                if (query.StartDate.HasValue)
+                    queryable = queryable.Where(q => q.QuotationDate >= query.StartDate.Value.Date);
+
+                if (query.EndDate.HasValue)
+                    queryable = queryable.Where(q => q.QuotationDate <= query.EndDate.Value.Date);
+
+                if (!string.IsNullOrWhiteSpace(query.Search))
+                {
+                    var search = query.Search.ToLower();
+                    queryable = queryable.Where(q =>
+                        q.FormattedNumber.ToLower().Contains(search) ||
+                        q.CustomerName.ToLower().Contains(search) ||
+                        q.Description.ToLower().Contains(search));
+                }
+
+                var items = await queryable.OrderByDescending(q => q.CreatedAt).ToListAsync();
+
+                using var workbook = new ClosedXML.Excel.XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("Quotations");
+
+                // Headers
+                worksheet.Cell(1, 1).Value = "No";
+                worksheet.Cell(1, 2).Value = "Nomor Quotation";
+                worksheet.Cell(1, 3).Value = "Tanggal";
+                worksheet.Cell(1, 4).Value = "Customer";
+                worksheet.Cell(1, 5).Value = "Deskripsi";
+                worksheet.Cell(1, 6).Value = "Nominal";
+                worksheet.Cell(1, 7).Value = "Status";
+                worksheet.Cell(1, 8).Value = "Pembuat";
+
+                var headerRow = worksheet.Range(1, 1, 1, 8);
+                headerRow.Style.Font.Bold = true;
+                headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+
+                // Data
+                int row = 2;
+                foreach (var item in items)
+                {
+                    worksheet.Cell(row, 1).Value = row - 1;
+                    worksheet.Cell(row, 2).Value = item.FormattedNumber;
+                    worksheet.Cell(row, 3).Value = item.QuotationDate.ToString("yyyy-MM-dd");
+                    worksheet.Cell(row, 4).Value = item.CustomerName;
+                    worksheet.Cell(row, 5).Value = item.Description;
+                    worksheet.Cell(row, 6).Value = item.Nominal;
+                    worksheet.Cell(row, 7).Value = item.Status.ToString();
+                    worksheet.Cell(row, 8).Value = item.CreatedByUser?.FullName;
+                    
+                    row++;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var stream = new System.IO.MemoryStream();
+                workbook.SaveAs(stream);
+                return stream.ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting quotations");
                 throw;
             }
         }

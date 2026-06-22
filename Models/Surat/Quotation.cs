@@ -19,6 +19,7 @@ namespace Pm.Models
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public int? UpdatedBy { get; set; }
+        public decimal? Nominal { get; set; }
 
         // Navigation properties
         public Company? Customer { get; set; }

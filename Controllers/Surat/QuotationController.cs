@@ -51,6 +51,22 @@ namespace Pm.Controllers
             }
         }
 
+        [HttpGet("export")]
+        [Authorize(Policy = "QuotationView")]
+        public async Task<IActionResult> Export([FromQuery] QuotationQueryDto query)
+        {
+            try
+            {
+                var fileContent = await _service.ExportQuotationsAsync(query);
+                return File(fileContent, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Quotations_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting quotations");
+                return ApiResponse.BadRequest("Export Quotations", ex.Message);
+            }
+        }
+
         [HttpGet("{id}")]
         [Authorize(Policy = "QuotationView")]
         public async Task<IActionResult> GetById(int id)

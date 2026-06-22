@@ -48,6 +48,11 @@ builder.Services.AddControllers(options =>
     options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+
+    // ✅ Pastikan semua DateTime di-serialize dengan suffix "Z" (UTC)
+    // agar browser otomatis konversi ke timezone lokal (WITA = UTC+8)
+    options.JsonSerializerOptions.Converters.Add(new DateTimeUtcJsonConverter());
+    options.JsonSerializerOptions.Converters.Add(new NullableDateTimeUtcJsonConverter());
 });
 
 // ===== Swagger =====

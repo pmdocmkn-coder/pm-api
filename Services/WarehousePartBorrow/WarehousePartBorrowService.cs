@@ -263,7 +263,7 @@ namespace Pm.Services.WarehousePartBorrow
                 Title = "Part Siap Diserahkan",
                 Message = $"Peminjaman ({b.BorrowNumber}) telah disetujui. Silakan siapkan part untuk diserahkan.",
                 Category = "Warehouse",
-                LinkUrl = "/warehouse/supervision",
+                LinkUrl = "/warehouse/borrow-history",
                 ReferenceId = b.Id,
                 ReferenceType = "WarehouseBorrow"
             });
@@ -278,10 +278,10 @@ namespace Pm.Services.WarehousePartBorrow
                     Title = "Peminjaman Part Teknisi Disetujui",
                     Message = $"Peminjaman part ({b.BorrowNumber}) oleh {b.BorrowerName ?? borrowerForApprove?.FullName ?? "teknisi"} telah disetujui.",
                     Category = "Warehouse",
-                    LinkUrl = "/warehouse/supervision",
+                    LinkUrl = "/warehouse/borrow-history",
                     ReferenceId = b.Id,
                     ReferenceType = "WarehouseBorrow"
-                });
+                }, new[] { b.BorrowedByUserId });
             }
 
             return (await GetByIdAsync(id, userId, null))!;
@@ -334,40 +334,61 @@ namespace Pm.Services.WarehousePartBorrow
             if (b.Status != WarehousePartBorrowStatus.Approved)
                 throw new InvalidOperationException("Part harus disetujui terlebih dahulu.");
             var from = b.Status;
-            b.Status = WarehousePartBorrowStatus.Issued;
+            
+            var isWaitingSignature = string.IsNullOrEmpty(dto.ReceiverSignatureBase64);
+            var targetStatus = isWaitingSignature ? WarehousePartBorrowStatus.PendingSignature : WarehousePartBorrowStatus.Issued;
+            
+            b.Status = targetStatus;
             b.IssuedByUserId = userId;
             b.IssuedAt = DateTime.UtcNow;
             b.IssuerSignatureBase64 = dto.IssuerSignatureBase64;
             b.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
-            await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", userId);
+            
+            await AddLogAsync(b.Id, from, targetStatus, isWaitingSignature ? "Menunggu tanda tangan penerima" : "Part diserahkan", userId);
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
-            // Notifikasi ke peminjam
-            await _notificationService.CreateAsync(new CreateNotificationDto
+            if (isWaitingSignature)
             {
-                RecipientUserId = b.BorrowedByUserId,
-                Title = "Part Diserahkan 📦",
-                Message = $"Part untuk peminjaman ({b.BorrowNumber}) telah diserahkan. Harap kembalikan setelah selesai.",
-                Category = "Warehouse",
-                LinkUrl = "/warehouse/borrow-history",
-                ReferenceId = b.Id,
-                ReferenceType = "WarehouseBorrow"
-            });
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = b.BorrowedByUserId,
+                    Title = "Tanda Tangan Diperlukan",
+                    Message = $"Part peminjaman ({b.BorrowNumber}) siap diambil. Harap lengkapi tanda tangan Anda.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/borrow-history",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
+            }
+            else
+            {
+                // Notifikasi ke peminjam
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = b.BorrowedByUserId,
+                    Title = "Part Diserahkan 📦",
+                    Message = $"Part untuk peminjaman ({b.BorrowNumber}) telah diserahkan. Harap kembalikan setelah selesai.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/borrow-history",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
 
-            // Notifikasi ke Supervisor Warehouse & Supv MKN
-            var issueNotifDto = new CreateNotificationDto
-            {
-                Title = "Part Diserahkan ke Teknisi",
-                Message = $"Part ({b.BorrowNumber}) telah diserahkan ke {(b.BorrowerName ?? b.BorrowedBy?.FullName ?? "teknisi")}.",
-                Category = "Warehouse",
-                LinkUrl = "/warehouse/supervision",
-                ReferenceId = b.Id,
-                ReferenceType = "WarehouseBorrow"
-            };
-            await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, issueNotifDto);
-            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, issueNotifDto);
+                // Notifikasi ke Supervisor Warehouse & Supv MKN
+                var issueNotifDto = new CreateNotificationDto
+                {
+                    Title = "Part Diserahkan ke Teknisi",
+                    Message = $"Part ({b.BorrowNumber}) telah diserahkan ke {(b.BorrowerName ?? b.BorrowedBy?.FullName ?? "teknisi")}.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/supervision",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                };
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, issueNotifDto);
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, issueNotifDto, new[] { b.BorrowedByUserId });
+            }
 
             return (await GetByIdAsync(id, userId, null))!;
         }
@@ -375,13 +396,51 @@ namespace Pm.Services.WarehousePartBorrow
         public async Task<WarehousePartBorrowDetailDto> SignReceiverAsync(int id, SignReceiverBorrowDto dto, int userId)
         {
             var b = await GetBorrowTrackedAsync(id);
-            if (b.Status != WarehousePartBorrowStatus.Issued)
-                throw new InvalidOperationException("Hanya dapat menandatangani peminjaman yang sudah diserahkan (Issued).");
+            if (b.Status != WarehousePartBorrowStatus.Issued && b.Status != WarehousePartBorrowStatus.PendingSignature)
+                throw new InvalidOperationException("Hanya dapat menandatangani peminjaman yang menunggu tanda tangan atau sudah diserahkan.");
             
+            var from = b.Status;
+            var isTransitioning = from == WarehousePartBorrowStatus.PendingSignature;
+
             b.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+            
+            if (isTransitioning)
+            {
+                b.Status = WarehousePartBorrowStatus.Issued;
+                await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", userId);
+            }
+
             b.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
+
+            if (isTransitioning)
+            {
+                // Notifikasi ke peminjam
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = b.BorrowedByUserId,
+                    Title = "Part Diserahkan 📦",
+                    Message = $"Part untuk peminjaman ({b.BorrowNumber}) telah diserahkan. Harap kembalikan setelah selesai.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/borrow-history",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
+
+                // Notifikasi ke Supervisor Warehouse & Supv MKN
+                var issueNotifDto = new CreateNotificationDto
+                {
+                    Title = "Part Diserahkan ke Teknisi",
+                    Message = $"Part ({b.BorrowNumber}) telah diserahkan ke {(b.BorrowerName ?? b.BorrowedBy?.FullName ?? "teknisi")}.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/supervision",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                };
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, issueNotifDto);
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, issueNotifDto, new[] { b.BorrowedByUserId });
+            }
 
             return (await GetByIdAsync(id, userId, null))!;
         }
@@ -396,7 +455,10 @@ namespace Pm.Services.WarehousePartBorrow
             // Siapa yang mengembalikan tercatat di status log (userId).
                 
             var from = b.Status;
-            b.Status = WarehousePartBorrowStatus.Returned;
+            var isWaitingSignature = string.IsNullOrEmpty(dto.ReturnReceiverSignatureBase64);
+            var targetStatus = isWaitingSignature ? WarehousePartBorrowStatus.PendingReturnSignature : WarehousePartBorrowStatus.Returned;
+
+            b.Status = targetStatus;
             b.ReturnedAt = DateTime.UtcNow;
             b.ReturnCondition = dto.ReturnCondition?.Trim();
             b.ReturnNote = dto.ReturnNote?.Trim();
@@ -404,15 +466,81 @@ namespace Pm.Services.WarehousePartBorrow
             b.ReturnIssuerSignatureBase64 = dto.ReturnIssuerSignatureBase64;
             b.ReturnReceiverSignatureBase64 = dto.ReturnReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
-            await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Returned, dto.ReturnNote, userId);
+            await AddLogAsync(b.Id, from, targetStatus, isWaitingSignature ? "Menunggu tanda tangan penerima pengembalian" : dto.ReturnNote, userId);
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
 
-            // Notifikasi ke Warehouse, Supervisor Warehouse, Supv MKN, Admin
+            if (isWaitingSignature)
+            {
+                // Notifikasi ke Warehouse agar menandatangani penerimaan
+                var pendingNotifDto = new CreateNotificationDto
+                {
+                    Title = "TTD Penerimaan Diperlukan",
+                    Message = $"Teknisi telah mengembalikan part ({b.BorrowNumber}). Silakan konfirmasi dan tanda tangani penerimaan.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/borrow-history",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                };
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, pendingNotifDto);
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, pendingNotifDto);
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, pendingNotifDto, new[] { b.BorrowedByUserId });
+            }
+            else
+            {
+                // Semua TTD lengkap → notifikasi pengembalian final
+                var notifDto = new CreateNotificationDto
+                {
+                    Title = "Part Dikembalikan ↩️",
+                    Message = $"Part ({b.BorrowNumber}) telah dikembalikan oleh {(dto.ReturnedByName?.Trim() ?? "teknisi")}.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/supervision",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                };
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, notifDto);
+                await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, notifDto);
+                await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, notifDto);
+
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = b.BorrowedByUserId,
+                    Title = "Part Berhasil Dikembalikan ✓",
+                    Message = $"Part ({b.BorrowNumber}) telah diterima kembali oleh Warehouse.",
+                    Category = "Warehouse",
+                    LinkUrl = "/warehouse/borrow-history",
+                    ReferenceId = b.Id,
+                    ReferenceType = "WarehouseBorrow"
+                });
+            }
+
+            return (await GetByIdAsync(id, userId, null))!;
+        }
+
+        public async Task<WarehousePartBorrowDetailDto> SignReturnReceiverAsync(int id, SignReturnReceiverBorrowDto dto, int userId)
+        {
+            var b = await GetBorrowTrackedAsync(id);
+            if (b.Status != WarehousePartBorrowStatus.PendingReturnSignature)
+                throw new InvalidOperationException("Hanya dapat menandatangani pengembalian yang menunggu tanda tangan penerima.");
+
+            var from = b.Status;
+            b.Status = WarehousePartBorrowStatus.Returned;
+            b.ReturnReceiverSignatureBase64 = dto.ReturnReceiverSignatureBase64;
+            if (!string.IsNullOrWhiteSpace(dto.ReturnCondition))
+                b.ReturnCondition = dto.ReturnCondition.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.ReturnNote))
+                b.ReturnNote = dto.ReturnNote.Trim();
+            b.UpdatedAt = DateTime.UtcNow;
+
+            await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Returned, "Part dikembalikan", userId);
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("WarehouseBorrow");
+
+            // Notifikasi ke Warehouse, Supervisor Warehouse
             var notifDto = new CreateNotificationDto
             {
                 Title = "Part Dikembalikan ↩️",
-                Message = $"Part ({b.BorrowNumber}) telah dikembalikan oleh {(dto.ReturnedByName?.Trim() ?? "teknisi")}.",
+                Message = $"Part ({b.BorrowNumber}) telah dikembalikan oleh {(b.ReturnedByName ?? b.BorrowerName ?? b.BorrowedBy?.FullName ?? "teknisi")}.",
                 Category = "Warehouse",
                 LinkUrl = "/warehouse/supervision",
                 ReferenceId = b.Id,
@@ -420,9 +548,9 @@ namespace Pm.Services.WarehousePartBorrow
             };
             await _notificationService.CreateForRoleAsync(OperationalRoleNames.SupervisorWarehouse, notifDto);
             await _notificationService.CreateForRoleAsync(OperationalRoleNames.Warehouse, notifDto);
-            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, notifDto);
+            await _notificationService.CreateForPermissionAsync(NotificationPermissions.WarehouseBorrow, notifDto, new[] { b.BorrowedByUserId });
 
-            // Notifikasi ke peminjam (akun yang membuat peminjaman)
+            // Notifikasi ke peminjam
             await _notificationService.CreateAsync(new CreateNotificationDto
             {
                 RecipientUserId = b.BorrowedByUserId,

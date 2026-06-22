@@ -25,6 +25,10 @@ namespace Pm.DTOs.RadioRepairJob
         public string? RadioFleet { get; set; }
         public string? RadioCategory { get; set; }
         public string? EquipmentName { get; set; }
+        public string? UnitNumber { get; set; }
+        public string? RadioOwnerLabel { get; set; }
+        public string? OwnerDivision { get; set; }
+        public string? OwnerDepartment { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
         public string DamageDescription { get; set; } = null!;
         public string? EquipmentTagType { get; set; }
@@ -58,6 +62,8 @@ namespace Pm.DTOs.RadioRepairJob
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
         public bool HasBorrowRequest { get; set; }
+        public bool HasActiveBorrowedPart { get; set; }
+        public bool HasReturnedBorrowedPart { get; set; }
     }
 
     public class RadioRepairTicketGroupDto
@@ -74,6 +80,7 @@ namespace Pm.DTOs.RadioRepairJob
         public string ToStatus { get; set; } = null!;
         public string? Note { get; set; }
         public string UserName { get; set; } = null!;
+        public string? WorkshopTechnicianName { get; set; }
         public DateTime At { get; set; }
     }
 
@@ -123,11 +130,7 @@ namespace Pm.DTOs.RadioRepairJob
     public class RadioRepairJobDetailDto : RadioRepairJobListDto
     {
         public string? BatterySerialNumber { get; set; }
-        // EquipmentName sudah ada di RadioRepairJobListDto — tidak perlu redeclare
-        public string? UnitNumber { get; set; }
-        public string? RadioOwnerLabel { get; set; }
-        public string? OwnerDivision { get; set; }
-        public string? OwnerDepartment { get; set; }
+        // EquipmentName dan Owner properties sudah ada di RadioRepairJobListDto
         public string OpenedByName { get; set; } = null!;
         public List<RadioRepairJobStatusLogDto> StatusLogs { get; set; } = [];
         public List<RadioRepairJobHandoverSummaryDto> Handovers { get; set; } = [];

@@ -140,6 +140,20 @@ namespace Pm.Controllers.WarehousePartBorrow
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
+        [HttpPatch("{id}/sign-return")]
+        [Authorize(Policy = "WarehouseBorrowView")]
+        public async Task<IActionResult> SignReturnReceiver(int id, [FromBody] SignReturnReceiverBorrowDto dto)
+        {
+            try
+            {
+                var data = await _service.SignReturnReceiverAsync(id, dto, CurrentUserId);
+                return ApiResponse.Success(data);
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("borrow", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
         [HttpPost("{id}/cancel")]
         [Authorize(Policy = "WarehouseBorrowCancel")]
         public async Task<IActionResult> Cancel(int id)
