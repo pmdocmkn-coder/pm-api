@@ -124,7 +124,10 @@ namespace Pm.Services.RadioRepairJob
                     DeletedAt = j.DeletedAt,
                     HasBorrowRequest = j.PartBorrows.Any(),
                     HasActiveBorrowedPart = j.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
-                    HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned)
+                    HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
+                    PendingHandoverType = j.CurrentHandoverId.HasValue 
+                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                        : null
                 })
                 .ToListAsync();
 
@@ -1231,6 +1234,9 @@ namespace Pm.Services.RadioRepairJob
             HasBorrowRequest = job.PartBorrows.Any(),
             HasActiveBorrowedPart = job.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
             HasReturnedBorrowedPart = job.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
+            PendingHandoverType = job.CurrentHandoverId.HasValue 
+                ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                : null,
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,

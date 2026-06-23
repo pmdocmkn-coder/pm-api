@@ -305,6 +305,14 @@ namespace Pm.Services.RadioHandover
             if (!OperationalRoleNames.IsTechnicianRole(currentRole))
                 throw new UnauthorizedAccessException("Hanya user dengan role teknisi yang dapat serah terima ke warehouse.");
 
+            var pendingHandover = await _context.RadioHandovers.AnyAsync(h => 
+                h.RadioRepairJobId == job.Id && 
+                h.HandoverType == RadioHandoverType.TechnicianToWarehouse && 
+                h.Status == "PendingReceiverSignature" && 
+                !h.IsDeleted);
+            if (pendingHandover)
+                throw new InvalidOperationException("Masih ada serah terima ke Warehouse yang menunggu tanda tangan penerima.");
+
             await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Warehouse);
 
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
@@ -323,20 +331,24 @@ namespace Pm.Services.RadioHandover
 
             _context.RadioHandovers.Add(handover);
 
-            var fromStatus = job.Status;
-            job.Status = RadioRepairJobStatus.HandedToWarehouse;
             job.CurrentHandoverId = handover.Id;
             job.UpdatedAt = now;
 
-            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+            if (isReceiverSignatureComplete)
             {
-                JobId = job.Id,
-                FromStatus = fromStatus,
-                ToStatus = RadioRepairJobStatus.HandedToWarehouse,
-                Note = $"Serah terima {strNumber}",
-                UserId = currentUserId,
-                At = now
-            });
+                var fromStatus = job.Status;
+                job.Status = RadioRepairJobStatus.HandedToWarehouse;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = RadioRepairJobStatus.HandedToWarehouse,
+                    Note = $"Serah terima {strNumber}",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
@@ -437,21 +449,25 @@ namespace Pm.Services.RadioHandover
 
             _context.RadioHandovers.Add(handover);
 
-            var fromStatus = job.Status;
-            job.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
-            job.ClosedAt = now;
             job.CurrentHandoverId = handover.Id;
             job.UpdatedAt = now;
 
-            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+            if (receiverComplete)
             {
-                JobId = job.Id,
-                FromStatus = fromStatus,
-                ToStatus = RadioRepairJobStatus.ReturnedToHelpdesk,
-                Note = $"Serah terima {strNumber} ke Helpdesk",
-                UserId = currentUserId,
-                At = now
-            });
+                var fromStatus = job.Status;
+                job.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+                job.ClosedAt = now;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = RadioRepairJobStatus.ReturnedToHelpdesk,
+                    Note = $"Serah terima {strNumber} ke Helpdesk",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
@@ -539,6 +555,17 @@ namespace Pm.Services.RadioHandover
             if (handover.RadioRepairJob != null)
             {
                 handover.RadioRepairJob.UpdatedAt = now;
+                var oldStatus = handover.RadioRepairJob.Status;
+
+                if (handover.HandoverType == RadioHandoverType.TechnicianToWarehouse)
+                {
+                    handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
+                }
+                else if (handover.HandoverType == RadioHandoverType.WarehouseToHelpdesk)
+                {
+                    handover.RadioRepairJob.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+                    handover.RadioRepairJob.ClosedAt = now;
+                }
 
                 string statusNote = handover.HandoverType switch
                 {
@@ -551,7 +578,7 @@ namespace Pm.Services.RadioHandover
                 _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
                 {
                     JobId = handover.RadioRepairJob.Id,
-                    FromStatus = handover.RadioRepairJob.Status,
+                    FromStatus = oldStatus,
                     ToStatus = handover.RadioRepairJob.Status,
                     Note = statusNote,
                     UserId = currentUserId,

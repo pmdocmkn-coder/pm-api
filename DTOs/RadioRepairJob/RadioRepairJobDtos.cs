@@ -64,6 +64,7 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasBorrowRequest { get; set; }
         public bool HasActiveBorrowedPart { get; set; }
         public bool HasReturnedBorrowedPart { get; set; }
+        public string? PendingHandoverType { get; set; }
     }
 
     public class RadioRepairTicketGroupDto
