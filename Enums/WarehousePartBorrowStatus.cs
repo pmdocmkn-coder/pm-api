@@ -5,7 +5,9 @@ namespace Pm.Enums
         PendingApproval,
         Approved,
         Rejected,
+        PendingSignature,
         Issued,
+        PendingReturnSignature,
         Returned,
         Cancelled
     }

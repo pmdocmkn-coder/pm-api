@@ -10,18 +10,11 @@ using Pm.DTOs.Notification;
 
 namespace Pm.Services.RadioRepairJob
 {
-    public class RadioRepairJobService : IRadioRepairJobService
+    public class RadioRepairJobService(AppDbContext context, IActivityLogService activityLog, INotificationService notificationService) : IRadioRepairJobService
     {
-        private readonly AppDbContext _context;
-        private readonly IActivityLogService _activityLog;
-        private readonly INotificationService _notificationService;
-
-        public RadioRepairJobService(AppDbContext context, IActivityLogService activityLog, INotificationService notificationService)
-        {
-            _context = context;
-            _activityLog = activityLog;
-            _notificationService = notificationService;
-        }
+        private readonly AppDbContext _context = context;
+        private readonly IActivityLogService _activityLog = activityLog;
+        private readonly INotificationService _notificationService = notificationService;
 
         private IQueryable<Models.RadioRepairJob> BaseQuery() =>
             _context.RadioRepairJobs.AsNoTracking()
@@ -56,6 +49,7 @@ namespace Pm.Services.RadioRepairJob
             if (query.ToDate.HasValue)
                 q = q.Where(j => j.OpenedAt <= query.ToDate.Value.AddDays(1));
 
+#pragma warning disable CA1862 // Prefer the 'StringComparison' method overloads to perform string comparisons. (In EF Core queries, .ToLower() is intentionally used for SQL translation.)
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
                 var s = query.Search.Trim().ToLower();
@@ -74,6 +68,7 @@ namespace Pm.Services.RadioRepairJob
                          (r.Fleet != null && r.Fleet.ToLower().Contains(s)) ||
                          (r.Type != null && r.Type.ToLower().Contains(s)))));
             }
+#pragma warning restore CA1862
 
             var total = await q.CountAsync();
             var items = await q
@@ -90,6 +85,10 @@ namespace Pm.Services.RadioRepairJob
                     RadioFleet = j.Radio != null ? j.Radio.Fleet : null,
                     RadioCategory = j.Radio != null ? j.Radio.Category : null,
                     EquipmentName = j.EquipmentName ?? (j.Radio != null ? j.Radio.Type : null),
+                    UnitNumber = j.UnitNumber ?? (j.Radio != null ? j.Radio.NomorUnit : null),
+                    RadioOwnerLabel = j.RadioOwnerLabel ?? (j.Radio != null ? j.Radio.Company : null),
+                    OwnerDivision = j.OwnerDivision ?? (j.Radio != null ? j.Radio.Division : null),
+                    OwnerDepartment = j.OwnerDepartment ?? (j.Radio != null ? j.Radio.Department : null),
                     PreviewPhotoBase64 = j.Handovers
                         .Where(h => h.HandoverType == RadioHandoverType.HelpdeskToTechnician && !h.IsDeleted)
                         .OrderBy(h => h.HandoverAt)
@@ -119,8 +118,16 @@ namespace Pm.Services.RadioRepairJob
                     ClosedAt = j.ClosedAt,
                     FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+                    AccumulatedProgressDurationMinutes = j.AccumulatedProgressDurationMinutes,
+                    CurrentProgressStartedAt = j.CurrentProgressStartedAt,
                     IsDeleted = j.IsDeleted,
-                    DeletedAt = j.DeletedAt
+                    DeletedAt = j.DeletedAt,
+                    HasBorrowRequest = j.PartBorrows.Any(),
+                    HasActiveBorrowedPart = j.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
+                    HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
+                    PendingHandoverType = j.CurrentHandoverId.HasValue && j.CurrentHandoverId > 0
+                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                        : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault()
                 })
                 .ToListAsync();
 
@@ -136,16 +143,15 @@ namespace Pm.Services.RadioRepairJob
             query.Page = 1;
             query.PageSize = 500;
             var paged = await GetAllAsync(query, currentUserId, roleName);
-            return paged.Data
+            return [.. paged.Data
                 .GroupBy(j => j.HelpdeskTicketNumber)
                 .OrderByDescending(g => g.Max(x => x.OpenedAt))
                 .Select(g => new RadioRepairTicketGroupDto
                 {
                     HelpdeskTicketNumber = g.Key,
                     RadioCount = g.Count(),
-                    Radios = g.OrderByDescending(x => x.OpenedAt).ToList()
-                })
-                .ToList();
+                    Radios = [.. g.OrderByDescending(x => x.OpenedAt)]
+                })];
         }
 
         public async Task<RadioRepairDashboardDto> GetDashboardAsync(int currentUserId, string? roleName)
@@ -198,7 +204,7 @@ namespace Pm.Services.RadioRepairJob
             if (job == null) return null;
 
             var dto = MapDetail(job, includeDeletedHandovers: false);
-            await EnrichRadioMasterFieldsAsync(new List<RadioRepairJobListDto> { dto });
+            await EnrichRadioMasterFieldsAsync([dto]);
             return dto;
         }
 
@@ -289,6 +295,11 @@ namespace Pm.Services.RadioRepairJob
                 StringComparison.OrdinalIgnoreCase);
             ValidateStatusTransition(from, dto.Status, isSupervisor);
 
+            if (dto.Status == RadioRepairJobStatus.RepairCompleted && job.EquipmentTagType == null)
+            {
+                throw new InvalidOperationException("Mohon lengkapi data perbaikan dan pilih jenis Tag (Hijau/Kuning) terlebih dahulu sebelum mengubah status menjadi Selesai.");
+            }
+
             job.Status = dto.Status;
             string? assignedTechName = null;
             if (dto.WorkshopTechnicianId.HasValue)
@@ -301,6 +312,29 @@ namespace Pm.Services.RadioRepairJob
                     .FirstOrDefaultAsync();
             }
             job.UpdatedAt = DateTime.UtcNow;
+
+            // --- Duration Calculation Logic ---
+            if (from == RadioRepairJobStatus.InProgress && dto.Status != RadioRepairJobStatus.InProgress)
+            {
+                // Pause duration
+                if (job.CurrentProgressStartedAt.HasValue)
+                {
+                    job.AccumulatedProgressDurationMinutes += (int)(DateTime.UtcNow - job.CurrentProgressStartedAt.Value).TotalMinutes;
+                    job.CurrentProgressStartedAt = null;
+                }
+            }
+            else if (dto.Status == RadioRepairJobStatus.InProgress && from != RadioRepairJobStatus.InProgress)
+            {
+                // Start or resume duration
+                // Sesuai request: HANYA reset jika kembali dari persetujuan material (WaitingMaterialApproval). 
+                // Jika dari Monitoring atau koreksi dari Selesai, waktu tetap lanjut (resume) dari akumulasi sebelumnya.
+                if (from == RadioRepairJobStatus.WaitingMaterialApproval)
+                {
+                    job.AccumulatedProgressDurationMinutes = 0; 
+                }
+                job.CurrentProgressStartedAt = DateTime.UtcNow;
+            }
+            // ----------------------------------
 
             var statusNote = dto.Note;
             if (isSupervisor && from != dto.Status)
@@ -586,6 +620,15 @@ namespace Pm.Services.RadioRepairJob
             }
 
             job.UpdatedAt = DateTime.UtcNow;
+
+            // --- Duration Calculation Logic ---
+            if (dto.ResumeStatus == RadioRepairJobStatus.InProgress)
+            {
+                // Reset duration to 0 and start
+                job.AccumulatedProgressDurationMinutes = 0;
+                job.CurrentProgressStartedAt = DateTime.UtcNow;
+            }
+            // ----------------------------------
             await AddStatusLogAsync(job.Id, from, dto.ResumeStatus, note, userId, currentTechName);
             await WriteRepairHistoryAsync(job, from, dto.ResumeStatus, note, userId);
             await _activityLog.LogAsync("RadioRepairJob", job.Id, "ApproveMaterial", userId, note);
@@ -1066,22 +1109,22 @@ namespace Pm.Services.RadioRepairJob
                 return; // supervisor bebas ke status lain
             }
 
-            var allowed = from switch
+            RadioRepairJobStatus[] allowed = from switch
             {
-                RadioRepairJobStatus.Received => new[]
-                {
+                RadioRepairJobStatus.Received =>
+                [
                     RadioRepairJobStatus.InProgress,
                     RadioRepairJobStatus.Monitoring,
                     RadioRepairJobStatus.WaitingMaterialApproval,
                     RadioRepairJobStatus.Cancelled
-                },
-                RadioRepairJobStatus.InProgress => new[] { RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
-                RadioRepairJobStatus.Monitoring => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap },
-                RadioRepairJobStatus.WaitingMaterialApproval => Array.Empty<RadioRepairJobStatus>(),
-                RadioRepairJobStatus.RepairCompleted => new[] { RadioRepairJobStatus.InProgress }, // teknisi bisa rollback jika salah tekan
-                RadioRepairJobStatus.ProcessScrap => new[] { RadioRepairJobStatus.InProgress, RadioRepairJobStatus.Scrapped }, // Supervisor can approve or reject
-                RadioRepairJobStatus.Scrapped => new[] { RadioRepairJobStatus.InProgress }, // Supervisor can cancel scrap
-                _ => Array.Empty<RadioRepairJobStatus>()
+                ],
+                RadioRepairJobStatus.InProgress => [RadioRepairJobStatus.Monitoring, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap],
+                RadioRepairJobStatus.Monitoring => [RadioRepairJobStatus.InProgress, RadioRepairJobStatus.WaitingMaterialApproval, RadioRepairJobStatus.RepairCompleted, RadioRepairJobStatus.ProcessScrap],
+                RadioRepairJobStatus.WaitingMaterialApproval => [],
+                RadioRepairJobStatus.RepairCompleted => [RadioRepairJobStatus.InProgress], // teknisi bisa rollback jika salah tekan
+                RadioRepairJobStatus.ProcessScrap => [RadioRepairJobStatus.InProgress, RadioRepairJobStatus.Scrapped], // Supervisor can approve or reject
+                RadioRepairJobStatus.Scrapped => [RadioRepairJobStatus.InProgress], // Supervisor can cancel scrap
+                _ => []
             };
             if (!allowed.Contains(to))
                 throw new InvalidOperationException($"Transisi status dari {from} ke {to} tidak diizinkan.");
@@ -1089,7 +1132,7 @@ namespace Pm.Services.RadioRepairJob
 
         private async Task AddStatusLogAsync(int jobId, RadioRepairJobStatus? from, RadioRepairJobStatus to, string? note, int userId, string? techName = null)
         {
-            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+            await _context.RadioRepairJobStatusLogs.AddAsync(new RadioRepairJobStatusLog
             {
                 JobId = jobId,
                 FromStatus = from,
@@ -1177,30 +1220,36 @@ namespace Pm.Services.RadioRepairJob
             DamageDescription = job.DamageDescription,
             Status = job.Status.ToString(),
             AssignedTechnicianUserId = job.AssignedTechnicianUserId,
-            AssignedTechnicianName = job.AssignedTechnician.FullName,
+            AssignedTechnicianName = job.AssignedTechnician?.FullName ?? "Unknown",
             WorkshopTechnicianId = job.WorkshopTechnicianId,
             WorkshopTechnicianName = job.WorkshopTechnician?.Name,
             CustomStatusId = job.CustomStatusId,
             CustomStatusLabel = job.CustomStatus?.Label,
             CustomStatusColor = job.CustomStatus?.Color,
-            OpenedByName = job.OpenedBy.FullName,
+            OpenedByName = job.OpenedBy?.FullName ?? "Unknown",
             OpenedAt = job.OpenedAt,
             ClosedAt = job.ClosedAt,
             IsDeleted = job.IsDeleted,
             DeletedAt = job.DeletedAt,
-            StatusLogs = job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
+            HasBorrowRequest = job.PartBorrows.Any(),
+            HasActiveBorrowedPart = job.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
+            HasReturnedBorrowedPart = job.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
+            PendingHandoverType = job.CurrentHandoverId.HasValue && job.CurrentHandoverId > 0
+                ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                : job.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
+            StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
                 FromStatus = l.FromStatus?.ToString(),
                 ToStatus = l.ToStatus.ToString(),
                 Note = l.Note,
-                UserName = (!string.IsNullOrEmpty(l.WorkshopTechnicianName) && 
-                            (l.User?.FullName?.ToLower().Contains("worskhop") == true || l.User?.Username?.ToLower().Contains("worskhop") == true)) 
+                UserName = !string.IsNullOrEmpty(l.WorkshopTechnicianName)
                             ? $"{(l.User?.FullName ?? l.User?.Username ?? "Unknown")} ({l.WorkshopTechnicianName})" 
                             : (l.User?.FullName ?? l.User?.Username ?? "Unknown"),
+                WorkshopTechnicianName = l.WorkshopTechnicianName,
                 At = l.At
-            }).ToList(),
-            Handovers = job.Handovers
+            })],
+            Handovers = [.. job.Handovers
                 .Where(h => includeDeletedHandovers || !h.IsDeleted)
                 .OrderBy(h => h.HandoverAt)
                 .Select(h => new RadioRepairJobHandoverSummaryDto
@@ -1216,7 +1265,7 @@ namespace Pm.Services.RadioRepairJob
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64)
-            }).ToList(),
+            })],
             PrimaryHandover = job.Handovers
                 .Where(h => !h.IsDeleted && h.HandoverType == RadioHandoverType.HelpdeskToTechnician)
                 .OrderBy(h => h.HandoverAt)
@@ -1225,7 +1274,7 @@ namespace Pm.Services.RadioRepairJob
         };
 
         /// <summary>Isi ID Radio & Fleet dari master (FK atau lookup SN) jika belum terisi di DTO.</summary>
-        private async Task EnrichRadioMasterFieldsAsync(IList<RadioRepairJobListDto> items)
+        private async Task EnrichRadioMasterFieldsAsync(List<RadioRepairJobListDto> items)
         {
             if (items.Count == 0) return;
 
@@ -1240,13 +1289,13 @@ namespace Pm.Services.RadioRepairJob
                 ? await _context.Radios.AsNoTracking()
                     .Where(r => radioIds.Contains(r.Id))
                     .ToDictionaryAsync(r => r.Id)
-                : new Dictionary<int, Models.Radio>();
+                : [];
 
             var allBySerial = serialKeys.Count > 0
                 ? await _context.Radios.AsNoTracking()
                     .Where(r => r.SerialNumber != null)
                     .ToListAsync()
-                : new List<Models.Radio>();
+                : [];
 
             var serialMap = allBySerial
                 .Where(r => serialKeys.Contains(r.SerialNumber!.Trim(), StringComparer.OrdinalIgnoreCase))
@@ -1302,14 +1351,14 @@ namespace Pm.Services.RadioRepairJob
             RadioSerialNumber = h.RadioSerialNumber,
             BatterySerialNumber = h.BatterySerialNumber,
             DamageDescription = job.DamageDescription,
-            Accessories = h.Accessories.Select(a => new RadioRepairHandoverAccessoryDto
+            Accessories = [.. h.Accessories.Select(a => new RadioRepairHandoverAccessoryDto
             {
                 ItemName = string.IsNullOrWhiteSpace(a.ItemName) ? (a.AccessoryCode ?? "") : a.ItemName,
                 Quantity = a.Quantity,
                 Unit = a.Unit,
                 Description = a.Description,
                 SerialNumber = a.SerialNumber
-            }).ToList()
+            })]
         };
 
         public async Task ResetTestingDataAsync(int userId)

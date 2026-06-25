@@ -114,4 +114,20 @@ namespace Pm.DTOs.WarehousePartBorrow
         [MaxLength(200)]
         public string? ReturnedByName { get; set; }
     }
+
+    public class SignReceiverBorrowDto
+    {
+        [Required]
+        public string ReceiverSignatureBase64 { get; set; } = null!;
+    }
+
+    public class SignReturnReceiverBorrowDto
+    {
+        [Required]
+        public string ReturnReceiverSignatureBase64 { get; set; } = null!;
+        [MaxLength(200)]
+        public string? ReturnCondition { get; set; }
+        [MaxLength(500)]
+        public string? ReturnNote { get; set; }
+    }
 }

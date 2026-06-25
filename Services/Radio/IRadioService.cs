@@ -27,5 +27,6 @@ namespace Pm.Services.Radio
         Task<ImportResultDto> ImportContractorAsync(IFormFile file, int userId);
         Task<ImportResultDto> ImportUnitAsync(IFormFile file, int userId);
         Task<ImportResultDto> ImportLegacyScrapAsync(IFormFile file, int userId);
+        Task<RadioDto> TransferCategoryAsync(int id, string targetCategory, int userId);
     }
 }

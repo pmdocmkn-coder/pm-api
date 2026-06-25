@@ -112,6 +112,20 @@ namespace Pm.Controllers.WarehousePartBorrow
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
+        [HttpPatch("{id}/sign-receiver")]
+        [Authorize(Policy = "WarehouseBorrowView")]
+        public async Task<IActionResult> SignReceiver(int id, [FromBody] SignReceiverBorrowDto dto)
+        {
+            try
+            {
+                var data = await _service.SignReceiverAsync(id, dto, CurrentUserId);
+                return ApiResponse.Success(data);
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("borrow", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
         [HttpPatch("{id}/return")]
         [Authorize(Policy = "WarehouseBorrowReturn")]
         public async Task<IActionResult> Return(int id, [FromBody] ReturnBorrowDto dto)
@@ -119,6 +133,20 @@ namespace Pm.Controllers.WarehousePartBorrow
             try
             {
                 var data = await _service.ReturnAsync(id, dto, CurrentUserId, RoleName);
+                return ApiResponse.Success(data);
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("borrow", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/sign-return")]
+        [Authorize(Policy = "WarehouseBorrowView")]
+        public async Task<IActionResult> SignReturnReceiver(int id, [FromBody] SignReturnReceiverBorrowDto dto)
+        {
+            try
+            {
+                var data = await _service.SignReturnReceiverAsync(id, dto, CurrentUserId);
                 return ApiResponse.Success(data);
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }

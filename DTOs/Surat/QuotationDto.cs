@@ -18,6 +18,7 @@ namespace Pm.DTOs
 
         public string? Notes { get; set; }
         public QuotationStatus Status { get; set; } = QuotationStatus.Draft;
+        public decimal? Nominal { get; set; }
     }
 
     // ===== UPDATE =====
@@ -28,6 +29,7 @@ namespace Pm.DTOs
 
         public string? Notes { get; set; }
         public QuotationStatus Status { get; set; }
+        public decimal? Nominal { get; set; }
 
         // Optional: can edit customer
         public int? CustomerId { get; set; }
@@ -50,6 +52,7 @@ namespace Pm.DTOs
         public DateTime QuotationDate { get; set; }
         public string? Notes { get; set; }
         public string Status { get; set; } = string.Empty;
+        public decimal? Nominal { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
@@ -68,6 +71,7 @@ namespace Pm.DTOs
         public string CustomerName { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
+        public decimal? Nominal { get; set; }
         public string? CreatedByName { get; set; }
     }
 
