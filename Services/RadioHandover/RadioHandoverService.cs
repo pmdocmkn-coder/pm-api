@@ -330,6 +330,7 @@ namespace Pm.Services.RadioHandover
                 await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
 
             _context.RadioHandovers.Add(handover);
+            await _context.SaveChangesAsync();
 
             job.CurrentHandoverId = handover.Id;
             job.UpdatedAt = now;
@@ -447,7 +448,11 @@ namespace Pm.Services.RadioHandover
             handover.RadioSerialNumber = job.RadioSerialNumber;
             handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
 
+            if (handover.Accessories.Count == 0)
+                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
+
             _context.RadioHandovers.Add(handover);
+            await _context.SaveChangesAsync();
 
             job.CurrentHandoverId = handover.Id;
             job.UpdatedAt = now;

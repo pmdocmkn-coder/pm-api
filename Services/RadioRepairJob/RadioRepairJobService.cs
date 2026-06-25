@@ -125,9 +125,9 @@ namespace Pm.Services.RadioRepairJob
                     HasBorrowRequest = j.PartBorrows.Any(),
                     HasActiveBorrowedPart = j.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
                     HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
-                    PendingHandoverType = j.CurrentHandoverId.HasValue 
+                    PendingHandoverType = j.CurrentHandoverId.HasValue && j.CurrentHandoverId > 0
                         ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
-                        : null
+                        : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault()
                 })
                 .ToListAsync();
 
@@ -1234,9 +1234,9 @@ namespace Pm.Services.RadioRepairJob
             HasBorrowRequest = job.PartBorrows.Any(),
             HasActiveBorrowedPart = job.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
             HasReturnedBorrowedPart = job.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
-            PendingHandoverType = job.CurrentHandoverId.HasValue 
+            PendingHandoverType = job.CurrentHandoverId.HasValue && job.CurrentHandoverId > 0
                 ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
-                : null,
+                : job.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
