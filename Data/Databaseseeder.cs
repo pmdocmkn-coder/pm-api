@@ -408,7 +408,9 @@ public static class DatabaseSeeder
                 }
             }
 
-            // 7. Cabut permission yang tidak boleh dimiliki Helpdesk (mis. dari assign manual / legacy)
+            // 7. Cabut permission yang tidak boleh dimiliki role tertentu (mis. dari assign manual / legacy)
+
+            // Helpdesk: tidak boleh punya create legacy, tek_wh, wh_hd
             var helpdeskRole = await context.Roles.FirstOrDefaultAsync(r => r.RoleName == "Helpdesk");
             if (helpdeskRole != null)
             {
@@ -433,6 +435,37 @@ public static class DatabaseSeeder
                     logger.LogInformation(
                         "Revoked {Count} inappropriate permissions from Helpdesk role.",
                         wrongAssignments.Count);
+                }
+            }
+
+            // Teknisi & Teknisi WSK: tidak boleh punya create legacy (hanya boleh create.tek_wh)
+            // Ini mencegah tombol "HD ke Teknisi" muncul di akun teknisi
+            var techRoleNames = new[] { "Teknisi", "Teknisi WSK" };
+            var revokeFromTech = new[]
+            {
+                "radio.handover.create",
+                "radio.handover.create.hd",
+                "radio.handover.create.wh_hd"
+            };
+            var revokeFromTechPermIds = allPermissions
+                .Where(p => revokeFromTech.Contains(p.PermissionName))
+                .Select(p => p.PermissionId)
+                .ToHashSet();
+            var techRoles = await context.Roles
+                .Where(r => techRoleNames.Contains(r.RoleName))
+                .ToListAsync();
+            foreach (var techRole in techRoles)
+            {
+                var wrongTechAssignments = await context.RolePermissions
+                    .Where(rp => rp.RoleId == techRole.RoleId && revokeFromTechPermIds.Contains(rp.PermissionId))
+                    .ToListAsync();
+                if (wrongTechAssignments.Count > 0)
+                {
+                    context.RolePermissions.RemoveRange(wrongTechAssignments);
+                    await context.SaveChangesAsync();
+                    logger.LogInformation(
+                        "Revoked {Count} inappropriate handover-create permissions from role {Role}.",
+                        wrongTechAssignments.Count, techRole.RoleName);
                 }
             }
 
