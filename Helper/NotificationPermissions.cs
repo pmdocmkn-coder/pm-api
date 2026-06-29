@@ -48,5 +48,13 @@ namespace Pm.Helper
         /// Assign ke: Supv WKS, Supervisor Warehouse, Warehouse
         /// </summary>
         public const string WarehouseBorrow = "notification.warehouse.borrow";
+
+        // ── Supervisor Borrow (Notif khusus peminjaman teknisi ke supervisor) ─
+        /// <summary>
+        /// Terima notif saat teknisi mengajukan/mengembalikan/membatalkan peminjaman part.
+        /// Khusus untuk supervisor agar aware aktivitas peminjaman bawahannya.
+        /// Assign ke: Supv WKS (atau supervisor lain yang perlu monitor peminjaman teknisi)
+        /// </summary>
+        public const string SupervisorBorrow = "notification.supervisor.borrow";
     }
 }
