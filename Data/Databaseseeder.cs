@@ -232,6 +232,7 @@ public static class DatabaseSeeder
                     new() { PermissionName = "notification.radio.handover.tek_wh", Description = "Terima notif serah terima Teknisi → Warehouse", Group = "Notification", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "notification.radio.handover.wh_hd", Description = "Terima notif serah terima Warehouse → Helpdesk", Group = "Notification", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "notification.warehouse.borrow", Description = "Terima notif pengajuan & peminjaman part warehouse", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "notification.supervisor.borrow", Description = "Terima notif peminjaman part oleh teknisi (khusus supervisor)", Group = "Notification", CreatedAt = DateTime.UtcNow },
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();
