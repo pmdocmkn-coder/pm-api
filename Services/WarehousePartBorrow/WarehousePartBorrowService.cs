@@ -407,7 +407,9 @@ namespace Pm.Services.WarehousePartBorrow
             if (isTransitioning)
             {
                 b.Status = WarehousePartBorrowStatus.Issued;
-                await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", userId);
+                // Gunakan IssuedByUserId (warehouse) bukan userId (penerima) agar log mencatat siapa yang menyerahkan
+                var issuerUserId = b.IssuedByUserId ?? userId;
+                await AddLogAsync(b.Id, from, WarehousePartBorrowStatus.Issued, "Part diserahkan", issuerUserId);
             }
 
             b.UpdatedAt = DateTime.UtcNow;
