@@ -38,9 +38,11 @@ namespace Pm.Services.RadioHandover
 
             if (string.Equals(roleName, "Warehouse", StringComparison.OrdinalIgnoreCase))
             {
+                // All Warehouse users see the same data (TekToWH + WHToHD)
+                // TTD button visibility is controlled on the frontend by matching receivedByUserId
                 q = q.Where(h => 
-                    (h.HandoverType == RadioHandoverType.TechnicianToWarehouse && h.ReceivedByUserId == currentUserId) ||
-                    (h.HandoverType == RadioHandoverType.WarehouseToHelpdesk && h.HandedOverByUserId == currentUserId)
+                    h.HandoverType == RadioHandoverType.TechnicianToWarehouse ||
+                    h.HandoverType == RadioHandoverType.WarehouseToHelpdesk
                 );
             }
 
@@ -548,8 +550,8 @@ namespace Pm.Services.RadioHandover
             if (handover.Status == "Completed")
                 throw new InvalidOperationException("Serah terima sudah selesai.");
 
-            if (handover.ReceivedByUserId != currentUserId)
-                throw new UnauthorizedAccessException("Hanya pengguna yang ditunjuk sebagai penerima yang dapat menandatangani.");
+            if (handover.ReceivedByUserId != currentUserId && handover.HandedOverByUserId != currentUserId)
+                throw new UnauthorizedAccessException("Hanya pengguna yang ditunjuk sebagai penerima atau penyerah yang dapat melengkapi TTD.");
 
             var now = DateTime.UtcNow;
             handover.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;

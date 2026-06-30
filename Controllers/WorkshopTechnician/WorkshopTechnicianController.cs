@@ -24,9 +24,9 @@ namespace Pm.Controllers
                 ?? throw new UnauthorizedAccessException());
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false)
+        public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false, [FromQuery] string? role = null)
         {
-            var result = await _service.GetAllAsync(includeInactive);
+            var result = await _service.GetAllAsync(includeInactive, role);
             return Ok(new { data = result });
         }
 
