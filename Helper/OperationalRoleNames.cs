@@ -7,7 +7,7 @@ namespace Pm.Helper
     public static class OperationalRoleNames
     {
         public const string Helpdesk = "Helpdesk";
-        public const string Technician = "Teknisi WSK";
+        public const string Technician = "Teknisi WKS";
         public const string Warehouse = "Warehouse";
         public const string SupervisorWarehouse = "Supervisor Warehouse";
 
@@ -30,7 +30,7 @@ namespace Pm.Helper
         public static readonly string[] RadioOperationalRoles = { Helpdesk, Technician, SupervisorWorkshop, Warehouse };
 
         /// <summary>Role yang dianggap "teknisi" untuk filter job & handover.</summary>
-        public static readonly string[] TechnicianRoles = { Technician, "Teknisi WSK" };
+        public static readonly string[] TechnicianRoles = { Technician, "Teknisi WKS" };
 
         public static bool IsTechnicianRole(string? roleName) =>
             !string.IsNullOrWhiteSpace(roleName) &&
