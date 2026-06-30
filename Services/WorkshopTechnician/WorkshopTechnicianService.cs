@@ -15,13 +15,20 @@ namespace Pm.Services
             _activityLog = activityLog;
         }
 
-        public async Task<List<WorkshopTechnicianDto>> GetAllAsync(bool includeInactive = false)
+        public async Task<List<WorkshopTechnicianDto>> GetAllAsync(bool includeInactive = false, string? role = null)
         {
             var query = _context.WorkshopTechnicians
+                .Include(t => t.User)
+                .ThenInclude(u => u!.Role)
                 .Where(t => !t.IsDeleted);
 
             if (!includeInactive)
                 query = query.Where(t => t.IsActive);
+
+            if (!string.IsNullOrEmpty(role))
+            {
+                query = query.Where(t => t.UserId != null && t.User!.Role != null && t.User.Role.RoleName == role);
+            }
 
             return await query.OrderBy(t => t.Name)
                 .Select(t => new WorkshopTechnicianDto
