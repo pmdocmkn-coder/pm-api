@@ -103,6 +103,10 @@ namespace Pm.Models
         [ForeignKey(nameof(ReceivedByUserId))]
         public User ReceivedBy { get; set; } = null!;
 
+        /// <summary>Nama PIC / penerima fisik sesungguhnya (terutama dari Warehouse ke Helpdesk atau pengambilan oleh User)</summary>
+        [MaxLength(200)]
+        public string? PicReceiverName { get; set; }
+
         public int? WorkshopTechnicianId { get; set; }
         [ForeignKey(nameof(WorkshopTechnicianId))]
         public WorkshopTechnician? WorkshopTechnician { get; set; }

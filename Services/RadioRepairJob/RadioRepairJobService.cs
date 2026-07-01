@@ -1264,7 +1264,9 @@ namespace Pm.Services.RadioRepairJob
                 ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
-                HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64)
+                HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
+                Remarks = h.Remarks,
+                PicReceiverName = h.PicReceiverName
             })],
             PrimaryHandover = job.Handovers
                 .Where(h => !h.IsDeleted && h.HandoverType == RadioHandoverType.HelpdeskToTechnician)
@@ -1375,6 +1377,52 @@ namespace Pm.Services.RadioRepairJob
             await _context.RadioRepairJobs.ExecuteDeleteAsync();
 
             await _activityLog.LogAsync("RadioRepairJob", 0, "ResetTestingData", userId, "Super Admin melakukan reset data serah terima dan perbaikan (testing data)");
+        }
+
+        public async Task PurgeJobAsync(int jobId, int userId)
+        {
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Handovers)
+                    .ThenInclude(h => h.Accessories)
+                .Include(j => j.Handovers)
+                    .ThenInclude(h => h.Photos)
+                .FirstOrDefaultAsync(j => j.Id == jobId)
+                ?? throw new KeyNotFoundException("Pekerjaan perbaikan tidak ditemukan.");
+
+            var ticket = job.HelpdeskTicketNumber;
+            var serial = job.RadioSerialNumber;
+            var handoverNumbers = job.Handovers.Select(h => h.HandoverNumber).ToList();
+
+            // 1. Hapus semua aksesoris & foto dari handover terkait
+            foreach (var h in job.Handovers)
+            {
+                _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
+                _context.RadioHandoverPhotos.RemoveRange(h.Photos);
+            }
+
+            // 2. Lepas referensi CurrentHandoverId agar tidak constraint error
+            job.CurrentHandoverId = null;
+            await _context.SaveChangesAsync();
+
+            // 3. Hapus semua handover milik job ini
+            _context.RadioHandovers.RemoveRange(job.Handovers);
+
+            // 4. Hapus semua status log milik job ini
+            var logs = await _context.RadioRepairJobStatusLogs
+                .Where(l => l.JobId == jobId)
+                .ToListAsync();
+            _context.RadioRepairJobStatusLogs.RemoveRange(logs);
+
+            // 5. Hapus job itu sendiri
+            _context.RadioRepairJobs.Remove(job);
+
+            // 6. Catat aktivitas
+            await _activityLog.LogAsync("RadioRepairJob", jobId, "PurgeJob", userId,
+                $"Hapus tuntas job tiket {ticket}, SN {serial}, STR: [{string.Join(", ", handoverNumbers)}]");
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
         }
     }
 }

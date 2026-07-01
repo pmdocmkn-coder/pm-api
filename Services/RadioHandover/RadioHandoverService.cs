@@ -105,7 +105,8 @@ namespace Pm.Services.RadioHandover
                     Status = h.Status,
                     PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null ? 1 : 0),
                     PreviewPhotoBase64 = h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64).FirstOrDefault()
-                        ?? h.RadioPhotoBase64
+                        ?? h.RadioPhotoBase64,
+                    PicReceiverName = h.PicReceiverName
                 })
                 .ToListAsync();
 
@@ -555,6 +556,16 @@ namespace Pm.Services.RadioHandover
 
             var now = DateTime.UtcNow;
             handover.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+            if (!string.IsNullOrWhiteSpace(dto.PicReceiverName))
+            {
+                handover.PicReceiverName = dto.PicReceiverName;
+            }
+            if (!string.IsNullOrWhiteSpace(dto.Remarks))
+            {
+                handover.Remarks = string.IsNullOrWhiteSpace(handover.Remarks) 
+                    ? dto.Remarks 
+                    : $"{handover.Remarks}\n{dto.Remarks}";
+            }
             handover.Status = "Completed";
             handover.SignedAt = now;
             handover.UpdatedAt = now;
@@ -742,6 +753,7 @@ namespace Pm.Services.RadioHandover
                 HandedOverSignatureBase64 = dto.HandedOverSignatureBase64,
                 ReceiverSignatureBase64 = dto.ReceiverSignatureBase64,
                 Remarks = dto.Remarks?.Trim(),
+                PicReceiverName = dto.PicReceiverName?.Trim(),
                 HandedOverByUserId = handedOverByUserId,
                 ReceivedByUserId = receivedByUserId,
                 WorkshopTechnicianId = dto.WorkshopTechnicianId,
@@ -1123,6 +1135,7 @@ namespace Pm.Services.RadioHandover
             HandedOverSignatureBase64 = h.HandedOverSignatureBase64,
             ReceiverSignatureBase64 = h.ReceiverSignatureBase64,
             Remarks = h.Remarks,
+            PicReceiverName = h.PicReceiverName,
             IsDeleted = h.IsDeleted,
             DeletedAt = h.DeletedAt,
             Accessories = [.. h.Accessories.Select(a => new HandoverAccessoryItemDto
@@ -1151,6 +1164,7 @@ namespace Pm.Services.RadioHandover
             if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician)
             {
                 h.Remarks = dto.Remarks?.Trim();
+                h.PicReceiverName = dto.PicReceiverName?.Trim();
             }
             else
             {
@@ -1201,6 +1215,7 @@ namespace Pm.Services.RadioHandover
                 h.OwnerDivision = dto.OwnerDivision?.Trim();
                 h.OwnerDepartment = dto.OwnerDepartment?.Trim();
                 h.Remarks = dto.Remarks?.Trim();
+                h.PicReceiverName = dto.PicReceiverName?.Trim();
                 h.EquipmentTagType = dto.EquipmentTagType;
                 h.OriginFrom = dto.OriginFrom?.Trim();
                 h.RepairDataDescription = dto.RepairDataDescription?.Trim();

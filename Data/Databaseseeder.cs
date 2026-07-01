@@ -200,6 +200,7 @@ public static class DatabaseSeeder
                     new() { PermissionName = "radio.repair.edit", Description = "Edit metadata pekerjaan perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.repair.view.archive", Description = "Lihat arsip pekerjaan yang dihapus", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.repair.delete.permanent", Description = "Hapus permanen pekerjaan di arsip", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "radio.repair.purge", Description = "Hapus tuntas 1 job beserta semua handover (termasuk yg sudah selesai siklus)", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
 
                     // Radio Handover
                     new() { PermissionName = "radio.handover.menu", Description = "Menu serah terima radio", Group = "Radio Handover", CreatedAt = DateTime.UtcNow },

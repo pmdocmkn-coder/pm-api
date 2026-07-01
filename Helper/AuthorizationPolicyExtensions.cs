@@ -194,6 +194,8 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "radio.repair.view.archive"));
             options.AddPolicy("RadioRepairDeletePermanent", policy =>
                 policy.RequireClaim("Permission", "radio.repair.delete.permanent"));
+            options.AddPolicy("RadioRepairPurge", policy =>
+                policy.RequireClaim("Permission", "radio.repair.purge"));
 
             // Radio Handover
             options.AddPolicy("RadioHandoverView", policy =>
