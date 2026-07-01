@@ -126,6 +126,8 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasRadioPhoto { get; set; }
         public bool HasHandedOverSignature { get; set; }
         public bool HasReceiverSignature { get; set; }
+        public string? Remarks { get; set; }
+        public string? PicReceiverName { get; set; }
     }
 
     public class RadioRepairJobDetailDto : RadioRepairJobListDto

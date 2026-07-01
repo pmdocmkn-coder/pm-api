@@ -255,5 +255,18 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.InternalServerError(ex.Message);
             }
         }
+
+        [HttpDelete("{id}/purge")]
+        [Authorize(Policy = "RadioRepairPurge")]
+        public async Task<IActionResult> PurgeJob(int id)
+        {
+            try
+            {
+                await _service.PurgeJobAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Pekerjaan dan semua serah terimanya telah dihapus tuntas.");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
     }
 }

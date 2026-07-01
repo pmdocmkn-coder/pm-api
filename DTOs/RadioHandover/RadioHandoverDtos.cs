@@ -98,6 +98,9 @@ namespace Pm.DTOs.RadioHandover
         public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
         [MaxLength(1000)]
         public string? Remarks { get; set; }
+        
+        [MaxLength(200)]
+        public string? PicReceiverName { get; set; }
     }
 
     public class RadioHandoverListDto
@@ -132,6 +135,7 @@ namespace Pm.DTOs.RadioHandover
         public string Status { get; set; } = null!;
         public int PhotoCount { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
+        public string? PicReceiverName { get; set; }
     }
 
     public class UpdateRadioHandoverDto
@@ -194,12 +198,19 @@ namespace Pm.DTOs.RadioHandover
         public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
         [MaxLength(1000)]
         public string? Remarks { get; set; }
+
+        [MaxLength(200)]
+        public string? PicReceiverName { get; set; }
     }
 
     public class CompleteReceiverSignatureDto
     {
         [Required]
         public string ReceiverSignatureBase64 { get; set; } = null!;
+        [MaxLength(200)]
+        public string? PicReceiverName { get; set; }
+        [MaxLength(1000)]
+        public string? Remarks { get; set; }
     }
 
     public class RadioHandoverDetailDto : RadioHandoverListDto
