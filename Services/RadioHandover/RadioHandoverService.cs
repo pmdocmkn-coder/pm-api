@@ -1161,47 +1161,50 @@ namespace Pm.Services.RadioHandover
                 .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
                 ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
 
-            if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician)
+            if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician && h.HandoverType != RadioHandoverType.TechnicianToWarehouse)
             {
                 h.Remarks = dto.Remarks?.Trim();
                 h.PicReceiverName = dto.PicReceiverName?.Trim();
             }
             else
             {
-                var newTicket = dto.HelpdeskTicketNumber?.Trim();
-                var newSerial = dto.RadioSerialNumber?.Trim();
-                if (!string.IsNullOrEmpty(newTicket) && !string.IsNullOrEmpty(newSerial) &&
-                    (h.RadioRepairJob.HelpdeskTicketNumber != newTicket || h.RadioRepairJob.RadioSerialNumber != newSerial))
+                if (h.HandoverType == RadioHandoverType.HelpdeskToTechnician)
                 {
-                    await RadioRepairJobService.ValidateDuplicateTicketSerialAsync(
-                        _context, newTicket, newSerial, h.RadioRepairJobId);
-                    h.RadioRepairJob.HelpdeskTicketNumber = newTicket;
-                    h.RadioRepairJob.RadioSerialNumber = newSerial;
-                    h.RadioRepairJob.JobNumber = Pm.Helper.RepairJobReference.InternalKey(newTicket, newSerial);
-                }
-
-                if (h.Status != "Completed")
-                {
-                    h.ReceivedByUserId = dto.ReceivedByUserId;
-                    h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
-
-                    if (!string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64))
+                    var newTicket = dto.HelpdeskTicketNumber?.Trim();
+                    var newSerial = dto.RadioSerialNumber?.Trim();
+                    if (!string.IsNullOrEmpty(newTicket) && !string.IsNullOrEmpty(newSerial) &&
+                        (h.RadioRepairJob.HelpdeskTicketNumber != newTicket || h.RadioRepairJob.RadioSerialNumber != newSerial))
                     {
-                        var now = DateTime.UtcNow;
-                        h.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
-                        h.Status = "Completed";
-                        h.SignedAt = now;
-                        h.RadioRepairJob.Status = RadioRepairJobStatus.InProgress;
-                        
-                        _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                        await RadioRepairJobService.ValidateDuplicateTicketSerialAsync(
+                            _context, newTicket, newSerial, h.RadioRepairJobId);
+                        h.RadioRepairJob.HelpdeskTicketNumber = newTicket;
+                        h.RadioRepairJob.RadioSerialNumber = newSerial;
+                        h.RadioRepairJob.JobNumber = Pm.Helper.RepairJobReference.InternalKey(newTicket, newSerial);
+                    }
+
+                    if (h.Status != "Completed")
+                    {
+                        h.ReceivedByUserId = dto.ReceivedByUserId;
+                        h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
+
+                        if (!string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64))
                         {
-                            JobId = h.RadioRepairJob.Id,
-                            FromStatus = RadioRepairJobStatus.Received,
-                            ToStatus = RadioRepairJobStatus.InProgress,
-                            Note = "Teknisi melengkapi TTD via edit HD",
-                            UserId = userId,
-                            At = now
-                        });
+                            var now = DateTime.UtcNow;
+                            h.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
+                            h.Status = "Completed";
+                            h.SignedAt = now;
+                            h.RadioRepairJob.Status = RadioRepairJobStatus.InProgress;
+                            
+                            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                            {
+                                JobId = h.RadioRepairJob.Id,
+                                FromStatus = RadioRepairJobStatus.Received,
+                                ToStatus = RadioRepairJobStatus.InProgress,
+                                Note = "Teknisi melengkapi TTD via edit HD",
+                                UserId = userId,
+                                At = now
+                            });
+                        }
                     }
                 }
 
@@ -1316,7 +1319,46 @@ namespace Pm.Services.RadioHandover
             }
 
             h.UpdatedAt = DateTime.UtcNow;
-            await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit STR {h.HandoverNumber}");
+            
+            // ✅ Smart Activity Log: Detect editor name based on handover type
+            string editorName;
+            
+            if (h.HandoverType == RadioHandoverType.TechnicianToWarehouse)
+            {
+                // Case 1: Teknisi → Warehouse (SHARED ACCOUNT)
+                // Prioritaskan teknisi yang tercatat menyerahkan radio ini
+                if (h.HandedOverByWorkshopTechnicianId.HasValue)
+                {
+                    var technician = h.HandedOverByWorkshopTechnician ?? await _context.WorkshopTechnicians
+                        .FirstOrDefaultAsync(t => t.Id == h.HandedOverByWorkshopTechnicianId.Value);
+                    
+                    editorName = technician?.Name ?? "Teknisi";
+                }
+                else if (h.RadioRepairJob?.WorkshopTechnicianId.HasValue == true)
+                {
+                    // Fallback ke teknisi yang diassign ke job perbaikan
+                    var technician = h.WorkshopTechnician ?? await _context.WorkshopTechnicians
+                        .FirstOrDefaultAsync(t => t.Id == h.RadioRepairJob.WorkshopTechnicianId.Value);
+                    
+                    editorName = technician?.Name ?? "Teknisi";
+                }
+                else
+                {
+                    editorName = "Teknisi";
+                }
+            }
+            else
+            {
+                // Case 2: Helpdesk/Warehouse handover (INDIVIDUAL ACCOUNT)
+                // Ambil nama dari user yang login
+                var user = await _context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.UserId == userId);
+                
+                editorName = user?.FullName ?? user?.Username ?? "Unknown";
+            }
+            
+            await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit STR {h.HandoverNumber} oleh {editorName}");
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(id))!;

@@ -9,6 +9,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public int? BorrowedByUserId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
+        public string? TicketNumber { get; set; }
     }
 
     public class WarehousePartBorrowItemDto
@@ -18,6 +19,8 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string PartDescription { get; set; } = null!;
         [MaxLength(100)]
         public string? PartCode { get; set; }
+        [MaxLength(50)]
+        public string? Unit { get; set; }
         [Range(1, 999)]
         public int Quantity { get; set; } = 1;
     }

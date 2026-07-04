@@ -218,7 +218,11 @@ namespace Pm.Helper
             options.AddPolicy("RadioHandoverDelete", policy =>
                 policy.RequireClaim("Permission", "radio.handover.delete"));
             options.AddPolicy("RadioHandoverEdit", policy =>
-                policy.RequireClaim("Permission", "radio.handover.edit"));
+                policy.RequireAssertion(ctx => 
+                    ctx.User.HasClaim("Permission", "radio.handover.edit") ||
+                    ctx.User.HasClaim("Permission", "radio.handover.create.tek_wh") ||
+                    ctx.User.HasClaim("Permission", "radio.handover.create.hd") ||
+                    ctx.User.HasClaim("Permission", "radio.handover.create.wh_hd")));
             options.AddPolicy("RadioHandoverViewArchive", policy =>
                 policy.RequireClaim("Permission", "radio.handover.view.archive"));
             options.AddPolicy("RadioHandoverDeletePermanent", policy =>

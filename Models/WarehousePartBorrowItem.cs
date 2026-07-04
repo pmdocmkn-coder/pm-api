@@ -19,6 +19,9 @@ namespace Pm.Models
         [MaxLength(100)]
         public string? PartCode { get; set; }
 
+        [MaxLength(50)]
+        public string? Unit { get; set; }
+
         public int Quantity { get; set; } = 1;
     }
 }

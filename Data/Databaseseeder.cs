@@ -355,13 +355,13 @@ public static class DatabaseSeeder
                 ["Teknisi"] = new[]
                 {
                     "radio.repair.menu", "radio.repair.view", "radio.repair.update",
-                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh",
+                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh", "radio.handover.edit",
                     "warehouse.borrow.menu", "warehouse.borrow.view", "warehouse.borrow.create", "warehouse.borrow.return"
                 },
                 ["Teknisi WSK"] = new[]
                 {
                     "radio.repair.menu", "radio.repair.view", "radio.repair.update",
-                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh",
+                    "radio.handover.menu", "radio.handover.view", "radio.handover.create.tek_wh", "radio.handover.edit",
                     "warehouse.borrow.menu", "warehouse.borrow.view", "warehouse.borrow.create", "warehouse.borrow.return"
                 },
                 ["Warehouse"] = new[]
