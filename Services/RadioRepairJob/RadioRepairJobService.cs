@@ -314,7 +314,10 @@ namespace Pm.Services.RadioRepairJob
             job.UpdatedAt = DateTime.UtcNow;
 
             // --- Duration Calculation Logic ---
-            if (from == RadioRepairJobStatus.InProgress && dto.Status != RadioRepairJobStatus.InProgress)
+            bool isFromActive = from == RadioRepairJobStatus.InProgress || from == RadioRepairJobStatus.Monitoring;
+            bool isToActive = dto.Status == RadioRepairJobStatus.InProgress || dto.Status == RadioRepairJobStatus.Monitoring;
+
+            if (isFromActive && !isToActive)
             {
                 // Pause duration
                 if (job.CurrentProgressStartedAt.HasValue)
@@ -323,11 +326,10 @@ namespace Pm.Services.RadioRepairJob
                     job.CurrentProgressStartedAt = null;
                 }
             }
-            else if (dto.Status == RadioRepairJobStatus.InProgress && from != RadioRepairJobStatus.InProgress)
+            else if (!isFromActive && isToActive)
             {
                 // Start or resume duration
-                // Sesuai request: HANYA reset jika kembali dari persetujuan material (WaitingMaterialApproval). 
-                // Jika dari Monitoring atau koreksi dari Selesai, waktu tetap lanjut (resume) dari akumulasi sebelumnya.
+                // HANYA reset jika kembali dari persetujuan material (WaitingMaterialApproval). 
                 if (from == RadioRepairJobStatus.WaitingMaterialApproval)
                 {
                     job.AccumulatedProgressDurationMinutes = 0; 
@@ -626,6 +628,11 @@ namespace Pm.Services.RadioRepairJob
             {
                 // Reset duration to 0 and start
                 job.AccumulatedProgressDurationMinutes = 0;
+                job.CurrentProgressStartedAt = DateTime.UtcNow;
+            }
+            else if (dto.ResumeStatus == RadioRepairJobStatus.Monitoring)
+            {
+                // Resume duration (lanjut dari akumulasi, tidak reset)
                 job.CurrentProgressStartedAt = DateTime.UtcNow;
             }
             // ----------------------------------
@@ -1229,6 +1236,10 @@ namespace Pm.Services.RadioRepairJob
             OpenedByName = job.OpenedBy?.FullName ?? "Unknown",
             OpenedAt = job.OpenedAt,
             ClosedAt = job.ClosedAt,
+            FirstInProgressAt = job.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+            WorkshopCompletedAt = job.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
+            AccumulatedProgressDurationMinutes = job.AccumulatedProgressDurationMinutes,
+            CurrentProgressStartedAt = job.CurrentProgressStartedAt,
             IsDeleted = job.IsDeleted,
             DeletedAt = job.DeletedAt,
             HasBorrowRequest = job.PartBorrows.Any(),

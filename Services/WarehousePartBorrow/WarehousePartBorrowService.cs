@@ -72,6 +72,12 @@ namespace Pm.Services.WarehousePartBorrow
             if (query.ToDate.HasValue)
                 q = q.Where(b => b.RequestedAt <= query.ToDate.Value.AddDays(1));
 
+            if (!string.IsNullOrWhiteSpace(query.TicketNumber))
+            {
+                var tn = query.TicketNumber.Trim().ToLower();
+                q = q.Where(b => b.TicketNumber != null && b.TicketNumber.ToLower() == tn);
+            }
+
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
                 var s = query.Search.Trim().ToLower();
@@ -93,6 +99,7 @@ namespace Pm.Services.WarehousePartBorrow
                         Id = i.Id, 
                         PartDescription = i.PartDescription, 
                         PartCode = i.PartCode, 
+                        Unit = i.Unit,
                         Quantity = i.Quantity 
                     }).ToList(),
                     Status = b.Status.ToString(),
@@ -125,6 +132,7 @@ namespace Pm.Services.WarehousePartBorrow
                         Id = i.Id, 
                         PartDescription = i.PartDescription, 
                         PartCode = i.PartCode, 
+                        Unit = i.Unit,
                         Quantity = i.Quantity 
                     }).ToList(),
                     Status = b.Status.ToString(),
@@ -157,6 +165,21 @@ namespace Pm.Services.WarehousePartBorrow
         {
             var number = await DocumentNumberHelper.NextBorrowNumberAsync(_context);
             var now = DateTime.UtcNow;
+            var requestedCodes = dto.Items
+                .Select(i => i.PartCode?.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var requestedNames = dto.Items
+                .Select(i => i.PartDescription.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var catalogMatches = await _context.WarehousePartCatalogs.AsNoTracking()
+                .Where(p => p.IsActive &&
+                    (requestedCodes.Contains(p.PartCode) ||
+                     requestedNames.Contains(p.PartName)))
+                .ToListAsync();
             var borrow = new Models.WarehousePartBorrow
             {
                 BorrowNumber = number,
@@ -171,6 +194,7 @@ namespace Pm.Services.WarehousePartBorrow
                 Items = dto.Items.Select(i => new WarehousePartBorrowItem {
                     PartDescription = i.PartDescription.Trim(),
                     PartCode = i.PartCode?.Trim(),
+                    Unit = ResolveUnit(i, catalogMatches),
                     Quantity = i.Quantity
                 }).ToList()
             };
@@ -627,6 +651,7 @@ namespace Pm.Services.WarehousePartBorrow
                 Id = i.Id, 
                 PartDescription = i.PartDescription, 
                 PartCode = i.PartCode, 
+                Unit = i.Unit,
                 Quantity = i.Quantity 
             }).ToList(),
             Status = b.Status.ToString(),
@@ -659,6 +684,17 @@ namespace Pm.Services.WarehousePartBorrow
                 At = l.At
             }).ToList()
         };
+
+        private static string? ResolveUnit(WarehousePartBorrowItemDto item, List<WarehousePartCatalog> catalogMatches)
+        {
+            var code = item.PartCode?.Trim();
+            var name = item.PartDescription.Trim();
+            var catalogItem = !string.IsNullOrWhiteSpace(code)
+                ? catalogMatches.FirstOrDefault(p => string.Equals(p.PartCode, code, StringComparison.OrdinalIgnoreCase))
+                : null;
+            catalogItem ??= catalogMatches.FirstOrDefault(p => string.Equals(p.PartName, name, StringComparison.OrdinalIgnoreCase));
+            return catalogItem?.Unit?.Trim() ?? item.Unit?.Trim();
+        }
 
         public async Task DeleteAsync(int id)
         {
