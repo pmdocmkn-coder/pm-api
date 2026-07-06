@@ -396,8 +396,8 @@ namespace Pm.Services.RadioHandover
                     Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse. Menunggu serah terima ke Helpdesk.",
                     Category = "handover",
                     LinkUrl = "/radio-handover/warehouse",
-                    ReferenceId = job.Id,
-                    ReferenceType = "RadioRepairJob"
+                    ReferenceId = handover.Id,       // handover.Id bukan job.Id — agar ?handoverId= bisa buka detail yang benar
+                    ReferenceType = "RadioHandover"
                 });
                 
                 // Notif ke Helpdesk (role fix)
@@ -514,8 +514,8 @@ namespace Pm.Services.RadioHandover
                 Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan dari Warehouse ke Helpdesk oleh {warehouseName}. {(receiverComplete ? "Proses perbaikan selesai." : "Menunggu TTD Helpdesk penerima.")}",
                 Category = "handover",
                 LinkUrl = "/radio-handover/warehouse?tab=outgoing",
-                ReferenceId = job.Id,
-                ReferenceType = "RadioRepairJob"
+                ReferenceId = handover.Id,      // handover.Id agar ?handoverId= buka detail yang benar
+                ReferenceType = "RadioHandover"
             }, excludeUserIds: [currentUserId, dto.ReceivedByUserId]);
 
             // Notif ke Teknisi workshop yang mengerjakan radio ini
@@ -526,7 +526,7 @@ namespace Pm.Services.RadioHandover
                     RecipientUserId = job.AssignedTechnicianUserId,
                     Title = "Radio Sudah Kembali ke Helpdesk",
                     Message = $"Radio SN {job.RadioSerialNumber} yang Anda kerjakan telah diserahkan kembali ke Helpdesk oleh Warehouse. Proses selesai.",
-                    Category = "handover",
+                    Category = "repair",             // category repair → navigasi ke /radio-repair-dashboard?jobId=
                     LinkUrl = "/radio-repair-dashboard",
                     ReferenceId = job.Id,
                     ReferenceType = "RadioRepairJob"
