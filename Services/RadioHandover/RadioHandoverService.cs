@@ -1103,7 +1103,11 @@ namespace Pm.Services.RadioHandover
             DamageDescription = h.RadioRepairJob.DamageDescription,
             ReceivedByUserId = h.ReceivedByUserId,
             HandedOverByName = h.HandedOverByWorkshopTechnician?.Name ?? h.HandedOverBy.FullName,
-            ReceivedByName = h.WorkshopTechnician?.Name ?? h.ReceivedBy.FullName,
+            // Tek→WH: penerima adalah akun Warehouse (ReceivedBy), bukan WorkshopTechnician (itu nama teknisi penyerah)
+            // WH→HD / HD→Tek: penerima bisa berupa WorkshopTechnician atau akun sistem
+            ReceivedByName = h.HandoverType == RadioHandoverType.TechnicianToWarehouse
+                ? h.ReceivedBy.FullName
+                : h.WorkshopTechnician?.Name ?? h.ReceivedBy.FullName,
             WorkshopTechnicianId = h.WorkshopTechnicianId,
             WorkshopTechnicianName = h.WorkshopTechnician?.Name,
             HandedOverByWorkshopTechnicianId = h.HandedOverByWorkshopTechnicianId,
