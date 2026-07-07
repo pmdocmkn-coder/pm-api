@@ -202,6 +202,10 @@ namespace Pm.Services.RadioHandover
                 OwnerDivision = equipment.OwnerDivision,
                 OwnerDepartment = equipment.OwnerDepartment,
                 DamageDescription = ResolveJobDamageDescription(dto),
+                EquipmentTagType = dto.EquipmentTagType,   // simpan tag type dari STR ke job
+                OriginFrom = dto.OriginFrom?.Trim(),
+                RepairDataDescription = dto.RepairDataDescription?.Trim(),
+                RepairedByName = dto.RepairedByName?.Trim(),
                 Status = RadioRepairJobStatus.Received,
                 AssignedTechnicianUserId = dto.ReceivedByUserId,
                 WorkshopTechnicianId = dto.WorkshopTechnicianId,
