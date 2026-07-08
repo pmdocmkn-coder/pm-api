@@ -1169,7 +1169,18 @@ namespace Pm.Services.RadioHandover
                 .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
                 ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
 
-            if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician && h.HandoverType != RadioHandoverType.TechnicianToWarehouse)
+            if (h.HandoverType == RadioHandoverType.WarehouseToHelpdesk)
+            {
+                // WH→HD: update receiver helpdesk jika belum complete (belum ada TTD penerima)
+                if (h.Status != "Completed" && dto.ReceivedByUserId != 0 && dto.ReceivedByUserId != h.ReceivedByUserId)
+                {
+                    await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Helpdesk);
+                    h.ReceivedByUserId = dto.ReceivedByUserId;
+                }
+                h.Remarks = dto.Remarks?.Trim();
+                h.PicReceiverName = dto.PicReceiverName?.Trim();
+            }
+            else if (h.HandoverType != RadioHandoverType.HelpdeskToTechnician && h.HandoverType != RadioHandoverType.TechnicianToWarehouse)
             {
                 h.Remarks = dto.Remarks?.Trim();
                 h.PicReceiverName = dto.PicReceiverName?.Trim();
