@@ -250,6 +250,12 @@ builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.Cctv
 builder.Services.AddScoped<Pm.Services.Notification.INotificationService, Pm.Services.Notification.NotificationService>();
 builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupService>();
 
+// ===== Operational Documents =====
+builder.Services.AddScoped<IOperationalDocumentService, OperationalDocumentService>();
+builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
+builder.Services.AddHttpClient("fonnte");
+builder.Services.AddHostedService<DocumentExpiryNotificationService>();
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 

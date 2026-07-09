@@ -81,6 +81,11 @@ namespace Pm.Data
         // Notification
         public DbSet<Notification> Notifications { get; set; } = null!;
 
+        // Monitoring Dokumen Operasional
+        public DbSet<OperationalDocument> OperationalDocuments { get; set; } = null!;
+        public DbSet<OperationalDocumentNotificationHistory> OperationalDocumentNotificationHistories { get; set; } = null!;
+        public DbSet<OperationalDocumentType> OperationalDocumentTypes { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -146,6 +151,46 @@ namespace Pm.Data
                 entity.HasIndex(e => e.RecipientUserId);
                 entity.HasIndex(e => e.RecipientRoleName);
                 entity.HasIndex(e => e.IsRead);
+            });
+
+            // ===========================================
+            // ✅ OPERATIONAL DOCUMENT CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<OperationalDocumentType>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("OperationalDocumentTypes");
+
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.HasIndex(e => e.Name).IsUnique();
+                
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+            });
+
+            modelBuilder.Entity<OperationalDocument>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("OperationalDocuments");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.Type);
+                entity.HasIndex(e => e.FollowUpStatus);
+                entity.HasIndex(e => e.ValidUntil);
+            });
+
+            modelBuilder.Entity<OperationalDocumentNotificationHistory>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("OperationalDocumentNotificationHistories");
+
+                entity.Property(e => e.NotifiedAt)
+                    .HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.DaysRemaining);
+                entity.HasIndex(e => new { e.OperationalDocumentId, e.NotifiedAt });
             });
 
             // ===========================================

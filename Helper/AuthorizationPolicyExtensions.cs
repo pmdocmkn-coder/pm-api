@@ -331,6 +331,16 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "cctv.kpc.delete"));
             options.AddPolicy("CctvKpcDeleteAll", policy =>
                 policy.RequireClaim("Permission", "cctv.kpc.delete.all"));
+
+            // Operational Documents
+            options.AddPolicy("OperationalDocumentView", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.view"));
+            options.AddPolicy("OperationalDocumentCreate", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.create"));
+            options.AddPolicy("OperationalDocumentUpdate", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.update"));
+            options.AddPolicy("OperationalDocumentDelete", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.delete"));
         }
 
 

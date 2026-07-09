@@ -56,5 +56,12 @@ namespace Pm.Helper
         /// Assign ke: Supv WKS (atau supervisor lain yang perlu monitor peminjaman teknisi)
         /// </summary>
         public const string SupervisorBorrow = "notification.supervisor.borrow";
+
+        // ── Operational Documents ──────────────────────────────────────────
+        /// <summary>
+        /// Terima notif internal saat masa berlaku dokumen mendekati expired.
+        /// Assign ke: Admin, PM
+        /// </summary>
+        public const string OperationalDocumentExpiry = "notification.operationaldocument.expiry";
     }
 }
