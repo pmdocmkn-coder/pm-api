@@ -36,14 +36,16 @@ namespace Pm.Models
         [MaxLength(255)]
         public string? PicName { get; set; }
 
-        [MaxLength(50)]
-        public string? PicPhone { get; set; }
+        [MaxLength(200)]
+        public string? PicTelegramId { get; set; }
 
         [MaxLength(1000)]
         public string? FileLink { get; set; }
 
         [Required, MaxLength(50)]
-        public string FollowUpStatus { get; set; } = "Pending";
+        public string FollowUpStatus { get; set; } = "Tidak Ada";
+
+        public string? FollowUpRemark { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }

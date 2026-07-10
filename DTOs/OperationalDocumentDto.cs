@@ -41,12 +41,11 @@ namespace Pm.DTOs
         [MaxLength(255)]
         public string? PicName { get; set; }
 
-        [MaxLength(50)]
-        [RegularExpression(@"^62[0-9]{8,15}$", ErrorMessage = "Nomor WhatsApp harus diawali dengan 62 dan hanya berisi angka")]
-        public string? PicPhone { get; set; }
+        [MaxLength(200)]
+        [RegularExpression(@"^([-]?[0-9]+)(,[-]?[0-9]+)*$", ErrorMessage = "Telegram Chat ID hanya boleh angka dan tanda minus. Pisahkan dengan koma jika lebih dari satu tanpa spasi")]
+        public string? PicTelegramId { get; set; }
 
         [MaxLength(1000)]
-        [Url(ErrorMessage = "Format link tidak valid")]
         public string? FileLink { get; set; }
     }
 
@@ -64,9 +63,10 @@ namespace Pm.DTOs
         public DateTime ValidFrom { get; set; }
         public DateTime ValidUntil { get; set; }
         public string? PicName { get; set; }
-        public string? PicPhone { get; set; }
+        public string? PicTelegramId { get; set; }
         public string? FileLink { get; set; }
         public required string FollowUpStatus { get; set; }
+        public string? FollowUpRemark { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         

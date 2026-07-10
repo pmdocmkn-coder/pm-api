@@ -10,7 +10,7 @@ namespace Pm.Services
         Task<OperationalDocumentResponseDto> GetByIdAsync(int id);
         Task<OperationalDocumentResponseDto> CreateAsync(OperationalDocumentCreateDto dto);
         Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto);
-        Task<OperationalDocumentResponseDto> UpdateFollowUpStatusAsync(int id, string status);
+        Task<OperationalDocumentResponseDto> UpdateFollowUpStatusAsync(int id, string status, string? remark = null);
         Task DeleteAsync(int id);
     }
 }

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
@@ -11,9 +12,11 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260710010113_InitialCreate")]
+    partial class InitialCreate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1164,9 +1167,6 @@ namespace Pm.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
 
-                    b.Property<string>("FollowUpRemark")
-                        .HasColumnType("longtext");
-
                     b.Property<string>("FollowUpStatus")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1185,7 +1185,7 @@ namespace Pm.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
-                    b.Property<string>("PicTelegramId")
+                    b.Property<string>("PicPhone")
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
@@ -2180,9 +2180,6 @@ namespace Pm.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<bool>("IsWarranty")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<string>("JobNumber")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2760,56 +2757,6 @@ namespace Pm.Migrations
                         .IsUnique();
 
                     b.ToTable("SwrSites", (string)null);
-                });
-
-            modelBuilder.Entity("Pm.Models.TelegramQueue", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ChatId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
-                        .HasDefaultValueSql("UTC_TIMESTAMP()");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<int>("MaxRetry")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("RetryCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("SentAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("Pending");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("IX_TelegramQueue_Status");
-
-                    b.ToTable("TelegramQueues", (string)null);
                 });
 
             modelBuilder.Entity("Pm.Models.User", b =>

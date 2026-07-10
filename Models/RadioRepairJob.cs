@@ -47,6 +47,12 @@ namespace Pm.Models
 
         public EquipmentTagType? EquipmentTagType { get; set; }
 
+        /// <summary>
+        /// Status garansi radio. Diisi saat serah terima Helpdesk → Teknisi.
+        /// True = dalam garansi, False = tidak dalam garansi (default).
+        /// </summary>
+        public bool IsWarranty { get; set; } = false;
+
         [MaxLength(100)]
         public string? OriginFrom { get; set; }
         

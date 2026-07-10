@@ -341,6 +341,9 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "operationaldocument.update"));
             options.AddPolicy("OperationalDocumentDelete", policy =>
                 policy.RequireClaim("Permission", "operationaldocument.delete"));
+            // Khusus Super Admin: kirim WA manual tanpa cek threshold tanggal
+            options.AddPolicy("OperationalDocumentSendNotification", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.sendnotification"));
         }
 
 

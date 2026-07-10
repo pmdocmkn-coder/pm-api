@@ -85,6 +85,7 @@ namespace Pm.Data
         public DbSet<OperationalDocument> OperationalDocuments { get; set; } = null!;
         public DbSet<OperationalDocumentNotificationHistory> OperationalDocumentNotificationHistories { get; set; } = null!;
         public DbSet<OperationalDocumentType> OperationalDocumentTypes { get; set; } = null!;
+        public DbSet<TelegramQueue> TelegramQueues { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -151,6 +152,24 @@ namespace Pm.Data
                 entity.HasIndex(e => e.RecipientUserId);
                 entity.HasIndex(e => e.RecipientRoleName);
                 entity.HasIndex(e => e.IsRead);
+            });
+
+            // ===========================================
+            // ✅ TELEGRAM QUEUE CONFIGURATION
+            // ===========================================
+
+            modelBuilder.Entity<TelegramQueue>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("TelegramQueues");
+
+                entity.Property(e => e.ChatId).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Message).IsRequired();
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(20).HasDefaultValue("Pending");
+                entity.Property(e => e.ErrorMessage).HasMaxLength(1000);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("UTC_TIMESTAMP()");
+
+                entity.HasIndex(e => e.Status).HasDatabaseName("IX_TelegramQueue_Status");
             });
 
             // ===========================================

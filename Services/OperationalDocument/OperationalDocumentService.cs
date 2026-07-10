@@ -106,9 +106,9 @@ namespace Pm.Services
                 ValidFrom = dto.ValidFrom,
                 ValidUntil = dto.ValidUntil,
                 PicName = dto.PicName,
-                PicPhone = dto.PicPhone,
+                PicTelegramId = dto.PicTelegramId,
                 FileLink = dto.FileLink,
-                FollowUpStatus = "Pending"
+                FollowUpStatus = "Tidak Ada"
             };
 
             await _context.OperationalDocuments.AddAsync(doc);
@@ -133,13 +133,14 @@ namespace Pm.Services
             // If expiry date changes, reset the follow up status
             if (doc.ValidUntil.Date != dto.ValidUntil.Date)
             {
-                doc.FollowUpStatus = "Pending";
+                doc.FollowUpStatus = "Tidak Ada";
+                doc.FollowUpRemark = null;
             }
             
             doc.ValidFrom = dto.ValidFrom;
             doc.ValidUntil = dto.ValidUntil;
             doc.PicName = dto.PicName;
-            doc.PicPhone = dto.PicPhone;
+            doc.PicTelegramId = dto.PicTelegramId;
             doc.FileLink = dto.FileLink;
             doc.UpdatedAt = DateTime.UtcNow;
 
@@ -147,9 +148,9 @@ namespace Pm.Services
             return MapToResponse(doc);
         }
 
-        public async Task<OperationalDocumentResponseDto> UpdateFollowUpStatusAsync(int id, string status)
+        public async Task<OperationalDocumentResponseDto> UpdateFollowUpStatusAsync(int id, string status, string? remark = null)
         {
-            var allowedStatuses = new[] { "Pending", "SedangDiproses", "Selesai" };
+            var allowedStatuses = new[] { "Tidak Ada", "Pending", "SedangDiproses", "Selesai" };
             if (!allowedStatuses.Contains(status))
                 throw new ArgumentException("Status tidak valid.");
 
@@ -157,6 +158,7 @@ namespace Pm.Services
                       ?? throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
             doc.FollowUpStatus = status;
+            doc.FollowUpRemark = remark;
             doc.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -184,9 +186,10 @@ namespace Pm.Services
                 ValidFrom = doc.ValidFrom,
                 ValidUntil = doc.ValidUntil,
                 PicName = doc.PicName,
-                PicPhone = doc.PicPhone,
+                PicTelegramId = doc.PicTelegramId,
                 FileLink = doc.FileLink,
                 FollowUpStatus = doc.FollowUpStatus,
+                FollowUpRemark = doc.FollowUpRemark,
                 CreatedAt = doc.CreatedAt,
                 UpdatedAt = doc.UpdatedAt
             };

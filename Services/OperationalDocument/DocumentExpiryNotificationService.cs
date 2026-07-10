@@ -7,7 +7,7 @@ using Pm.DTOs.Notification;
 namespace Pm.Services
 {
     /// <summary>
-    /// Background Service: Cron job harian untuk kirim notifikasi WhatsApp
+    /// Background Service: Cron job harian untuk kirim notifikasi Telegram
     /// saat dokumen operasional mendekati tanggal berakhir.
     ///
     /// Threshold: H-30, H-14, H-7, H-3, H-1, H-0
@@ -16,7 +16,7 @@ namespace Pm.Services
     ///
     /// Grouped Notification:
     ///   Dokumen yang punya GroupName yang sama + ValidUntil yang sama
-    ///   akan digabung menjadi 1 notifikasi WA (tidak dikirim satupersatu).
+    ///   akan digabung menjadi 1 notifikasi Telegram (tidak dikirim satupersatu).
     ///   PIC phone yang digunakan adalah dari dokumen pertama dalam grup.
     /// </summary>
     public class DocumentExpiryNotificationService(
@@ -47,13 +47,13 @@ namespace Pm.Services
             }
         }
 
-        private async Task RunNotificationJobAsync(CancellationToken ct)
+        public async Task RunNotificationJobAsync(CancellationToken ct)
         {
             _logger.LogInformation("[DocExpiry] Job berjalan pada {Time}", DateTime.Now);
 
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var whatsApp = scope.ServiceProvider.GetRequiredService<IWhatsAppService>();
+            var Telegram = scope.ServiceProvider.GetRequiredService<ITelegramService>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
             var today = DateTime.UtcNow.Date;
@@ -61,7 +61,7 @@ namespace Pm.Services
             // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
             var documents = await db.OperationalDocuments
                 .AsNoTracking()
-                .Where(d => d.PicPhone != null && d.PicPhone != ""
+                .Where(d => d.PicTelegramId != null && d.PicTelegramId != ""
                          && d.FollowUpStatus != "SedangDiproses"
                          && d.FollowUpStatus != "Selesai")
                 .ToListAsync(ct);
@@ -79,7 +79,7 @@ namespace Pm.Services
                     GroupName = d.GroupName!,
                     ValidUntilDate = d.ValidUntil.Date,
                     // Kirim ke PIC phone pertama dalam grup (semua harus sama idealnya)
-                    PicPhone = d.PicPhone!
+                    PicTelegramId = d.PicTelegramId!
                 })
                 .ToList();
 
@@ -106,14 +106,14 @@ namespace Pm.Services
                     if (!alreadySent)
                     {
                         _logger.LogInformation("[DocExpiry] Kirim Grouped WA: Group='{Group}', Phone={Phone}, H-{Days}, Count={Count}",
-                            group.Key.GroupName, group.Key.PicPhone, daysRemaining, group.Count());
+                            group.Key.GroupName, group.Key.PicTelegramId, daysRemaining, group.Count());
 
-                        var sent = await whatsApp.SendGroupedDocumentExpiryMessageAsync(
-                            phone: group.Key.PicPhone,
+                        var sent = await Telegram.SendGroupedDocumentExpiryMessageAsync(
+                            chatId: group.Key.PicTelegramId,
                             groupName: group.Key.GroupName,
                             daysRemaining: daysRemaining,
                             validUntil: group.Key.ValidUntilDate,
-                            documentNames: group.Select(d => d.Name)
+                            documents: group.Select(d => (d.Name, d.ValidUntil))
                         );
 
                         if (sent)
@@ -182,8 +182,8 @@ namespace Pm.Services
                         _logger.LogInformation("[DocExpiry] Kirim Grouped Anniversary WA: Group='{Group}', H-{Days}",
                             group.Key.GroupName, annivDays);
 
-                        var sentAnniv = await whatsApp.SendGroupedDocumentAnniversaryMessageAsync(
-                            phone: group.Key.PicPhone,
+                        var sentAnniv = await Telegram.SendGroupedDocumentAnniversaryMessageAsync(
+                            chatId: group.Key.PicTelegramId,
                             groupName: group.Key.GroupName,
                             daysRemaining: annivDays,
                             validUntil: group.Key.ValidUntilDate,
@@ -234,10 +234,10 @@ namespace Pm.Services
                     if (!alreadySent)
                     {
                         _logger.LogInformation("[DocExpiry] Kirim WA: DocId={Id}, Phone={Phone}, H-{Days}",
-                            doc.Id, doc.PicPhone, daysRemaining);
+                            doc.Id, doc.PicTelegramId, daysRemaining);
 
-                        var sent = await whatsApp.SendDocumentExpiryMessageAsync(
-                            phone: doc.PicPhone!,
+                        var sent = await Telegram.SendDocumentExpiryMessageAsync(
+                            chatId: doc.PicTelegramId!,
                             documentName: doc.Name,
                             daysRemaining: daysRemaining,
                             validUntil: doc.ValidUntil,
@@ -290,8 +290,8 @@ namespace Pm.Services
                         {
                             _logger.LogInformation("[DocExpiry] Kirim Anniversary WA: DocId={Id}, H-{Days}", doc.Id, dta);
 
-                            var sentAnniv = await whatsApp.SendDocumentAnniversaryMessageAsync(
-                                phone: doc.PicPhone!,
+                            var sentAnniv = await Telegram.SendDocumentAnniversaryMessageAsync(
+                                chatId: doc.PicTelegramId!,
                                 documentName: doc.Name,
                                 daysRemaining: dta,
                                 validUntil: doc.ValidUntil,
@@ -336,12 +336,139 @@ namespace Pm.Services
         }
 
         /// <summary>
+        /// Kirim notifikasi Telegram paksa untuk 1 dokumen tertentu (by ID).
+        /// Mengabaikan threshold tanggal — khusus Super Admin.
+        /// </summary>
+        public async Task<(bool success, string message)> SendForceNotificationAsync(int documentId)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var Telegram = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+
+            var doc = await db.OperationalDocuments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (doc == null)
+                return (false, "Dokumen tidak ditemukan.");
+
+            if (string.IsNullOrWhiteSpace(doc.PicTelegramId))
+                return (false, "Dokumen ini tidak memiliki Telegram Chat ID PIC. Harap isi Telegram Chat ID terlebih dahulu.");
+
+            var daysRemaining = (int)(doc.ValidUntil.Date - DateTime.UtcNow.Date).TotalDays;
+
+            // Kirim ke semua nomor (support multi-nomor dipisahkan koma)
+            var phones = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            bool anySent = false;
+
+            foreach (var phone in phones)
+            {
+                var sent = await Telegram.SendDocumentExpiryMessageAsync(
+                    chatId: phone,
+                    documentName: doc.Name,
+                    daysRemaining: daysRemaining,
+                    validUntil: doc.ValidUntil,
+                    fileLink: doc.FileLink,
+                    documentId: doc.Id.ToString()
+                );
+                if (sent) anySent = true;
+            }
+
+            if (anySent)
+            {
+                _logger.LogInformation("[DocExpiry] Force notification sent: DocId={Id}, Phone={Phone}", doc.Id, doc.PicTelegramId);
+                return (true, $"Notifikasi Telegram berhasil dikirim ke {doc.PicTelegramId}.");
+            }
+
+            return (false, "Gagal mengirim WA. Periksa koneksi Fonnte dan nomor WA.");
+        }
+
+        public async Task<(bool isSuccess, string message, int sentCount)> SendForceNotificationBulkAsync(string? groupName, string? type, string? expiryStatus)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var Telegram = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+
+            var query = db.OperationalDocuments.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(groupName))
+                query = query.Where(d => d.GroupName == groupName);
+
+            if (!string.IsNullOrWhiteSpace(type))
+                query = query.Where(d => d.Type == type);
+
+            var today = DateTime.UtcNow.Date;
+            if (!string.IsNullOrWhiteSpace(expiryStatus))
+            {
+                if (expiryStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase))
+                    query = query.Where(d => d.ValidUntil.Date < today);
+                else if (expiryStatus.Equals("Warning", StringComparison.OrdinalIgnoreCase))
+                    query = query.Where(d => d.ValidUntil.Date >= today && d.ValidUntil.Date <= today.AddDays(30));
+                else if (expiryStatus.Equals("Aman", StringComparison.OrdinalIgnoreCase))
+                    query = query.Where(d => d.ValidUntil.Date > today.AddDays(30));
+            }
+
+            var docs = await query.ToListAsync();
+            
+            var groupedByPhone = docs
+                .Where(d => !string.IsNullOrWhiteSpace(d.PicTelegramId))
+                .SelectMany(d => d.PicTelegramId!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(p => new { Phone = p, Document = d }))
+                .GroupBy(x => x.Phone)
+                .ToList();
+
+            int sentCount = 0;
+
+            foreach (var phoneGroup in groupedByPhone)
+            {
+                var phone = phoneGroup.Key;
+                var phoneDocs = phoneGroup.Select(x => x.Document).ToList();
+                bool sent;
+
+                if (phoneDocs.Count == 1)
+                {
+                    // Hanya 1 dokumen → kirim pesan individual
+                    var doc = phoneDocs[0];
+                    var daysRemaining = (int)(doc.ValidUntil.Date - today).TotalDays;
+                    sent = await Telegram.SendDocumentExpiryMessageAsync(
+                        chatId: phone,
+                        documentName: doc.Name,
+                        daysRemaining: daysRemaining,
+                        validUntil: doc.ValidUntil,
+                        fileLink: doc.FileLink,
+                        documentId: doc.Id.ToString()
+                    );
+                }
+                else
+                {
+                    // Lebih dari 1 dokumen dengan Telegram ID yang sama → kirim 1 pesan gabungan
+                    var nearestDoc = phoneDocs.OrderBy(d => d.ValidUntil).First();
+                    var daysRemaining = (int)(nearestDoc.ValidUntil.Date - today).TotalDays;
+                    var groupLabel = !string.IsNullOrWhiteSpace(groupName)
+                        ? groupName
+                        : (!string.IsNullOrWhiteSpace(type) ? type : "Dokumen Terpilih");
+
+                    sent = await Telegram.SendGroupedDocumentExpiryMessageAsync(
+                        chatId: phone,
+                        groupName: groupLabel,
+                        daysRemaining: daysRemaining,
+                        validUntil: nearestDoc.ValidUntil,
+                        documents: phoneDocs.Select(d => (d.Name, d.ValidUntil))
+                    );
+                }
+
+                if (sent) sentCount++;
+            }
+
+            return (true, $"Berhasil mengirim notifikasi ke {sentCount} Telegram Chat ID (dari {docs.Count} dokumen).", sentCount);
+        }
+
+        /// <summary>
         /// Hitung waktu tunggu hingga jam 07:00 WIB (UTC+7 = 00:00 UTC) hari berikutnya.
         /// Saat dev/testing, bisa override NotificationRunHour di appsettings.
         /// </summary>
         private TimeSpan GetDelayUntilNextRun()
         {
-            var runHour = _configuration.GetValue("WhatsAppSettings:NotificationRunHour", 7);
+            var runHour = _configuration.GetValue("TelegramSettings:NotificationRunHour", 7);
             var nowWib = DateTime.UtcNow.AddHours(7); // UTC+7
             var nextRun = nowWib.Date.AddHours(runHour);
 
@@ -401,3 +528,5 @@ namespace Pm.Services
         }
     }
 }
+
+
