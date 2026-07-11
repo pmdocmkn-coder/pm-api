@@ -95,6 +95,7 @@ namespace Pm.Services.RadioRepairJob
                         .Select(h => h.RadioPhotoBase64)
                         .FirstOrDefault(),
                     EquipmentTagType = j.EquipmentTagType != null ? j.EquipmentTagType.ToString() : null,
+                    IsWarranty = j.IsWarranty,
                     OriginFrom = j.OriginFrom,
                     RepairDataDescription = j.RepairDataDescription,
                     RepairedByName = j.RepairedByName,
@@ -1214,6 +1215,7 @@ namespace Pm.Services.RadioRepairJob
             OwnerDivision = job.OwnerDivision ?? job.Radio?.Division,
             OwnerDepartment = job.OwnerDepartment ?? job.Radio?.Department,
             EquipmentTagType = job.EquipmentTagType?.ToString(),
+            IsWarranty = job.IsWarranty,
             OriginFrom = job.OriginFrom,
             RepairDataDescription = job.RepairDataDescription,
             RepairedByName = job.RepairedByName,

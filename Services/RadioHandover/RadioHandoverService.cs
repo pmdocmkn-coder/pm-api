@@ -203,6 +203,7 @@ namespace Pm.Services.RadioHandover
                 OwnerDepartment = equipment.OwnerDepartment,
                 DamageDescription = ResolveJobDamageDescription(dto),
                 EquipmentTagType = dto.EquipmentTagType,   // simpan tag type dari STR ke job
+                IsWarranty = dto.IsWarranty,
                 OriginFrom = dto.OriginFrom?.Trim(),
                 RepairDataDescription = dto.RepairDataDescription?.Trim(),
                 RepairedByName = dto.RepairedByName?.Trim(),
@@ -1146,6 +1147,7 @@ namespace Pm.Services.RadioHandover
             PicReceiverName = h.PicReceiverName,
             IsDeleted = h.IsDeleted,
             DeletedAt = h.DeletedAt,
+            IsWarranty = h.RadioRepairJob.IsWarranty,
             Accessories = [.. h.Accessories.Select(a => new HandoverAccessoryItemDto
             {
                 ItemName = string.IsNullOrWhiteSpace(a.ItemName) ? (a.AccessoryCode ?? "") : a.ItemName,
@@ -1304,6 +1306,7 @@ namespace Pm.Services.RadioHandover
                     h.RadioRepairJob.OwnerDivision = h.OwnerDivision;
                     h.RadioRepairJob.OwnerDepartment = h.OwnerDepartment;
                     h.RadioRepairJob.RadioId = h.RadioId;
+                    h.RadioRepairJob.IsWarranty = dto.IsWarranty;
 
                     if (dto.ReceivedByUserId != 0 && dto.ReceivedByUserId != h.ReceivedByUserId)
                     {

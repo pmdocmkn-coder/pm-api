@@ -32,6 +32,7 @@ namespace Pm.DTOs.RadioRepairJob
         public string? PreviewPhotoBase64 { get; set; }
         public string DamageDescription { get; set; } = null!;
         public string? EquipmentTagType { get; set; }
+        public bool IsWarranty { get; set; }
         public string? OriginFrom { get; set; }
         public string? RepairDataDescription { get; set; }
         public string? RepairedByName { get; set; }

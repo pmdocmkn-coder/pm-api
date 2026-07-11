@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Pm.Data;
 using Pm.DTOs.CallRecord;
 using Pm.DTOs.Common;
+using Pm.Helper;
 using Pm.Models;
 using System.Globalization;
 using System.Text;
@@ -190,7 +191,10 @@ namespace Pm.Services
                 .ToListAsync();
 
             if (existingSummaries.Any())
+            {
                 context.CallSummaries.RemoveRange(existingSummaries);
+                await context.SaveChangesAsync();
+            }
 
             var newSummaries = new List<CallSummary>();
 
@@ -717,8 +721,8 @@ namespace Pm.Services
         {
             try
             {
-                // Default to today if no dates provided
-                var start = startDate?.Date ?? DateTime.Today;
+                // Default to today if no dates provided (pakai WITA agar tanggal tidak meleset)
+                var start = startDate?.Date ?? WitaHelper.Today;
                 var end = endDate?.Date ?? start;
 
                 var typeStr = type?.ToString() ?? "All";
@@ -880,7 +884,7 @@ namespace Pm.Services
         {
             try
             {
-                var start = startDate?.Date ?? DateTime.Today;
+                var start = startDate?.Date ?? WitaHelper.Today;
                 var end = endDate?.Date ?? start;
 
                 _logger.LogInformation("📊 Getting unique callers for fleet {Fleet} from {Start} to {End}",
@@ -926,7 +930,7 @@ namespace Pm.Services
         {
             try
             {
-                var start = startDate?.Date ?? DateTime.Today;
+                var start = startDate?.Date ?? WitaHelper.Today;
                 var end = endDate?.Date ?? start;
 
                 _logger.LogInformation("📊 Getting unique called fleets for caller {Fleet} from {Start} to {End}",
@@ -1053,7 +1057,7 @@ namespace Pm.Services
             DateTime? endDate)
         {
             var start = startDate?.Date ?? new DateTime(2020, 1, 1);
-            var end = endDate?.Date ?? DateTime.Today;
+            var end = endDate?.Date ?? WitaHelper.Today;
 
             _logger.LogInformation("🔍 DIAGNOSTIC: Analyzing fleet duration for {Caller} -> {Called} from {Start} to {End}",
                 callerFleet, calledFleet, start.ToString("yyyy-MM-dd"), end.ToString("yyyy-MM-dd"));

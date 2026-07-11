@@ -1,5 +1,9 @@
 namespace Pm.Helper
 {
+    /// <summary>
+    /// Helper untuk format waktu relatif (misalnya "5 menit yang lalu").
+    /// Untuk konversi dan display zona waktu WITA, gunakan <see cref="WitaHelper"/>.
+    /// </summary>
     public static class TimeHelper
     {
         public static string GetRelativeTime(DateTime dateTime)
@@ -21,7 +25,7 @@ namespace Pm.Helper
             if (timeSpan <= TimeSpan.FromDays(365))
                 return $"{timeSpan.Days / 30} bulan yang lalu";
 
-            return $"{timeSpan.Days / 365} tahun yang laluu";
+            return $"{timeSpan.Days / 365} tahun yang lalu";
         }
     }
-}
+}

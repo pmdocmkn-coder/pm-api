@@ -191,6 +191,13 @@ public static class DatabaseSeeder
                     new() { PermissionId = 108, PermissionName = "cctv.kpc.delete.all", Description = "Hapus semua data CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 109, PermissionName = "cctv.kpc.menu", Description = "Akses menu CCTV KPC", Group = "CCTV KPC", CreatedAt = DateTime.UtcNow },
 
+                    // Operational Documents
+                    new() { PermissionName = "operationaldocument.menu", Description = "Akses menu dokumen operasional", Group = "Operational Document", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "operationaldocument.view", Description = "Lihat data dokumen operasional", Group = "Operational Document", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "operationaldocument.create", Description = "Tambah dokumen operasional", Group = "Operational Document", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "operationaldocument.update", Description = "Edit dokumen operasional", Group = "Operational Document", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "operationaldocument.delete", Description = "Hapus dokumen operasional", Group = "Operational Document", CreatedAt = DateTime.UtcNow },
+
                     // Radio Repair
                     new() { PermissionName = "radio.repair.menu", Description = "Menu dashboard perbaikan radio", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "radio.repair.view", Description = "Lihat dashboard & detail job perbaikan", Group = "Radio Repair", CreatedAt = DateTime.UtcNow },
@@ -234,6 +241,7 @@ public static class DatabaseSeeder
                     new() { PermissionName = "notification.radio.handover.wh_hd", Description = "Terima notif serah terima Warehouse → Helpdesk", Group = "Notification", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "notification.warehouse.borrow", Description = "Terima notif pengajuan & peminjaman part warehouse", Group = "Notification", CreatedAt = DateTime.UtcNow },
                     new() { PermissionName = "notification.supervisor.borrow", Description = "Terima notif peminjaman part oleh teknisi (khusus supervisor)", Group = "Notification", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "notification.operationaldocument.expiry", Description = "Terima notif internal saat masa berlaku dokumen mendekati expired", Group = "Notification", CreatedAt = DateTime.UtcNow },
                 };
 
             var existingPermissions = await context.Permissions.ToListAsync();

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Pm.Data;
 
@@ -11,9 +12,11 @@ using Pm.Data;
 namespace Pm.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260710062719_MigrateToTelegram")]
+    partial class MigrateToTelegram
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1164,9 +1167,6 @@ namespace Pm.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
 
-                    b.Property<string>("FollowUpRemark")
-                        .HasColumnType("longtext");
-
                     b.Property<string>("FollowUpStatus")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2178,9 +2178,6 @@ namespace Pm.Migrations
                         .HasColumnType("varchar(50)");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<bool>("IsWarranty")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<string>("JobNumber")

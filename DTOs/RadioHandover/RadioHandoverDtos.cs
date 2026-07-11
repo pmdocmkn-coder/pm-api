@@ -57,6 +57,9 @@ namespace Pm.DTOs.RadioHandover
         /// <summary>Tag kuning (rusak) atau hijau (baik). Default rusak untuk HD→Tek.</summary>
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
 
+        /// <summary>Status garansi radio. Hanya berlaku untuk tipe HD → Teknisi. Default: tidak warranty.</summary>
+        public bool IsWarranty { get; set; } = false;
+
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
 
@@ -160,6 +163,9 @@ namespace Pm.DTOs.RadioHandover
 
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
 
+        /// <summary>Status garansi radio. Default: tidak warranty.</summary>
+        public bool IsWarranty { get; set; } = false;
+
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
 
@@ -239,6 +245,7 @@ namespace Pm.DTOs.RadioHandover
         public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
         // HelpdeskTicketNumber sudah ada di RadioHandoverListDto — tidak perlu redeclare
         public string JobStatus { get; set; } = null!;
+        public bool IsWarranty { get; set; }
     }
 
     public class UserOptionDto

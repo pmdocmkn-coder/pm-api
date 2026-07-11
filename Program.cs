@@ -250,6 +250,16 @@ builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.Cctv
 builder.Services.AddScoped<Pm.Services.Notification.INotificationService, Pm.Services.Notification.NotificationService>();
 builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupService>();
 
+// ===== Operational Documents =====
+builder.Services.AddScoped<IOperationalDocumentService, OperationalDocumentService>();
+builder.Services.AddScoped<Pm.Services.Telegram.ITelegramQueueService, Pm.Services.Telegram.TelegramQueueService>();
+builder.Services.AddScoped<ITelegramService, TelegramService>();
+builder.Services.AddHostedService<Pm.Services.Telegram.TelegramQueueWorker>();
+builder.Services.AddHttpClient("telegram");
+// Daftarkan sebagai Singleton agar bisa di-inject ke Controller untuk manual trigger
+builder.Services.AddSingleton<DocumentExpiryNotificationService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DocumentExpiryNotificationService>());
+
 // ===== Cloudinary =====
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("Cloudinary"));
 

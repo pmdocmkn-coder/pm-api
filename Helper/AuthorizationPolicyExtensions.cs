@@ -331,6 +331,19 @@ namespace Pm.Helper
                 policy.RequireClaim("Permission", "cctv.kpc.delete"));
             options.AddPolicy("CctvKpcDeleteAll", policy =>
                 policy.RequireClaim("Permission", "cctv.kpc.delete.all"));
+
+            // Operational Documents
+            options.AddPolicy("OperationalDocumentView", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.view"));
+            options.AddPolicy("OperationalDocumentCreate", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.create"));
+            options.AddPolicy("OperationalDocumentUpdate", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.update"));
+            options.AddPolicy("OperationalDocumentDelete", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.delete"));
+            // Khusus Super Admin: kirim WA manual tanpa cek threshold tanggal
+            options.AddPolicy("OperationalDocumentSendNotification", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.sendnotification"));
         }
 
 
