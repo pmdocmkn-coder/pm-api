@@ -212,6 +212,7 @@ namespace Pm.DTOs.RadioRepairJob
         public string? DamageDescription { get; set; }
 
         public EquipmentTagType? EquipmentTagType { get; set; }
+        public bool? IsWarranty { get; set; }
         [MaxLength(100)] public string? OriginFrom { get; set; }
         [MaxLength(2000)] public string? RepairDataDescription { get; set; }
         [MaxLength(100)] public string? RepairedByName { get; set; }
