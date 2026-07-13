@@ -781,6 +781,12 @@ namespace Pm.Services.RadioRepairJob
                 job.EquipmentTagType = dto.EquipmentTagType.Value;
             }
 
+            if (dto.IsWarranty.HasValue && job.IsWarranty != dto.IsWarranty.Value)
+            {
+                changes.Add($"Status Garansi: \"{(job.IsWarranty ? "Ya" : "Tidak")}\" → \"{(dto.IsWarranty.Value ? "Ya" : "Tidak")}\"");
+                job.IsWarranty = dto.IsWarranty.Value;
+            }
+
             if (!string.Equals(job.DamageDescription, newDamage, StringComparison.Ordinal))
             {
                 changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{newDamage}\"");
