@@ -33,6 +33,7 @@ namespace Pm.Services.PmSchedule
             // Get all schedules for the specified year
             var schedules = await _context.PmSchedules
                 .Include(s => s.Tasks)
+                    .ThenInclude(t => t.CompletedByUser)
                 .Where(s => s.Year == year)
                 .ToListAsync();
 
@@ -56,8 +57,14 @@ namespace Pm.Services.PmSchedule
                         DeviceName = schedule.DeviceName,
                         Tasks = schedule.Tasks.Select(t => new PmScheduleTaskDto
                         {
+                            Id = t.Id,
                             Month = t.Month,
-                            Week = t.Week
+                            Week = t.Week,
+                            IsCompleted = t.IsCompleted,
+                            CompletedAt = t.CompletedAt,
+                            CompletedByUserId = t.CompletedByUserId,
+                            CompletedByUserName = t.CompletedByUser?.FullName,
+                            Remarks = t.Remarks
                         }).ToList()
                     };
                     siteDto.Devices.Add(deviceDto);
@@ -94,13 +101,25 @@ namespace Pm.Services.PmSchedule
             }
             else
             {
-                // Remove existing tasks
-                _context.PmScheduleTasks.RemoveRange(schedule.Tasks);
-                schedule.Tasks.Clear();
+                // Merge tasks to preserve completion status
+                if (dto.Tasks == null) dto.Tasks = new List<PmScheduleTaskDto>();
+                var tasksToAdd = dto.Tasks.Where(dt => !schedule.Tasks.Any(st => st.Month == dt.Month && st.Week == dt.Week)).ToList();
+                var tasksToRemove = schedule.Tasks.Where(st => !dto.Tasks.Any(dt => dt.Month == st.Month && dt.Week == st.Week)).ToList();
+
+                _context.PmScheduleTasks.RemoveRange(tasksToRemove);
+                foreach (var t in tasksToRemove) schedule.Tasks.Remove(t);
+
+                foreach (var dt in tasksToAdd)
+                {
+                    schedule.Tasks.Add(new PmScheduleTask
+                    {
+                        Month = dt.Month,
+                        Week = dt.Week
+                    });
+                }
             }
 
-            // Add new tasks (if any)
-            if (dto.Tasks != null && dto.Tasks.Count > 0)
+            if (action == "Create" && dto.Tasks != null && dto.Tasks.Count > 0)
             {
                 foreach (var taskDto in dto.Tasks)
                 {
@@ -144,6 +163,114 @@ namespace Pm.Services.PmSchedule
                 return true;
             }
             return false;
+        }
+
+        public async Task<bool> ToggleTaskCompletionAsync(int taskId, string? remarks, System.DateTime? completedAt, int userId)
+        {
+            var task = await _context.PmScheduleTasks
+                .Include(t => t.PmSchedule)
+                .FirstOrDefaultAsync(t => t.Id == taskId);
+
+            if (task == null) return false;
+
+            task.IsCompleted = !task.IsCompleted;
+            
+            if (task.IsCompleted)
+            {
+                task.CompletedAt = completedAt ?? System.DateTime.UtcNow;
+                task.CompletedByUserId = userId;
+                task.Remarks = remarks;
+            }
+            else
+            {
+                task.CompletedAt = null;
+                task.CompletedByUserId = null;
+                task.Remarks = null;
+            }
+
+            await _context.SaveChangesAsync();
+
+            string status = task.IsCompleted ? "Selesai" : "Belum Selesai";
+            await _activityLogService.LogAsync(
+                "PM Schedule Task",
+                task.Id,
+                "ToggleCompletion",
+                userId,
+                $"Mengubah status PM {task.PmSchedule.DeviceName} menjadi {status}"
+            );
+
+            return true;
+        }
+
+        public async Task<PmComplianceDashboardDto> GetComplianceDashboardAsync(int year)
+        {
+            var currentDate = System.DateTime.UtcNow.AddHours(7); // WIB
+            var currentMonth = currentDate.Month;
+            var currentYear = currentDate.Year;
+            var currentWeek = (int)Math.Ceiling(currentDate.Day / 7.0);
+            
+            var sixMonthsAgo = currentDate.AddMonths(-5);
+
+            var schedules = await _context.PmSchedules
+                .Include(s => s.Tasks)
+                .Where(s => s.Year == year || s.Year == sixMonthsAgo.Year)
+                .ToListAsync();
+
+            var allTasksYear = schedules.Where(s => s.Year == year).SelectMany(s => s.Tasks).ToList();
+            var totalScheduled = allTasksYear.Count;
+            var totalCompleted = allTasksYear.Count(t => t.IsCompleted);
+
+            var totalOverdue = allTasksYear.Count(t => 
+                !t.IsCompleted && (year < currentYear || (year == currentYear && t.Month < currentMonth) || (year == currentYear && t.Month == currentMonth && t.Week < currentWeek))
+            );
+
+            var dashboard = new PmComplianceDashboardDto
+            {
+                TotalScheduled = totalScheduled,
+                TotalCompleted = totalCompleted,
+                TotalOverdue = totalOverdue,
+                CompliancePercentage = totalScheduled > 0 ? (double)totalCompleted / totalScheduled * 100 : 0
+            };
+
+            // Current Month
+            var currentMonthTasks = schedules.Where(s => s.Year == currentYear).SelectMany(s => s.Tasks).Where(t => t.Month == currentMonth).ToList();
+            dashboard.CurrentMonth = new PmCurrentMonthDto
+            {
+                TotalScheduled = currentMonthTasks.Count,
+                Completed = currentMonthTasks.Count(t => t.IsCompleted),
+                Overdue = currentMonthTasks.Count(t => !t.IsCompleted && t.Week < currentWeek),
+                ProgressPercentage = currentMonthTasks.Count > 0 ? (double)currentMonthTasks.Count(t => t.IsCompleted) / currentMonthTasks.Count * 100 : 0
+            };
+
+            // Trend 6 Months
+            var monthNames = new[] { "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des" };
+            
+            var allTasks = schedules.SelectMany(s => s.Tasks.Select(t => new { s.Year, Task = t })).ToList();
+
+            for (int i = 5; i >= 0; i--)
+            {
+                var targetDate = currentDate.AddMonths(-i);
+                var m = targetDate.Month;
+                var y = targetDate.Year;
+
+                var tasksInMonth = allTasks.Where(t => t.Task.Month == m && t.Year == y).Select(t => t.Task).ToList();
+                
+                var completed = tasksInMonth.Count(t => t.IsCompleted);
+                var scheduled = tasksInMonth.Count;
+                var overdue = tasksInMonth.Count(t => !t.IsCompleted && (y < currentYear || (y == currentYear && m < currentMonth) || (y == currentYear && m == currentMonth && t.Week < currentWeek)));
+
+                dashboard.Trend6Months.Add(new PmTrendDto
+                {
+                    MonthName = monthNames[m - 1],
+                    Year = y,
+                    Month = m,
+                    Completed = completed,
+                    Overdue = overdue,
+                    CompliancePercentage = scheduled > 0 ? (double)completed / scheduled * 100 : 0
+                });
+            }
+
+            return dashboard;
         }
     }
 }

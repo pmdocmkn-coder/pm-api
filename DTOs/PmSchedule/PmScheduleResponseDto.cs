@@ -26,7 +26,14 @@ namespace Pm.DTOs
 
     public class PmScheduleTaskDto
     {
+        public int Id { get; set; }
         public int Month { get; set; } // 1-12
         public int Week { get; set; }  // 1-4
+        
+        public bool IsCompleted { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public int? CompletedByUserId { get; set; }
+        public string? CompletedByUserName { get; set; }
+        public string? Remarks { get; set; }
     }
 }
