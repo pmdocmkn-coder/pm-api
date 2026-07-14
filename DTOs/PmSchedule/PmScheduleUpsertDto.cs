@@ -19,4 +19,10 @@ namespace Pm.DTOs
         // We will replace existing tasks with this list
         public List<PmScheduleTaskDto> Tasks { get; set; } = new List<PmScheduleTaskDto>();
     }
+
+    public class PmTaskToggleDto
+    {
+        public string? Remarks { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
 }

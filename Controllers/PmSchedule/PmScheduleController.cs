@@ -96,5 +96,24 @@ namespace Pm.Controllers.PmSchedule
                 return ApiResponse.InternalServerError("Gagal menghapus jadwal PM: " + ex.Message);
             }
         }
+
+        [HttpPost("tasks/{taskId}/toggle-complete")]
+        [Authorize(Policy = "PmScheduleUpdate")]
+        public async Task<IActionResult> ToggleTaskCompletion(int taskId, [FromBody] PmTaskToggleDto dto)
+        {
+            try
+            {
+                var success = await _pmScheduleService.ToggleTaskCompletionAsync(taskId, dto.Remarks, dto.CompletedAt, CurrentUserId);
+                if (!success)
+                    return ApiResponse.NotFound("Tugas PM tidak ditemukan");
+
+                return ApiResponse.Success(new { }, "Status tugas PM berhasil diubah");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error toggling PM schedule task completion for task {TaskId}", taskId);
+                return ApiResponse.InternalServerError("Gagal mengubah status tugas PM: " + ex.Message);
+            }
+        }
     }
 }

@@ -1374,6 +1374,20 @@ namespace Pm.Data
                 entity.Property(e => e.ToStatus).HasConversion<string>().HasMaxLength(50);
                 entity.HasOne(e => e.Borrow).WithMany(b => b.StatusLogs).HasForeignKey(e => e.BorrowId).OnDelete(DeleteBehavior.Cascade);
             });
+
+            // ===========================================
+            // PM SCHEDULE CONFIGURATION
+            // ===========================================
+            modelBuilder.Entity<Pm.Models.PmSchedule.PmScheduleTask>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Remarks).HasMaxLength(1000);
+                
+                entity.HasOne(e => e.CompletedByUser)
+                    .WithMany()
+                    .HasForeignKey(e => e.CompletedByUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
         }
     }
 }
