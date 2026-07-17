@@ -71,6 +71,10 @@ namespace Pm.Models
         [MaxLength(200)]
         public string? ReturnedByName { get; set; }
 
+        /// <summary>Nama warehouse yang menerima pengembalian (jika diisi manual, misalnya dari akun non-warehouse)</summary>
+        [MaxLength(200)]
+        public string? ReturnReceiverName { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
         

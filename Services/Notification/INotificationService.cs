@@ -19,5 +19,7 @@ namespace Pm.Services.Notification
         Task MarkAllAsReadAsync(int userId, string roleName);
         Task DeleteOldNotificationsAsync(int daysOld = 30);
         Task BroadcastRefreshDataAsync(string entityName);
+        /// <summary>Update pesan notif lama jika ada (berdasarkan referenceId + recipientUserId), atau buat baru.</summary>
+        Task UpdateOrCreateAsync(CreateNotificationDto dto);
     }
 }

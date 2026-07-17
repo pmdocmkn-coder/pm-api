@@ -1241,56 +1241,6 @@ namespace Pm.Services.RadioHandover
                 h.Remarks = dto.Remarks?.Trim();
                 h.PicReceiverName = dto.PicReceiverName?.Trim();
                 h.EquipmentTagType = dto.EquipmentTagType;
-                h.OriginFrom = dto.OriginFrom?.Trim();
-                h.RepairDataDescription = dto.RepairDataDescription?.Trim();
-                h.RepairedByName = dto.RepairedByName?.Trim();
-                h.FrequencyError = dto.FrequencyError?.Trim();
-                h.AfReading = dto.AfReading?.Trim();
-                h.PowerReading = dto.PowerReading?.Trim();
-                h.VoltageOutNoLoad = dto.VoltageOutNoLoad?.Trim();
-                h.VoltageOutWithLoad = dto.VoltageOutWithLoad?.Trim();
-                h.PhysicalCondition = dto.PhysicalCondition?.Trim();
-                h.DisplayCondition = dto.DisplayCondition?.Trim();
-
-                List<string> photos = [];
-                if (dto.RadioPhotos != null && dto.RadioPhotos.Count > 0)
-                    photos = [.. dto.RadioPhotos.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!)];
-                else if (!string.IsNullOrWhiteSpace(dto.RadioPhotoBase64))
-                    photos = [dto.RadioPhotoBase64];
-
-                if (photos.Count > 0)
-                {
-                    _context.RadioHandoverPhotos.RemoveRange(h.Photos);
-                    h.Photos.Clear();
-                    h.RadioPhotoBase64 = photos[0];
-                    for (var i = 0; i < photos.Count; i++)
-                    {
-                        h.Photos.Add(new RadioHandoverPhoto
-                        {
-                            SortOrder = i,
-                            PhotoBase64 = photos[i]
-                        });
-                    }
-                }
-
-                if (dto.Accessories != null)
-                {
-                    _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
-                    h.Accessories.Clear();
-                    foreach (var item in dto.Accessories)
-                    {
-                        if (string.IsNullOrWhiteSpace(item.ItemName)) continue;
-                        h.Accessories.Add(new RadioHandoverAccessory
-                        {
-                            ItemName = item.ItemName.Trim(),
-                            Quantity = item.Quantity < 1 ? 1 : item.Quantity,
-                            Unit = string.IsNullOrWhiteSpace(item.Unit) ? "EA" : item.Unit.Trim(),
-                            Description = item.Description?.Trim(),
-                            SerialNumber = item.SerialNumber?.Trim()
-                        });
-                    }
-                }
-
                 if (h.RadioRepairJob != null)
                 {
                     h.RadioRepairJob.DamageDescription = dto.EquipmentTagType == EquipmentTagType.Damaged
@@ -1310,15 +1260,23 @@ namespace Pm.Services.RadioHandover
 
                     if (dto.ReceivedByUserId != 0 && dto.ReceivedByUserId != h.ReceivedByUserId)
                     {
-                        await ValidateTechnicianReceiverAsync(dto.ReceivedByUserId);
+                        // TechnicianToWarehouse: penerima adalah Warehouse, bukan teknisi
+                        await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Warehouse);
                         h.ReceivedByUserId = dto.ReceivedByUserId;
-                        h.RadioRepairJob.AssignedTechnicianUserId = dto.ReceivedByUserId;
+                        // AssignedTechnicianUserId tidak diubah — tetap teknisi yang mengerjakan job
                     }
 
                     if (dto.WorkshopTechnicianId != null && dto.WorkshopTechnicianId != h.WorkshopTechnicianId)
                     {
                         h.WorkshopTechnicianId = dto.WorkshopTechnicianId;
                         h.RadioRepairJob.WorkshopTechnicianId = dto.WorkshopTechnicianId;
+                    }
+
+                    // Update teknisi penyerah jika berubah
+                    if (dto.HandedOverByWorkshopTechnicianId.HasValue &&
+                        dto.HandedOverByWorkshopTechnicianId != h.HandedOverByWorkshopTechnicianId)
+                    {
+                        h.HandedOverByWorkshopTechnicianId = dto.HandedOverByWorkshopTechnicianId;
                     }
                 }
 
@@ -1337,6 +1295,116 @@ namespace Pm.Services.RadioHandover
                 {
                     _imageValidator.Validate(dto.HandedOverSignatureBase64, Pm.Enums.StoredImageKind.Signature, "TTD penyerah");
                     h.HandedOverSignatureBase64 = dto.HandedOverSignatureBase64;
+                }
+            }
+
+            // Data perbaikan (Green Tag) can be updated by Warehouse during WH->HD
+            h.OriginFrom = dto.OriginFrom?.Trim();
+            h.RepairDataDescription = dto.RepairDataDescription?.Trim();
+            h.RepairedByName = dto.RepairedByName?.Trim();
+            h.FrequencyError = dto.FrequencyError?.Trim();
+            h.AfReading = dto.AfReading?.Trim();
+            h.PowerReading = dto.PowerReading?.Trim();
+            h.VoltageOutNoLoad = dto.VoltageOutNoLoad?.Trim();
+            h.VoltageOutWithLoad = dto.VoltageOutWithLoad?.Trim();
+            h.PhysicalCondition = dto.PhysicalCondition?.Trim();
+            h.DisplayCondition = dto.DisplayCondition?.Trim();
+
+
+            List<string> photos = [];
+            if (dto.RadioPhotos != null && dto.RadioPhotos.Count > 0)
+                photos = [.. dto.RadioPhotos.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!)];
+            else if (!string.IsNullOrWhiteSpace(dto.RadioPhotoBase64))
+                photos = [dto.RadioPhotoBase64];
+
+            if (photos.Count > 0)
+            {
+                _context.RadioHandoverPhotos.RemoveRange(h.Photos);
+                h.Photos.Clear();
+                h.RadioPhotoBase64 = photos[0];
+                for (var i = 0; i < photos.Count; i++)
+                {
+                    h.Photos.Add(new RadioHandoverPhoto
+                    {
+                        SortOrder = i,
+                        PhotoBase64 = photos[i]
+                    });
+                }
+            }
+
+            if (dto.Accessories != null)
+            {
+                _context.RadioHandoverAccessories.RemoveRange(h.Accessories);
+                h.Accessories.Clear();
+                foreach (var item in dto.Accessories)
+                {
+                    if (string.IsNullOrWhiteSpace(item.ItemName)) continue;
+                    h.Accessories.Add(new RadioHandoverAccessory
+                    {
+                        ItemName = item.ItemName.Trim(),
+                        Quantity = item.Quantity < 1 ? 1 : item.Quantity,
+                        Unit = string.IsNullOrWhiteSpace(item.Unit) ? "EA" : item.Unit.Trim(),
+                        Description = item.Description?.Trim(),
+                        SerialNumber = item.SerialNumber?.Trim()
+                    });
+                }
+            }
+
+            // ✅ Sinkronisasi Data Tag Hijau + Aksesoris ke Job & Serah Terima WH->HD
+            // Dijalankan SETELAH foto & aksesoris di-update pada h agar data terbaru yang disalin
+            if (h.RadioRepairJob != null)
+            {
+                // Update master data perbaikan di tiket
+                h.RadioRepairJob.OriginFrom = h.OriginFrom;
+                h.RadioRepairJob.RepairDataDescription = h.RepairDataDescription;
+                h.RadioRepairJob.RepairedByName = h.RepairedByName;
+                h.RadioRepairJob.FrequencyError = h.FrequencyError;
+                h.RadioRepairJob.AfReading = h.AfReading;
+                h.RadioRepairJob.PowerReading = h.PowerReading;
+                h.RadioRepairJob.VoltageOutNoLoad = h.VoltageOutNoLoad;
+                h.RadioRepairJob.VoltageOutWithLoad = h.VoltageOutWithLoad;
+                h.RadioRepairJob.PhysicalCondition = h.PhysicalCondition;
+                h.RadioRepairJob.DisplayCondition = h.DisplayCondition;
+
+                // Jika ini adalah Tek->WH dan ada WH->HD yang belum selesai, maka ikut di-update
+                if (h.HandoverType == RadioHandoverType.TechnicianToWarehouse)
+                {
+                    var subsequentHandover = await _context.RadioHandovers
+                        .Include(sh => sh.Accessories)
+                        .FirstOrDefaultAsync(sh => sh.RadioRepairJobId == h.RadioRepairJobId 
+                                                && sh.HandoverType == RadioHandoverType.WarehouseToHelpdesk
+                                                && sh.Status != "Completed");
+                    if (subsequentHandover != null)
+                    {
+                        // Sinkronisasi Data Perbaikan (Tag Hijau)
+                        subsequentHandover.OriginFrom = h.OriginFrom;
+                        subsequentHandover.RepairDataDescription = h.RepairDataDescription;
+                        subsequentHandover.RepairedByName = h.RepairedByName;
+                        subsequentHandover.FrequencyError = h.FrequencyError;
+                        subsequentHandover.AfReading = h.AfReading;
+                        subsequentHandover.PowerReading = h.PowerReading;
+                        subsequentHandover.VoltageOutNoLoad = h.VoltageOutNoLoad;
+                        subsequentHandover.VoltageOutWithLoad = h.VoltageOutWithLoad;
+                        subsequentHandover.PhysicalCondition = h.PhysicalCondition;
+                        subsequentHandover.DisplayCondition = h.DisplayCondition;
+
+                        // Sinkronisasi Aksesoris (data terbaru dari h.Accessories)
+                        _context.RadioHandoverAccessories.RemoveRange(subsequentHandover.Accessories);
+                        subsequentHandover.Accessories.Clear();
+                        foreach (var acc in h.Accessories)
+                        {
+                            subsequentHandover.Accessories.Add(new RadioHandoverAccessory
+                            {
+                                ItemName = acc.ItemName,
+                                Quantity = acc.Quantity,
+                                Unit = acc.Unit,
+                                Description = acc.Description,
+                                SerialNumber = acc.SerialNumber
+                            });
+                        }
+
+                        // ⚠️ Foto TIDAK disinkronkan — tiap serah terima punya foto sendiri
+                    }
                 }
             }
 
@@ -1382,6 +1450,34 @@ namespace Pm.Services.RadioHandover
             
             await _activityLog.LogAsync("RadioHandover", h.Id, "Update", userId, $"Edit STR {h.HandoverNumber} oleh {editorName}");
             await _context.SaveChangesAsync();
+
+            // Kirim notif ke penerima baru jika receivedByUserId berubah (HD→Tek)
+            if (h.HandoverType == RadioHandoverType.HelpdeskToTechnician)
+            {
+                var serial = h.RadioSerialNumber ?? "";
+                var ticket = h.RadioRepairJob?.HelpdeskTicketNumber ?? "";
+                // Ambil nama teknisi dari DB langsung menggunakan ID dari DTO (lebih reliable dari navigation property)
+                var techName = "Teknisi";
+                // Untuk HD→Tek: teknisi penerima = dto.WorkshopTechnicianId atau h.WorkshopTechnicianId
+                var workshopTechIdForNotif = dto.WorkshopTechnicianId ?? h.WorkshopTechnicianId;
+                if (workshopTechIdForNotif.HasValue)
+                {
+                    var tech = await _context.WorkshopTechnicians.AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Id == workshopTechIdForNotif.Value);
+                    techName = tech?.Name ?? "Teknisi";
+                }
+                await _notificationService.UpdateOrCreateAsync(new DTOs.Notification.CreateNotificationDto
+                {
+                    RecipientUserId = h.ReceivedByUserId,
+                    Title = "Radio Masuk Workshop — Untuk Anda",
+                    Message = $"Radio SN {serial} diserahkan ke Workshop dari Helpdesk (Tiket {ticket}). Anda ditunjuk sebagai penerima: {techName}.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover",
+                    ReferenceId = h.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(id))!;
         }

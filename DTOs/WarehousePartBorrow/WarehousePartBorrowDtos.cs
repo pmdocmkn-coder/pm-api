@@ -80,6 +80,8 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string? ReturnCondition { get; set; }
         public string? ReturnNote { get; set; }
         public string? ReturnedByName { get; set; }
+        /// <summary>Nama warehouse yang menerima pengembalian (diisi manual jika submit dari akun non-warehouse)</summary>
+        public string? ReturnReceiverName { get; set; }
         public string? IssuerSignatureBase64 { get; set; }
         public string? ReceiverSignatureBase64 { get; set; }
         public string? ReturnIssuerSignatureBase64 { get; set; }
@@ -116,6 +118,9 @@ namespace Pm.DTOs.WarehousePartBorrow
         /// <summary>Nama orang yang mengembalikan (jika diwakilkan)</summary>
         [MaxLength(200)]
         public string? ReturnedByName { get; set; }
+        /// <summary>Nama warehouse penerima pengembalian (diisi manual jika submit dari akun non-warehouse)</summary>
+        [MaxLength(200)]
+        public string? ReturnReceiverName { get; set; }
     }
 
     public class SignReceiverBorrowDto
