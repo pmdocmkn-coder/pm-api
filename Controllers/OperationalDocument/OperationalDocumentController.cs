@@ -91,6 +91,34 @@ namespace Pm.Controllers
             }
         }
 
+        /// <summary>
+        /// Upsert dokumen: jika Name+Type+ReferenceNumber sudah ada → update, jika belum → create.
+        /// Digunakan oleh fitur Import Excel agar data reusable (tidak duplikat).
+        /// </summary>
+        [HttpPost("upsert")]
+        [Authorize(Policy = "OperationalDocumentCreate")]
+        public async Task<IActionResult> Upsert([FromBody] OperationalDocumentCreateDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { data = ModelState });
+
+            try
+            {
+                var result = await _service.UpsertAsync(dto);
+                return ApiResponse.Success(result, "Dokumen berhasil disimpan");
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Validation error upserting document");
+                return ApiResponse.BadRequest("Upsert Document", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error upserting operational document");
+                return ApiResponse.InternalServerError("Upsert Document gagal: " + ex.Message);
+            }
+        }
+
         [HttpPut("{id}")]
         [Authorize(Policy = "OperationalDocumentUpdate")]
         public async Task<IActionResult> Update(int id, [FromBody] OperationalDocumentUpdateDto dto)
