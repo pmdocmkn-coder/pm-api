@@ -211,5 +211,36 @@ namespace Pm.Services.Notification
         {
             await _hubContext.Clients.All.SendAsync("RefreshData", entityName);
         }
+
+        public async Task UpdateOrCreateAsync(CreateNotificationDto dto)
+        {
+            // Cari notif lama berdasarkan recipientUserId + referenceId + referenceType
+            var existing = dto.RecipientUserId.HasValue && dto.ReferenceId.HasValue
+                ? await _context.Notifications.FirstOrDefaultAsync(n =>
+                    n.RecipientUserId == dto.RecipientUserId &&
+                    n.ReferenceId == dto.ReferenceId &&
+                    n.ReferenceType == dto.ReferenceType)
+                : null;
+
+            if (existing != null)
+            {
+                // Update pesan notif lama
+                existing.Title = dto.Title;
+                existing.Message = dto.Message;
+                existing.IsRead = false;
+                existing.ReadAt = null;
+                existing.CreatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                // Push update via SignalR
+                var notifDto = MapToDto(existing);
+                if (dto.RecipientUserId.HasValue)
+                    await _hubContext.Clients.Group($"User_{dto.RecipientUserId.Value}").SendAsync("ReceiveNotification", notifDto);
+            }
+            else
+            {
+                await CreateAsync(dto);
+            }
+        }
     }
 }

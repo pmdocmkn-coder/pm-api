@@ -491,6 +491,7 @@ namespace Pm.Services.WarehousePartBorrow
             b.ReturnCondition = dto.ReturnCondition?.Trim();
             b.ReturnNote = dto.ReturnNote?.Trim();
             b.ReturnedByName = dto.ReturnedByName?.Trim();
+            b.ReturnReceiverName = dto.ReturnReceiverName?.Trim();
             b.ReturnIssuerSignatureBase64 = dto.ReturnIssuerSignatureBase64;
             b.ReturnReceiverSignatureBase64 = dto.ReturnReceiverSignatureBase64;
             b.UpdatedAt = DateTime.UtcNow;
@@ -670,6 +671,7 @@ namespace Pm.Services.WarehousePartBorrow
             ReturnCondition = b.ReturnCondition,
             ReturnNote = b.ReturnNote,
             ReturnedByName = b.ReturnedByName,
+            ReturnReceiverName = b.ReturnReceiverName,
             IssuerSignatureBase64 = b.IssuerSignatureBase64,
             ReceiverSignatureBase64 = b.ReceiverSignatureBase64,
             ReturnIssuerSignatureBase64 = b.ReturnIssuerSignatureBase64,
