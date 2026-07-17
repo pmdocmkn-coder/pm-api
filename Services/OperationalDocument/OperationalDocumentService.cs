@@ -117,6 +117,67 @@ namespace Pm.Services
             return MapToResponse(doc);
         }
 
+        /// <summary>
+        /// Upsert: cari dokumen berdasarkan Name + Type + ReferenceNumber.
+        /// Jika sudah ada → update, jika belum → create baru.
+        /// Digunakan oleh fitur Import Excel agar data tidak duplikat.
+        /// </summary>
+        public async Task<OperationalDocumentResponseDto> UpsertAsync(OperationalDocumentCreateDto dto)
+        {
+            if (dto.ValidUntil <= dto.ValidFrom)
+                throw new ArgumentException("Tanggal berakhir harus lebih besar dari tanggal berlaku.");
+
+            // Cari dokumen existing berdasarkan Name + Type + ReferenceNumber
+            var existing = await _context.OperationalDocuments.FirstOrDefaultAsync(d =>
+                d.Name == dto.Name &&
+                d.Type == dto.Type &&
+                d.ReferenceNumber == dto.ReferenceNumber);
+
+            if (existing != null)
+            {
+                // UPDATE existing document
+                existing.GroupName = dto.GroupName;
+                
+                // Jika tanggal berakhir berubah, reset follow up status
+                if (existing.ValidUntil.Date != dto.ValidUntil.Date)
+                {
+                    existing.FollowUpStatus = "Tidak Ada";
+                    existing.FollowUpRemark = null;
+                }
+
+                existing.ValidFrom = dto.ValidFrom;
+                existing.ValidUntil = dto.ValidUntil;
+                existing.PicName = dto.PicName;
+                existing.PicTelegramId = dto.PicTelegramId;
+                existing.FileLink = dto.FileLink;
+                existing.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return MapToResponse(existing);
+            }
+            else
+            {
+                // CREATE new document
+                var doc = new OperationalDocument
+                {
+                    Name = dto.Name,
+                    Type = dto.Type,
+                    ReferenceNumber = dto.ReferenceNumber,
+                    GroupName = dto.GroupName,
+                    ValidFrom = dto.ValidFrom,
+                    ValidUntil = dto.ValidUntil,
+                    PicName = dto.PicName,
+                    PicTelegramId = dto.PicTelegramId,
+                    FileLink = dto.FileLink,
+                    FollowUpStatus = "Tidak Ada"
+                };
+
+                await _context.OperationalDocuments.AddAsync(doc);
+                await _context.SaveChangesAsync();
+                return MapToResponse(doc);
+            }
+        }
+
         public async Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto)
         {
             var doc = await _context.OperationalDocuments.FirstOrDefaultAsync(d => d.Id == id)
