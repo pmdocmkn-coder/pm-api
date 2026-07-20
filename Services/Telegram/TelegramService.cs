@@ -256,5 +256,173 @@ namespace Pm.Services
             if (string.IsNullOrEmpty(text)) return text;
             return text.Replace("_", "\\_").Replace("*", "\\*").Replace("[", "\\[").Replace("]", "\\]").Replace("`", "\\`");
         }
+
+        public async Task<bool> SendBhpPaymentReminderAsync(
+            string chatId,
+            string documentName,
+            int daysToAnniv,
+            int currentYear,
+            IEnumerable<(int Year, bool IsPaid, string? InvoiceNumber)> bhpItems)
+        {
+            var settings = _configuration.GetSection("TelegramSettings").Get<TelegramSettings>() ?? new TelegramSettings();
+            if (string.IsNullOrWhiteSpace(settings.BotToken)) return false;
+
+            var itemList = bhpItems.OrderBy(b => b.Year).ToList();
+            var unpaidItems = itemList.Where(b => !b.IsPaid).ToList();
+            var paidCount = itemList.Count(b => b.IsPaid);
+
+            var dueLabel = daysToAnniv switch
+            {
+                0 => "⚠️ *HARI INI*",
+                1 => "⏰ *BESOK*",
+                _ => $"⏰ *{daysToAnniv} hari lagi*"
+            };
+
+            var sb = new StringBuilder();
+            sb.AppendLine("*[PM Dashboard MKN]*");
+            sb.AppendLine();
+            sb.AppendLine("💰 *Peringatan Pembayaran BHP Tahunan*");
+            sb.AppendLine();
+            sb.AppendLine($"📄 Dokumen: *{EscapeMarkdown(documentName)}*");
+            sb.AppendLine($"🗓 Jatuh tempo: {dueLabel}");
+            sb.AppendLine();
+            sb.AppendLine($"📊 Progress: *{paidCount}/{itemList.Count}* tahun lunas");
+            sb.AppendLine();
+
+            if (unpaidItems.Count > 0)
+            {
+                sb.AppendLine("❌ *Tahun yang BELUM dibayar:*");
+                foreach (var item in unpaidItems)
+                    sb.AppendLine($"  • Tahun *{item.Year}* — Belum ada invoice");
+            }
+
+            if (paidCount > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("✅ *Tahun yang sudah lunas:*");
+                foreach (var item in itemList.Where(b => b.IsPaid))
+                    sb.AppendLine($"  • Tahun *{item.Year}* — INV: `{EscapeMarkdown(item.InvoiceNumber ?? "-")}`");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Segera catat pembayaran BHP di *PM Dashboard MKN*.");
+
+            try
+            {
+                await _queueService.EnqueueMessageAsync(chatId, sb.ToString());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception saat queue BHP reminder ke {ChatId}", chatId);
+                return false;
+            }
+        }
+
+        public async Task<bool> SendGroupedBhpPaymentReminderAsync(
+            string chatId,
+            string groupName,
+            int daysToAnniv,
+            IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems)
+        {
+            var settings = _configuration.GetSection("TelegramSettings").Get<TelegramSettings>() ?? new TelegramSettings();
+            if (string.IsNullOrWhiteSpace(settings.BotToken)) return false;
+
+            var items = groupItems.ToList();
+            var totalUnpaid = items.Sum(i => i.UnpaidCount);
+
+            var dueLabel = daysToAnniv switch
+            {
+                0 => "⚠️ *HARI INI*",
+                1 => "⏰ *BESOK*",
+                _ => $"⏰ *{daysToAnniv} hari lagi*"
+            };
+
+            var sb = new StringBuilder();
+            sb.AppendLine("*[PM Dashboard MKN]*");
+            sb.AppendLine();
+            sb.AppendLine("💰 *Peringatan Pembayaran BHP Tahunan (Grup)*");
+            sb.AppendLine();
+            sb.AppendLine($"📂 Grup: *{EscapeMarkdown(groupName)}*");
+            sb.AppendLine($"🗓 Jatuh tempo: {dueLabel}");
+            sb.AppendLine($"📊 Total belum bayar: *{totalUnpaid} tahun* dari {items.Count} dokumen");
+            sb.AppendLine();
+            sb.AppendLine("❌ *Detail per dokumen:*");
+
+            foreach (var item in items.Take(10))
+            {
+                var years = string.Join(", ", item.UnpaidYears);
+                sb.AppendLine($"  • *{EscapeMarkdown(item.DocName)}*");
+                sb.AppendLine($"      └ Belum bayar tahun: {years}");
+            }
+
+            if (items.Count > 10)
+                sb.AppendLine($"  ... dan {items.Count - 10} dokumen lainnya");
+
+            sb.AppendLine();
+            sb.AppendLine("Segera catat pembayaran BHP di *PM Dashboard MKN*.");
+
+            try
+            {
+                await _queueService.EnqueueMessageAsync(chatId, sb.ToString());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception saat queue Grouped BHP reminder ke {ChatId}", chatId);
+                return false;
+            }
+        }
+
+        public async Task<bool> SendBhpPaymentConfirmationAsync(
+            string chatId,
+            string documentName,
+            int year,
+            string invoiceNumber,
+            string paidByUserName,
+            bool isAllPaid,
+            int paidCount,
+            int totalCount)
+        {
+            var settings = _configuration.GetSection("TelegramSettings").Get<TelegramSettings>() ?? new TelegramSettings();
+
+            if (string.IsNullOrWhiteSpace(settings.BotToken))
+            {
+                _logger.LogWarning("Telegram BotToken belum dikonfigurasi. BHP payment notif tidak terkirim.");
+                return false;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("*[PM Dashboard MKN]*");
+            sb.AppendLine();
+            sb.AppendLine(isAllPaid ? "✅ *Pembayaran BHP Selesai (LUNAS SEMUA)*" : "✅ *Pembayaran BHP Dicatat*");
+            sb.AppendLine();
+            sb.AppendLine($"📄 Dokumen: *{EscapeMarkdown(documentName)}*");
+            sb.AppendLine($"🗓 Tahun: *{year}*");
+            sb.AppendLine($"🧾 No. Invoice: `{EscapeMarkdown(invoiceNumber)}`");
+            sb.AppendLine($"👤 Dicatat oleh: {EscapeMarkdown(paidByUserName)}");
+            sb.AppendLine();
+
+            if (isAllPaid)
+            {
+                sb.AppendLine($"🎉 Semua {totalCount} tahun BHP sudah lunas!");
+            }
+            else
+            {
+                sb.AppendLine($"📊 Progress: *{paidCount}/{totalCount}* tahun lunas");
+                sb.AppendLine($"Masih ada {totalCount - paidCount} tahun yang belum dibayar.");
+            }
+
+            try
+            {
+                await _queueService.EnqueueMessageAsync(chatId, sb.ToString());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception saat queue BHP payment notif ke {ChatId}", chatId);
+                return false;
+            }
+        }
     }
 }

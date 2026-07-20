@@ -3,6 +3,22 @@ using Pm.DTOs.Common;
 
 namespace Pm.DTOs
 {
+    public class BhpPaymentChecklistItemDto
+    {
+        public int Id { get; set; }
+        public int Year { get; set; }
+        public bool IsPaid { get; set; }
+        public string? InvoiceNumber { get; set; }
+        public DateTime? PaidAt { get; set; }
+        public string? PaidByUserName { get; set; }
+    }
+
+    public class UpdateBhpPaymentDto
+    {
+        [Required(ErrorMessage = "No. Invoice wajib diisi")]
+        public required string InvoiceNumber { get; set; }
+    }
+
     public class OperationalDocumentQueryDto : BaseQueryDto
     {
         public string? Type { get; set; }
@@ -82,6 +98,10 @@ namespace Pm.DTOs
                 return "Aman";
             }
         }
+
+        public List<BhpPaymentChecklistItemDto>? BhpChecklist { get; set; }
+        public int? BhpPaidCount { get; set; }
+        public int? BhpTotalCount { get; set; }
     }
 
     public class OperationalDocumentSummaryDto

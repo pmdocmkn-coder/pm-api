@@ -49,7 +49,7 @@ namespace Pm.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
-
         public ICollection<OperationalDocumentNotificationHistory> NotificationHistories { get; set; } = [];
+        public ICollection<BhpPaymentChecklist> BhpChecklists { get; set; } = [];
     }
 }

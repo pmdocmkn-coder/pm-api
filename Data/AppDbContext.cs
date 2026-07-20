@@ -85,6 +85,7 @@ namespace Pm.Data
         public DbSet<OperationalDocument> OperationalDocuments { get; set; } = null!;
         public DbSet<OperationalDocumentNotificationHistory> OperationalDocumentNotificationHistories { get; set; } = null!;
         public DbSet<OperationalDocumentType> OperationalDocumentTypes { get; set; } = null!;
+        public DbSet<BhpPaymentChecklist> BhpPaymentChecklists { get; set; } = null!;
         public DbSet<TelegramQueue> TelegramQueues { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -210,6 +211,20 @@ namespace Pm.Data
 
                 entity.HasIndex(e => e.DaysRemaining);
                 entity.HasIndex(e => new { e.OperationalDocumentId, e.NotifiedAt });
+            });
+
+            modelBuilder.Entity<BhpPaymentChecklist>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.ToTable("BhpPaymentChecklists");
+
+                entity.HasOne(e => e.OperationalDocument)
+                    .WithMany(d => d.BhpChecklists)
+                    .HasForeignKey(e => e.OperationalDocumentId)
+                    .HasConstraintName("FK_BhpChecklists_OpDoc")
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.OperationalDocumentId, e.Year }).IsUnique();
             });
 
             // ===========================================

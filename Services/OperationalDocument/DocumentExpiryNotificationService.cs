@@ -59,7 +59,9 @@ namespace Pm.Services
             var today = DateTime.UtcNow.Date;
 
             // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
+            // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
             var documents = await db.OperationalDocuments
+                .Include(d => d.BhpChecklists)
                 .AsNoTracking()
                 .Where(d => d.PicTelegramId != null && d.PicTelegramId != ""
                          && d.FollowUpStatus != "SedangDiproses"
@@ -161,13 +163,17 @@ namespace Pm.Services
                         var dta = (int)(anniv.Value - today).TotalDays;
                         if (NotificationThresholds.Contains(dta))
                         {
-                            annivDocs.Add(doc);
-                            groupDaysToAnniv = dta; 
+                            bool isPaid = doc.BhpChecklists?.Any(c => c.Year == anniv.Value.Year && c.IsPaid) ?? false;
+                            if (!isPaid)
+                            {
+                                annivDocs.Add(doc);
+                                groupDaysToAnniv = dta; 
+                            }
                         }
                     }
                 }
 
-                if (annivDocs.Any() && groupDaysToAnniv.HasValue)
+                if (annivDocs.Count > 0 && groupDaysToAnniv.HasValue)
                 {
                     var repDocAnniv = annivDocs.First();
                     var annivDays = groupDaysToAnniv.Value;
@@ -179,16 +185,56 @@ namespace Pm.Services
 
                     if (!alreadySentAnniv)
                     {
-                        _logger.LogInformation("[DocExpiry] Kirim Grouped Anniversary WA: Group='{Group}', H-{Days}",
+                        _logger.LogInformation("[DocExpiry] Kirim Grouped BHP Anniversary WA: Group='{Group}', H-{Days}",
                             group.Key.GroupName, annivDays);
 
-                        var sentAnniv = await Telegram.SendGroupedDocumentAnniversaryMessageAsync(
-                            chatId: group.Key.PicTelegramId,
-                            groupName: group.Key.GroupName,
-                            daysRemaining: annivDays,
-                            validUntil: group.Key.ValidUntilDate,
-                            documents: annivDocs.Select(d => (d.Name, d.Type ?? ""))
-                        );
+                        // Cek apakah semua ISR → kirim grouped BHP reminder dengan detail
+                        bool allIsr = annivDocs.All(d => d.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true);
+
+                        bool sentAnniv;
+                        if (allIsr)
+                        {
+                            // Kirim grouped BHP reminder dengan detail per dokumen
+                            var groupDetailItems = annivDocs.Select(d =>
+                            {
+                                var unpaidYears = d.BhpChecklists?
+                                    .Where(c => !c.IsPaid)
+                                    .Select(c => c.Year)
+                                    .OrderBy(y => y)
+                                    .ToList() ?? [];
+                                return (
+                                    DocName: d.Name,
+                                    UnpaidCount: unpaidYears.Count,
+                                    UnpaidYears: (IEnumerable<int>)unpaidYears
+                                );
+                            }).Where(x => x.UnpaidCount > 0).ToList();
+
+                            if (groupDetailItems.Count > 0)
+                            {
+                                sentAnniv = await Telegram.SendGroupedBhpPaymentReminderAsync(
+                                    chatId: group.Key.PicTelegramId,
+                                    groupName: group.Key.GroupName,
+                                    daysToAnniv: annivDays,
+                                    groupItems: groupDetailItems
+                                );
+                            }
+                            else
+                            {
+                                // Semua sudah lunas, tidak perlu kirim reminder BHP
+                                sentAnniv = false;
+                                _logger.LogInformation("[DocExpiry] Skip BHP reminder grup '{Group}' — semua sudah lunas.", group.Key.GroupName);
+                            }
+                        }
+                        else
+                        {
+                            sentAnniv = await Telegram.SendGroupedDocumentAnniversaryMessageAsync(
+                                chatId: group.Key.PicTelegramId,
+                                groupName: group.Key.GroupName,
+                                daysRemaining: annivDays,
+                                validUntil: group.Key.ValidUntilDate,
+                                documents: annivDocs.Select(d => (d.Name, d.Type ?? ""))
+                            );
+                        }
 
                         if (sentAnniv)
                         {
@@ -202,14 +248,14 @@ namespace Pm.Services
                                 });
                             }
                             await db.SaveChangesAsync(ct);
-                            totalProcessed += annivDocs.Count();
+                            totalProcessed += annivDocs.Count;
 
                             await notificationService.CreateForPermissionAsync(
                                 "notification.operationaldocument.expiry",
                                 new CreateNotificationDto
                                 {
-                                    Title = $"Peringatan Tahunan (Grup {group.Key.GroupName})",
-                                    Message = $"Terdapat {annivDocs.Count} dokumen dalam grup '{group.Key.GroupName}' yang masuk jadwal tahunan dalam {annivDays} hari.",
+                                    Title = $"Peringatan BHP Tahunan (Grup {group.Key.GroupName})",
+                                    Message = $"Terdapat {annivDocs.Count} dokumen ISR dalam grup '{group.Key.GroupName}' yang belum melunasi BHP tahunan. Jatuh tempo {annivDays} hari lagi.",
                                     Category = "OperationalDocument",
                                     LinkUrl = "/operational-documents"
                                 }
@@ -281,49 +327,87 @@ namespace Pm.Services
                     var dta = (int)(anniv.Value - today).TotalDays;
                     if (NotificationThresholds.Contains(dta))
                     {
-                        var alreadySentAnniv = await db.OperationalDocumentNotificationHistories
-                            .AnyAsync(h => h.OperationalDocumentId == doc.Id
-                                           && h.DaysRemaining == dta
-                                           && h.NotifiedAt.Date == today, ct);
-
-                        if (!alreadySentAnniv)
+                        bool isPaid = doc.BhpChecklists?.Any(c => c.Year == anniv.Value.Year && c.IsPaid) ?? false;
+                        if (!isPaid)
                         {
-                            _logger.LogInformation("[DocExpiry] Kirim Anniversary WA: DocId={Id}, H-{Days}", doc.Id, dta);
+                            var alreadySentAnniv = await db.OperationalDocumentNotificationHistories
+                                .AnyAsync(h => h.OperationalDocumentId == doc.Id
+                                               && h.DaysRemaining == dta
+                                               && h.NotifiedAt.Date == today, ct);
 
-                            var sentAnniv = await Telegram.SendDocumentAnniversaryMessageAsync(
-                                chatId: doc.PicTelegramId!,
-                                documentName: doc.Name,
-                                daysRemaining: dta,
-                                validUntil: doc.ValidUntil,
-                                fileLink: doc.FileLink,
-                                documentId: doc.Id.ToString(),
-                                documentType: doc.Type ?? ""
-                            );
-
-                            if (sentAnniv)
+                            if (!alreadySentAnniv)
                             {
-                                db.OperationalDocumentNotificationHistories.Add(new OperationalDocumentNotificationHistory
-                                {
-                                    OperationalDocumentId = doc.Id,
-                                    NotifiedAt = DateTime.UtcNow,
-                                    DaysRemaining = dta
-                                });
-                                await db.SaveChangesAsync(ct);
-                                totalProcessed++;
+                                _logger.LogInformation("[DocExpiry] Kirim Anniversary WA: DocId={Id}, H-{Days}", doc.Id, dta);
 
                                 bool isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
-                                string annivTitle = isIsr ? $"Pembayaran Tahunan BHP ({dta} Hari)" : $"Peringatan Tahunan ({dta} Hari)";
+                                bool sentAnniv;
 
-                                await notificationService.CreateForPermissionAsync(
-                                    "notification.operationaldocument.expiry",
-                                    new CreateNotificationDto
+                                if (isIsr && doc.BhpChecklists != null && doc.BhpChecklists.Count > 0)
+                                {
+                                    // Kirim BHP reminder detail untuk dokumen ISR
+                                    var bhpItems = doc.BhpChecklists
+                                        .OrderBy(c => c.Year)
+                                        .Select(c => (c.Year, c.IsPaid, c.InvoiceNumber));
+
+                                    // Hanya kirim jika masih ada yang belum bayar
+                                    var hasUnpaid = doc.BhpChecklists.Any(c => !c.IsPaid);
+                                    if (hasUnpaid)
                                     {
-                                        Title = annivTitle,
-                                        Message = $"Dokumen {doc.Name} ({doc.Type}) memasuki jadwal evaluasi/tahunan.",
-                                        Category = "OperationalDocument",
-                                        LinkUrl = "/operational-documents"
+                                        sentAnniv = await Telegram.SendBhpPaymentReminderAsync(
+                                            chatId: doc.PicTelegramId!,
+                                            documentName: doc.Name,
+                                            daysToAnniv: dta,
+                                            currentYear: DateTime.UtcNow.Year,
+                                            bhpItems: bhpItems
+                                        );
                                     }
-                                );
+                                    else
+                                    {
+                                        sentAnniv = false;
+                                        _logger.LogInformation("[DocExpiry] Skip BHP reminder DocId={Id} — semua sudah lunas.", doc.Id);
+                                    }
+                                }
+                                else
+                                {
+                                    sentAnniv = await Telegram.SendDocumentAnniversaryMessageAsync(
+                                        chatId: doc.PicTelegramId!,
+                                        documentName: doc.Name,
+                                        daysRemaining: dta,
+                                        validUntil: doc.ValidUntil,
+                                        fileLink: doc.FileLink,
+                                        documentId: doc.Id.ToString(),
+                                        documentType: doc.Type ?? ""
+                                    );
+                                }
+
+                                if (sentAnniv)
+                                {
+                                    db.OperationalDocumentNotificationHistories.Add(new OperationalDocumentNotificationHistory
+                                    {
+                                        OperationalDocumentId = doc.Id,
+                                        NotifiedAt = DateTime.UtcNow,
+                                        DaysRemaining = dta
+                                    });
+                                    await db.SaveChangesAsync(ct);
+                                    totalProcessed++;
+
+                                    string annivTitle = isIsr
+                                        ? $"Peringatan Pembayaran BHP ({dta} Hari)"
+                                        : $"Peringatan Tahunan ({dta} Hari)";
+
+                                    await notificationService.CreateForPermissionAsync(
+                                        "notification.operationaldocument.expiry",
+                                        new CreateNotificationDto
+                                        {
+                                            Title = annivTitle,
+                                            Message = isIsr
+                                                ? $"Dokumen {doc.Name} memiliki BHP yang belum dibayar. Jatuh tempo dalam {dta} hari."
+                                                : $"Dokumen {doc.Name} ({doc.Type}) memasuki jadwal evaluasi/tahunan.",
+                                            Category = "OperationalDocument",
+                                            LinkUrl = "/operational-documents"
+                                        }
+                                    );
+                                }
                             }
                         }
                     }
@@ -345,7 +429,9 @@ namespace Pm.Services
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var Telegram = scope.ServiceProvider.GetRequiredService<ITelegramService>();
 
-            var doc = await db.OperationalDocuments.AsNoTracking()
+            var doc = await db.OperationalDocuments
+                .Include(d => d.BhpChecklists)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == documentId);
 
             if (doc == null)
@@ -355,31 +441,54 @@ namespace Pm.Services
                 return (false, "Dokumen ini tidak memiliki Telegram Chat ID PIC. Harap isi Telegram Chat ID terlebih dahulu.");
 
             var daysRemaining = (int)(doc.ValidUntil.Date - DateTime.UtcNow.Date).TotalDays;
+            bool isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
 
-            // Kirim ke semua nomor (support multi-nomor dipisahkan koma)
-            var phones = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var chatIds = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             bool anySent = false;
 
-            foreach (var phone in phones)
+            foreach (var chatId in chatIds)
             {
-                var sent = await Telegram.SendDocumentExpiryMessageAsync(
-                    chatId: phone,
-                    documentName: doc.Name,
-                    daysRemaining: daysRemaining,
-                    validUntil: doc.ValidUntil,
-                    fileLink: doc.FileLink,
-                    documentId: doc.Id.ToString()
-                );
+                bool sent;
+
+                if (isIsr && doc.BhpChecklists != null && doc.BhpChecklists.Count > 0)
+                {
+                    // ISR: kirim pesan lengkap dengan detail BHP checklist
+                    var bhpItems = doc.BhpChecklists
+                        .OrderBy(c => c.Year)
+                        .Select(c => (c.Year, c.IsPaid, c.InvoiceNumber));
+
+                    sent = await Telegram.SendBhpPaymentReminderAsync(
+                        chatId: chatId,
+                        documentName: doc.Name,
+                        daysToAnniv: daysRemaining,
+                        currentYear: DateTime.UtcNow.Year,
+                        bhpItems: bhpItems
+                    );
+                }
+                else
+                {
+                    // Non-ISR: pesan expiry biasa
+                    sent = await Telegram.SendDocumentExpiryMessageAsync(
+                        chatId: chatId,
+                        documentName: doc.Name,
+                        daysRemaining: daysRemaining,
+                        validUntil: doc.ValidUntil,
+                        fileLink: doc.FileLink,
+                        documentId: doc.Id.ToString()
+                    );
+                }
+
                 if (sent) anySent = true;
             }
 
             if (anySent)
             {
-                _logger.LogInformation("[DocExpiry] Force notification sent: DocId={Id}, Phone={Phone}", doc.Id, doc.PicTelegramId);
+                _logger.LogInformation("[DocExpiry] Force notification sent: DocId={Id}, ChatId={ChatId}, IsISR={IsIsr}",
+                    doc.Id, doc.PicTelegramId, isIsr);
                 return (true, $"Notifikasi Telegram berhasil dikirim ke {doc.PicTelegramId}.");
             }
 
-            return (false, "Gagal mengirim WA. Periksa koneksi Fonnte dan nomor WA.");
+            return (false, "Gagal mengirim notifikasi. Periksa koneksi Telegram Bot.");
         }
 
         public async Task<(bool isSuccess, string message, int sentCount)> SendForceNotificationBulkAsync(string? groupName, string? type, string? expiryStatus)
@@ -478,7 +587,7 @@ namespace Pm.Services
             return nextRun - nowWib;
         }
 
-        private DateTime? GetCurrentYearAnniversary(DateTime validFrom, DateTime validUntil, DateTime today)
+        private static DateTime? GetCurrentYearAnniversary(DateTime validFrom, DateTime validUntil, DateTime today)
         {
             // Jika durasi <= 1 tahun, tidak ada anniversary tahunan
             if ((validUntil - validFrom).TotalDays <= 365) return null;

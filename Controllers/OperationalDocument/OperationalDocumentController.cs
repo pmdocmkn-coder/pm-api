@@ -193,6 +193,73 @@ namespace Pm.Controllers
             }
         }
 
+        [HttpPatch("{id}/bhp-payment/{year}")]
+        [Authorize(Policy = "OperationalDocumentUpdateBhp")]
+        public async Task<IActionResult> MarkBhpPayment(int id, int year, [FromBody] UpdateBhpPaymentDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { data = ModelState });
+
+            try
+            {
+                var userName = User.Identity?.Name ?? "Unknown";
+                var result = await _service.MarkBhpPaymentAsync(id, year, dto.InvoiceNumber, userName);
+                return ApiResponse.Success(result, $"Pembayaran BHP tahun {year} berhasil dicatat");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return ApiResponse.NotFound(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking BHP payment for document {Id} year {Year}", id, year);
+                return ApiResponse.InternalServerError("Gagal mencatat BHP: " + ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}/bhp-payment/{year}")]
+        [Authorize(Policy = "OperationalDocumentUpdateBhp")]
+        public async Task<IActionResult> UnmarkBhpPayment(int id, int year)
+        {
+            try
+            {
+                var result = await _service.UnmarkBhpPaymentAsync(id, year);
+                return ApiResponse.Success(result, $"Pembayaran BHP tahun {year} berhasil dibatalkan");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return ApiResponse.NotFound(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unmarking BHP payment for document {Id} year {Year}", id, year);
+                return ApiResponse.InternalServerError("Gagal membatalkan BHP: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Backfill BHP checklist untuk semua dokumen ISR yang belum punya checklist.
+        /// Dipakai SEKALI untuk data lama sebelum fitur BHP ada. Aman dijalankan berulang (idempotent).
+        /// </summary>
+        [HttpPost("backfill-bhp")]
+        [Authorize(Policy = "OperationalDocumentUpdateBhp")]
+        public async Task<IActionResult> BackfillBhpChecklists()
+        {
+            try
+            {
+                var (processedCount, generatedCount) = await _service.BackfillBhpChecklistsAsync();
+                return ApiResponse.Success(
+                    new { processedCount, generatedCount },
+                    $"Backfill selesai: {generatedCount} checklist baru di-generate untuk {processedCount} dokumen ISR."
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saat backfill BHP checklists");
+                return ApiResponse.InternalServerError("Backfill gagal: " + ex.Message);
+            }
+        }
+
         /// <summary>
         /// Trigger pengiriman notifikasi WA secara manual (untuk testing).
         /// Menjalankan job yang sama persis dengan yang berjalan tiap jam 7 pagi.

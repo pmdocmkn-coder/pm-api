@@ -23,6 +23,35 @@ namespace Pm.Services
             string documentId, 
             string documentType);
 
+        Task<bool> SendBhpPaymentConfirmationAsync(
+            string chatId,
+            string documentName,
+            int year,
+            string invoiceNumber,
+            string paidByUserName,
+            bool isAllPaid,
+            int paidCount,
+            int totalCount);
+
+        /// <summary>
+        /// Kirim reminder peringatan BHP tahunan dengan detail tahun yang belum dibayar.
+        /// </summary>
+        Task<bool> SendBhpPaymentReminderAsync(
+            string chatId,
+            string documentName,
+            int daysToAnniv,
+            int currentYear,
+            IEnumerable<(int Year, bool IsPaid, string? InvoiceNumber)> bhpItems);
+
+        /// <summary>
+        /// Kirim reminder BHP tahunan untuk grup dokumen ISR.
+        /// </summary>
+        Task<bool> SendGroupedBhpPaymentReminderAsync(
+            string chatId,
+            string groupName,
+            int daysToAnniv,
+            IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems);
+
         Task<bool> SendGroupedDocumentAnniversaryMessageAsync(
             string chatId,
             string groupName,
