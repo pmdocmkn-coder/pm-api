@@ -4,14 +4,15 @@ using Pm.DTOs;
 using Pm.DTOs.Common;
 using Pm.Helper;
 using Pm.Models;
+using Pm.Services.Telegram;
 
 namespace Pm.Services
 {
-    public class OperationalDocumentService(AppDbContext _context) : IOperationalDocumentService
+    public class OperationalDocumentService(AppDbContext _context, ITelegramService _telegramService) : IOperationalDocumentService
     {
         public async Task<PagedResultDto<OperationalDocumentResponseDto>> GetAllAsync(OperationalDocumentQueryDto query)
         {
-            var q = _context.OperationalDocuments.AsNoTracking().AsQueryable();
+            var q = _context.OperationalDocuments.Include(d => d.BhpChecklists).AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
@@ -87,7 +88,7 @@ namespace Pm.Services
 
         public async Task<OperationalDocumentResponseDto> GetByIdAsync(int id)
         {
-            var doc = await _context.OperationalDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
+            var doc = await _context.OperationalDocuments.Include(d => d.BhpChecklists).AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
                       ?? throw new KeyNotFoundException("Dokumen tidak ditemukan.");
             return MapToResponse(doc);
         }
@@ -113,6 +114,7 @@ namespace Pm.Services
 
             await _context.OperationalDocuments.AddAsync(doc);
             await _context.SaveChangesAsync();
+            await GenerateBhpChecklistAsync(doc);
 
             return MapToResponse(doc);
         }
@@ -153,6 +155,7 @@ namespace Pm.Services
                 existing.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
+                await GenerateBhpChecklistAsync(existing);
                 return MapToResponse(existing);
             }
             else
@@ -174,6 +177,7 @@ namespace Pm.Services
 
                 await _context.OperationalDocuments.AddAsync(doc);
                 await _context.SaveChangesAsync();
+                await GenerateBhpChecklistAsync(doc);
                 return MapToResponse(doc);
             }
         }
@@ -206,6 +210,7 @@ namespace Pm.Services
             doc.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await GenerateBhpChecklistAsync(doc);
             return MapToResponse(doc);
         }
 
@@ -235,6 +240,66 @@ namespace Pm.Services
             await _context.SaveChangesAsync();
         }
 
+        public async Task<OperationalDocumentResponseDto> MarkBhpPaymentAsync(int id, int year, string invoiceNumber, string userName)
+        {
+            var doc = await _context.OperationalDocuments
+                .Include(d => d.BhpChecklists)
+                .FirstOrDefaultAsync(d => d.Id == id)
+                ?? throw new KeyNotFoundException("Dokumen tidak ditemukan.");
+
+            var checklist = doc.BhpChecklists.FirstOrDefault(c => c.Year == year);
+            if (checklist == null)
+            {
+                checklist = new BhpPaymentChecklist { OperationalDocumentId = id, Year = year };
+                _context.BhpPaymentChecklists.Add(checklist);
+                doc.BhpChecklists.Add(checklist);
+            }
+
+            checklist.IsPaid = true;
+            checklist.InvoiceNumber = invoiceNumber;
+            checklist.PaidAt = DateTime.UtcNow;
+            checklist.PaidByUserName = userName;
+
+            await _context.SaveChangesAsync();
+
+            // Kirim notif Telegram ke semua PIC jika ada
+            if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
+            {
+                var paidCount = doc.BhpChecklists.Count(c => c.IsPaid);
+                var totalCount = doc.BhpChecklists.Count;
+                var isAllPaid = paidCount == totalCount && totalCount > 0;
+
+                var chatIds = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var chatId in chatIds)
+                {
+                    await _telegramService.SendBhpPaymentConfirmationAsync(
+                        chatId, doc.Name, year, invoiceNumber, userName, isAllPaid, paidCount, totalCount);
+                }
+            }
+
+            return MapToResponse(doc);
+        }
+
+        public async Task<OperationalDocumentResponseDto> UnmarkBhpPaymentAsync(int id, int year)
+        {
+            var doc = await _context.OperationalDocuments
+                .Include(d => d.BhpChecklists)
+                .FirstOrDefaultAsync(d => d.Id == id)
+                ?? throw new KeyNotFoundException("Dokumen tidak ditemukan.");
+
+            var checklist = doc.BhpChecklists.FirstOrDefault(c => c.Year == year);
+            if (checklist != null)
+            {
+                checklist.IsPaid = false;
+                checklist.InvoiceNumber = null;
+                checklist.PaidAt = null;
+                checklist.PaidByUserName = null;
+                await _context.SaveChangesAsync();
+            }
+
+            return MapToResponse(doc);
+        }
+
         private static OperationalDocumentResponseDto MapToResponse(OperationalDocument doc)
         {
             return new OperationalDocumentResponseDto
@@ -252,8 +317,106 @@ namespace Pm.Services
                 FollowUpStatus = doc.FollowUpStatus,
                 FollowUpRemark = doc.FollowUpRemark,
                 CreatedAt = doc.CreatedAt,
-                UpdatedAt = doc.UpdatedAt
+                UpdatedAt = doc.UpdatedAt,
+                BhpChecklist = doc.BhpChecklists?.Select(c => new BhpPaymentChecklistItemDto
+                {
+                    Id = c.Id,
+                    Year = c.Year,
+                    IsPaid = c.IsPaid,
+                    InvoiceNumber = c.InvoiceNumber,
+                    PaidAt = c.PaidAt,
+                    PaidByUserName = c.PaidByUserName
+                }).OrderBy(c => c.Year).ToList(),
+                BhpPaidCount = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase) 
+                    ? doc.BhpChecklists?.Count(c => c.IsPaid) ?? 0 : null,
+                BhpTotalCount = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase) 
+                    ? doc.BhpChecklists?.Count ?? 0 : null
             };
+        }
+
+        private async Task GenerateBhpChecklistAsync(OperationalDocument doc)
+        {
+            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var existingChecklists = await _context.BhpPaymentChecklists
+                .Where(c => c.OperationalDocumentId == doc.Id)
+                .ToListAsync();
+
+            var currentYear = DateTime.UtcNow.Year;
+            bool addedAny = false;
+
+            // ValidFrom.Year+1 s/d ValidUntil.Year (inklusif) — semua tahun aktif ISR wajib bayar BHP
+            for (int year = doc.ValidFrom.Year + 1; year <= doc.ValidUntil.Year; year++)
+            {
+                if (!existingChecklists.Any(c => c.Year == year))
+                {
+                    var isPast = year < currentYear;
+                    var checklist = new BhpPaymentChecklist
+                    {
+                        OperationalDocumentId = doc.Id,
+                        Year = year,
+                        IsPaid = isPast,
+                        InvoiceNumber = isPast ? "Data Migrasi" : null,
+                        PaidAt = isPast ? DateTime.UtcNow : null,
+                        PaidByUserName = isPast ? "System" : null
+                    };
+                    _context.BhpPaymentChecklists.Add(checklist);
+                    doc.BhpChecklists.Add(checklist);
+                    addedAny = true;
+                }
+            }
+
+            if (addedAny)
+                await _context.SaveChangesAsync();
+        }
+
+        public async Task<(int processedCount, int generatedCount)> BackfillBhpChecklistsAsync()
+        {
+            var isrDocs = await _context.OperationalDocuments
+                .Include(d => d.BhpChecklists)
+                .Where(d => d.Type != null && d.Type.Contains("ISR"))
+                .ToListAsync();
+
+            int processedCount = 0;
+            int generatedCount = 0;
+
+            foreach (var doc in isrDocs)
+            {
+                var existingYears = doc.BhpChecklists.Select(c => c.Year).ToHashSet();
+                var currentYear = DateTime.UtcNow.Year;
+                bool addedAny = false;
+
+                // ValidFrom.Year+1 s/d ValidUntil.Year (inklusif)
+                for (int year = doc.ValidFrom.Year + 1; year <= doc.ValidUntil.Year; year++)
+                {
+                    if (!existingYears.Contains(year))
+                    {
+                        var isPast = year < currentYear;
+                        var checklist = new BhpPaymentChecklist
+                        {
+                            OperationalDocumentId = doc.Id,
+                            Year = year,
+                            IsPaid = isPast,
+                            InvoiceNumber = isPast ? "Data Migrasi" : null,
+                            PaidAt = isPast ? DateTime.UtcNow : null,
+                            PaidByUserName = isPast ? "System" : null
+                        };
+                        _context.BhpPaymentChecklists.Add(checklist);
+                        doc.BhpChecklists.Add(checklist);
+                        generatedCount++;
+                        addedAny = true;
+                    }
+                }
+
+                if (addedAny)
+                    processedCount++;
+            }
+
+            if (generatedCount > 0)
+                await _context.SaveChangesAsync();
+
+            return (processedCount, generatedCount);
         }
     }
 }

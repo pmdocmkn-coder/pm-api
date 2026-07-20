@@ -169,7 +169,6 @@ builder.Services.AddAuthentication(options =>
         {
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
-            
             // If the request is for our hub...
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
             {
@@ -252,6 +251,7 @@ builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupSe
 
 // ===== Operational Documents =====
 builder.Services.AddScoped<IOperationalDocumentService, OperationalDocumentService>();
+builder.Services.AddHostedService<BhpBackfillStartupService>(); // Auto-generate BHP checklist saat server start
 builder.Services.AddScoped<Pm.Services.Telegram.ITelegramQueueService, Pm.Services.Telegram.TelegramQueueService>();
 builder.Services.AddScoped<ITelegramService, TelegramService>();
 builder.Services.AddHostedService<Pm.Services.Telegram.TelegramQueueWorker>();

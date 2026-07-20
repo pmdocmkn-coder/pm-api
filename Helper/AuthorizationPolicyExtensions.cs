@@ -344,6 +344,8 @@ namespace Pm.Helper
             // Khusus Super Admin: kirim WA manual tanpa cek threshold tanggal
             options.AddPolicy("OperationalDocumentSendNotification", policy =>
                 policy.RequireClaim("Permission", "operationaldocument.sendnotification"));
+            options.AddPolicy("OperationalDocumentUpdateBhp", policy =>
+                policy.RequireClaim("Permission", "operationaldocument.updatebhp"));
         }
 
 

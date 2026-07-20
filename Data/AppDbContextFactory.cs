@@ -1,8 +1,10 @@
 // AppDbContextFactory.cs
+using System;
+using System.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Configuration;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
-using Pm.Data;
 
 namespace Pm.Data
 {
@@ -10,10 +12,22 @@ namespace Pm.Data
     {
         public AppDbContext CreateDbContext(string[] args)
         {
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+            var basePath = Directory.GetCurrentDirectory();
+
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(basePath)
+                .AddJsonFile("appsettings.json")
+                .AddJsonFile($"appsettings.{environment}.json", optional: true)
+                .AddEnvironmentVariables()
+                .Build();
+
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
             optionsBuilder.UseMySql(
-                "Server=203.153.127.45;Port=3306;Database=mknpm;User Id=sql_pm_web;Password=$mknsmart123$;CharSet=utf8mb4;",
-                ServerVersion.AutoDetect("Server=203.153.127.45;Port=3306;Database=mknpm;User Id=sql_pm_web;Password=$mknsmart123$;")
+                connectionString,
+                ServerVersion.AutoDetect(connectionString)
             );
             return new AppDbContext(optionsBuilder.Options);
         }
