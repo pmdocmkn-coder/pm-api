@@ -30,6 +30,8 @@ namespace Pm.DTOs.RadioRepairJob
         public string? OwnerDivision { get; set; }
         public string? OwnerDepartment { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
+        public int? PhotoHandoverId { get; set; }
+        public int PhotoCount { get; set; }
         public string DamageDescription { get; set; } = null!;
         public string? EquipmentTagType { get; set; }
         public bool IsWarranty { get; set; }

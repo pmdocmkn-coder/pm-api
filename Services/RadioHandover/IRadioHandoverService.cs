@@ -9,6 +9,7 @@ namespace Pm.Services.RadioHandover
         Task<RadioHandoverDetailDto?> GetByIdAsync(int id);
         Task<RadioHandoverDetailDto> CreateAsync(CreateRadioHandoverDto dto, int currentUserId);
         Task<RadioHandoverDetailDto> CompleteReceiverSignatureAsync(int id, CompleteReceiverSignatureDto dto, int currentUserId);
+        Task<RadioHandoverDetailDto> ResetReceiverSignatureAsync(int id, int currentUserId);
         Task<List<UserOptionDto>> GetTechniciansAsync();
         Task<List<UserOptionDto>> GetWarehouseReceiversAsync();
         Task<List<UserOptionDto>> GetHelpdeskReceiversAsync();
