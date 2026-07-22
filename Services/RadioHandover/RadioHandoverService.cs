@@ -104,8 +104,7 @@ namespace Pm.Services.RadioHandover
                     HasReceiverSignature = h.ReceiverSignatureBase64 != null && h.ReceiverSignatureBase64.Length > 0,
                     Status = h.Status,
                     PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null ? 1 : 0),
-                    PreviewPhotoBase64 = h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64).FirstOrDefault()
-                        ?? h.RadioPhotoBase64,
+                    PreviewPhotoBase64 = null, // loaded lazily via /thumbnail endpoint
                     PicReceiverName = h.PicReceiverName
                 })
                 .ToListAsync();
@@ -687,6 +686,57 @@ namespace Pm.Services.RadioHandover
             }
 
             return (await GetByIdAsync(handover.Id))!;
+        }
+
+        public async Task<RadioHandoverDetailDto> ResetReceiverSignatureAsync(int id, int currentUserId)
+        {
+            await ValidateUserRoleAsync(currentUserId, OperationalRoleNames.Warehouse);
+
+            var handover = await _context.RadioHandovers
+                .Include(h => h.RadioRepairJob)
+                .FirstOrDefaultAsync(h => h.Id == id && !h.IsDeleted)
+                ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
+
+            if (handover.Status != "Completed")
+                throw new InvalidOperationException("Serah terima belum selesai, tidak dapat dibatalkan.");
+
+            if (handover.HandoverType != RadioHandoverType.WarehouseToHelpdesk)
+                throw new InvalidOperationException("Hanya serah terima dari Warehouse ke Helpdesk yang dapat direset oleh Warehouse.");
+
+            var now = DateTime.UtcNow;
+
+            handover.ReceiverSignatureBase64 = null;
+            handover.SignedAt = null;
+            handover.Status = "PendingReceiverSignature";
+            handover.UpdatedAt = now;
+
+            if (handover.RadioRepairJob != null)
+            {
+                var oldStatus = handover.RadioRepairJob.Status;
+                handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
+                handover.RadioRepairJob.ClosedAt = null;
+                handover.RadioRepairJob.UpdatedAt = now;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = handover.RadioRepairJob.Id,
+                    FromStatus = oldStatus,
+                    ToStatus = RadioRepairJobStatus.HandedToWarehouse,
+                    Note = "Status Done dibatalkan, menunggu TTD ulang dari Helpdesk",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
+
+            await _activityLog.LogAsync("RadioHandover", handover.Id, "ResetReceiverSignature",
+                currentUserId, $"STR {handover.HandoverNumber} — TTD penerima direset oleh Warehouse");
+
+            await _context.SaveChangesAsync();
+
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            return (await GetByIdAsync(id))!;
         }
 
         private sealed record EquipmentSnapshot(
