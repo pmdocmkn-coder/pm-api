@@ -108,6 +108,34 @@ namespace Pm.Controllers
         }
 
         /// <summary>
+        /// Get tanggal-tanggal yang memiliki data call record dalam satu bulan
+        /// </summary>
+        [Authorize(Policy = "CanViewCallRecords")]
+        [HttpGet("dates-with-data")]
+        public async Task<IActionResult> GetDatesWithData(
+            [FromQuery] int year,
+            [FromQuery] int month)
+        {
+            if (month < 1 || month > 12)
+                return ApiResponse.BadRequest("month", "Bulan harus antara 1-12");
+
+            if (year < 2000 || year > 2100)
+                return ApiResponse.BadRequest("year", "Tahun tidak valid");
+
+            try
+            {
+                var dates = await _callRecordService.GetDatesWithDataAsync(year, month);
+                var dateStrings = dates.Select(d => d.ToString("yyyy-MM-dd")).ToList();
+                return ApiResponse.Success(dateStrings, $"Ditemukan {dateStrings.Count} tanggal dengan data di {year}-{month:D2}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting dates with data for {Year}-{Month}", year, month);
+                return ApiResponse.InternalServerError($"Terjadi kesalahan: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Get daily summary untuk tanggal tertentu
         /// </summary>
         [Authorize(Policy = "CanViewDetailCallRecords")]
