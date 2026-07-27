@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
 using Pm.DTOs.Auth;
+using Pm.Helper;
 using Pm.Models;
+using Pm.Services.Notification;
 
 namespace Pm.Services
 {
@@ -11,13 +13,15 @@ namespace Pm.Services
         private readonly AppDbContext _context;
         private readonly IJwtService _jwtService;
         private readonly IEmailService _emailService;
+        private readonly INotificationService _notificationService;
         private readonly ILogger<AuthService> _logger;
 
-        public AuthService(AppDbContext context, IJwtService jwtService, IEmailService emailService, ILogger<AuthService> logger)
+        public AuthService(AppDbContext context, IJwtService jwtService, IEmailService emailService, INotificationService notificationService, ILogger<AuthService> logger)
         {
             _context = context;
             _jwtService = jwtService;
             _emailService = emailService;
+            _notificationService = notificationService;
             _logger = logger;
         }
 
@@ -72,6 +76,9 @@ namespace Pm.Services
                 var rowsAffected = await _context.SaveChangesAsync();
                 _logger.LogInformation("✅ LastLogin saved to DB - UTC: {LastLogin} (Rows: {Rows})",
                     user.LastLogin, rowsAffected);
+
+                // Broadcast agar User Management page auto-refresh
+                await _notificationService.BroadcastRefreshDataAsync("User");
             }
             catch (Exception ex)
             {

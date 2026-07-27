@@ -50,5 +50,8 @@ namespace Pm.Services
 
         // Rebuild FleetStatistics from raw CallRecords (for data correction)
         Task<int> RebuildFleetStatisticsAsync(DateTime? startDate = null, DateTime? endDate = null);
+
+        // Get distinct dates that have call record data in a given month
+        Task<List<DateTime>> GetDatesWithDataAsync(int year, int month);
     }
 }

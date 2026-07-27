@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs;
 using Pm.DTOs.Common;
+using Pm.Helper;
 using Pm.Models;
 
 namespace Pm.Services
@@ -439,9 +440,9 @@ namespace Pm.Services
                 RoleId = user.RoleId,
                 RoleName = user.Role?.RoleName,
                 LastLogin = user.LastLogin,
-                LastLoginText = user.LastLogin?.ToString("dd MMM yyyy HH:mm") ?? "Belum pernah login",
+                LastLoginText = WitaHelper.Format(user.LastLogin, "dd MMM yyyy HH:mm"),
                 CreatedAt = user.CreatedAt,
-                CreatedAtText = user.CreatedAt.ToString("dd MMM yyyy HH:mm")
+                CreatedAtText = WitaHelper.Format(user.CreatedAt, "dd MMM yyyy HH:mm")
             };
         }
 
