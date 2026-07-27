@@ -62,6 +62,12 @@ namespace Pm.Models
         /// <summary>Tag kuning (rusak) atau hijau (baik).</summary>
         public EquipmentTagType EquipmentTagType { get; set; } = EquipmentTagType.Damaged;
 
+        /// <summary>Menandakan apakah serah terima ini parsial (tidak semua item diserahkan).</summary>
+        public bool IsPartial { get; set; } = false;
+
+        /// <summary>Menandakan apakah unit radio utama diserahkan pada serah terima ini.</summary>
+        public bool ContainsMainRadioUnit { get; set; } = true;
+
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
 

@@ -131,6 +131,9 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasReceiverSignature { get; set; }
         public string? Remarks { get; set; }
         public string? PicReceiverName { get; set; }
+        public bool IsPartial { get; set; }
+        public bool ContainsMainRadioUnit { get; set; }
+        public List<string> Accessories { get; set; } = [];
     }
 
     public class RadioRepairJobDetailDto : RadioRepairJobListDto

@@ -23,6 +23,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public string? Unit { get; set; }
         [Range(1, 999)]
         public int Quantity { get; set; } = 1;
+        public bool IsAlatKerja { get; set; }
     }
 
     public class CreateWarehousePartBorrowDto
@@ -49,6 +50,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public int TotalItems => Items.Count;
         public string Status { get; set; } = null!;
         public string BorrowedByName { get; set; } = null!;
+        public int BorrowedByUserId { get; set; }
         public DateTime RequestedAt { get; set; }
         /// <summary>Waktu barang benar-benar diserahkan (Issued). Dipakai untuk hitung durasi peminjaman.</summary>
         public DateTime? IssuedAt { get; set; }

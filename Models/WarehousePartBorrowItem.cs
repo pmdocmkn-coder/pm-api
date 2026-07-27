@@ -23,5 +23,7 @@ namespace Pm.Models
         public string? Unit { get; set; }
 
         public int Quantity { get; set; } = 1;
+
+        public bool IsAlatKerja { get; set; } = false;
     }
 }

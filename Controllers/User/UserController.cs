@@ -211,7 +211,7 @@ namespace Pm.Controllers
             }
         }
 
-        [Authorize(Policy = "CanUpdateUsers")]
+        [Authorize]
         [HttpPut("{userId}")]
         [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -219,6 +219,14 @@ namespace Pm.Controllers
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> UpdateUser(int userId, [FromBody] UpdateUserDto dto)
         {
+            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var canUpdateOthers = User.HasClaim("Permission", "user.update");
+
+            if (userId.ToString() != currentUserId && !canUpdateOthers)
+            {
+                return ApiResponse.Forbidden();
+            }
+
             var existingUser = await _userService.GetUserEntityByIdAsync(userId);
             if (existingUser == null)
             {
