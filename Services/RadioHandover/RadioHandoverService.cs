@@ -105,7 +105,9 @@ namespace Pm.Services.RadioHandover
                     Status = h.Status,
                     PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null ? 1 : 0),
                     PreviewPhotoBase64 = null, // loaded lazily via /thumbnail endpoint
-                    PicReceiverName = h.PicReceiverName
+                    PicReceiverName = h.PicReceiverName,
+                    IsPartial = h.IsPartial,
+                    ContainsMainRadioUnit = h.ContainsMainRadioUnit
                 })
                 .ToListAsync();
 
@@ -433,9 +435,9 @@ namespace Pm.Services.RadioHandover
                 throw new InvalidOperationException("Job harus berstatus HandedToWarehouse (sudah diterima dari teknisi).");
 
             var alreadyReturned = await _context.RadioHandovers.AnyAsync(h =>
-                h.RadioRepairJobId == job.Id && h.HandoverType == RadioHandoverType.WarehouseToHelpdesk);
+                h.RadioRepairJobId == job.Id && h.HandoverType == RadioHandoverType.WarehouseToHelpdesk && h.ContainsMainRadioUnit);
             if (alreadyReturned)
-                throw new InvalidOperationException("Radio job ini sudah diserahkan ke Helpdesk.");
+                throw new InvalidOperationException("Unit Radio Utama sudah diserahkan ke Helpdesk pada serah terima sebelumnya.");
 
             await ValidateUserRoleAsync(currentUserId, OperationalRoleNames.Warehouse);
             await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Helpdesk);
@@ -467,15 +469,18 @@ namespace Pm.Services.RadioHandover
             if (receiverComplete)
             {
                 var fromStatus = job.Status;
-                job.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
-                job.ClosedAt = now;
+                if (dto.ContainsMainRadioUnit)
+                {
+                    job.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+                    job.ClosedAt = now;
+                }
 
                 _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
                 {
                     JobId = job.Id,
                     FromStatus = fromStatus,
-                    ToStatus = RadioRepairJobStatus.ReturnedToHelpdesk,
-                    Note = $"Serah terima {strNumber} ke Helpdesk",
+                    ToStatus = job.Status,
+                    Note = $"Serah terima {strNumber} ke Helpdesk{(dto.ContainsMainRadioUnit ? "" : " (Parsial/Aksesoris)")}",
                     UserId = currentUserId,
                     At = now
                 });
@@ -585,8 +590,11 @@ namespace Pm.Services.RadioHandover
                 }
                 else if (handover.HandoverType == RadioHandoverType.WarehouseToHelpdesk)
                 {
-                    handover.RadioRepairJob.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
-                    handover.RadioRepairJob.ClosedAt = now;
+                    if (handover.ContainsMainRadioUnit)
+                    {
+                        handover.RadioRepairJob.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+                        handover.RadioRepairJob.ClosedAt = now;
+                    }
                 }
 
                 string statusNote = handover.HandoverType switch
@@ -710,7 +718,7 @@ namespace Pm.Services.RadioHandover
             handover.Status = "PendingReceiverSignature";
             handover.UpdatedAt = now;
 
-            if (handover.RadioRepairJob != null)
+            if (handover.RadioRepairJob != null && handover.ContainsMainRadioUnit)
             {
                 var oldStatus = handover.RadioRepairJob.Status;
                 handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
@@ -816,7 +824,9 @@ namespace Pm.Services.RadioHandover
                 HandoverAt = now,
                 SignedAt = receiverSignatureComplete ? now : null,
                 Status = receiverSignatureComplete ? "Completed" : "PendingReceiverSignature",
-                CreatedAt = now
+                CreatedAt = now,
+                IsPartial = dto.IsPartial,
+                ContainsMainRadioUnit = dto.ContainsMainRadioUnit
             };
             ApplyTagFields(handover, dto);
 
@@ -1198,6 +1208,8 @@ namespace Pm.Services.RadioHandover
             IsDeleted = h.IsDeleted,
             DeletedAt = h.DeletedAt,
             IsWarranty = h.RadioRepairJob.IsWarranty,
+            IsPartial = h.IsPartial,
+            ContainsMainRadioUnit = h.ContainsMainRadioUnit,
             Accessories = [.. h.Accessories.Select(a => new HandoverAccessoryItemDto
             {
                 ItemName = string.IsNullOrWhiteSpace(a.ItemName) ? (a.AccessoryCode ?? "") : a.ItemName,

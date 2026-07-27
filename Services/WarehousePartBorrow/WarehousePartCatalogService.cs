@@ -31,7 +31,17 @@ namespace Pm.Services.WarehousePartBorrow
             var items = await query.OrderBy(x => x.PartName)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new WarehousePartCatalogDto
+                .ToListAsync();
+
+            var activeBorrows = await _context.WarehousePartBorrowItems
+                .Include(i => i.Borrow)
+                    .ThenInclude(b => b.BorrowedBy)
+                .Where(i => i.IsAlatKerja && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Returned && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Rejected && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Cancelled)
+                .ToListAsync();
+
+            var result = items.Select(x => {
+                var activeBorrow = x.Description?.ToLower() == "alat kerja" ? activeBorrows.FirstOrDefault(b => b.PartCode == x.PartCode) : null;
+                return new WarehousePartCatalogDto
                 {
                     Id = x.Id,
                     PartCode = x.PartCode,
@@ -39,11 +49,13 @@ namespace Pm.Services.WarehousePartBorrow
                     OwnerId = x.OwnerId,
                     Category = x.Category,
                     Unit = x.Unit,
-                    Description = x.Description
-                })
-                .ToListAsync();
+                    Description = x.Description,
+                    IsBorrowed = activeBorrow != null,
+                    ActiveBorrowerName = activeBorrow?.Borrow?.BorrowerName ?? activeBorrow?.Borrow?.BorrowedBy?.FullName
+                };
+            }).ToList();
 
-            return new Pm.DTOs.Common.PagedResultDto<WarehousePartCatalogDto>(items, page, pageSize, totalCount);
+            return new Pm.DTOs.Common.PagedResultDto<WarehousePartCatalogDto>(result, page, pageSize, totalCount);
         }
 
         public async Task<List<WarehousePartCatalogDto>> SearchAsync(string? query, int limit = 10)
@@ -61,10 +73,20 @@ namespace Pm.Services.WarehousePartBorrow
                     (x.Category != null && x.Category.ToLower().Contains(s)));
             }
 
-            return await items
+            var resultItems = await items
                 .OrderBy(x => x.PartName)
                 .Take(limit)
-                .Select(x => new WarehousePartCatalogDto
+                .ToListAsync();
+
+            var activeBorrows = await _context.WarehousePartBorrowItems
+                .Include(i => i.Borrow)
+                    .ThenInclude(b => b.BorrowedBy)
+                .Where(i => i.IsAlatKerja && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Returned && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Rejected && i.Borrow.Status != Pm.Enums.WarehousePartBorrowStatus.Cancelled)
+                .ToListAsync();
+
+            return resultItems.Select(x => {
+                var activeBorrow = x.Description?.ToLower() == "alat kerja" ? activeBorrows.FirstOrDefault(b => b.PartCode == x.PartCode) : null;
+                return new WarehousePartCatalogDto
                 {
                     Id = x.Id,
                     PartCode = x.PartCode,
@@ -73,8 +95,10 @@ namespace Pm.Services.WarehousePartBorrow
                     Category = x.Category,
                     Unit = x.Unit,
                     Description = x.Description,
-                })
-                .ToListAsync();
+                    IsBorrowed = activeBorrow != null,
+                    ActiveBorrowerName = activeBorrow?.Borrow?.BorrowerName ?? activeBorrow?.Borrow?.BorrowedBy?.FullName
+                };
+            }).ToList();
         }
 
         public async Task<WarehousePartImportResultDto> ImportAsync(IFormFile file, int userId)

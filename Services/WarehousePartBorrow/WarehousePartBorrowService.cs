@@ -57,7 +57,10 @@ namespace Pm.Services.WarehousePartBorrow
 
             if (IsFieldRole(roleName))
             {
-                q = q.Where(b => b.BorrowedByUserId == currentUserId);
+                // Teknisi/Field role hanya bisa melihat histori pinjamannya sendiri,
+                // KECUALI jika barang yang dipinjam adalah "Alat Kerja", maka semua orang bisa melihatnya
+                // agar tahu siapa yang sedang meminjam alat tersebut.
+                q = q.Where(b => b.BorrowedByUserId == currentUserId || b.Items.Any(i => i.IsAlatKerja));
             }
 
             if (!string.IsNullOrWhiteSpace(query.Status) &&
@@ -100,10 +103,12 @@ namespace Pm.Services.WarehousePartBorrow
                         PartDescription = i.PartDescription, 
                         PartCode = i.PartCode, 
                         Unit = i.Unit,
-                        Quantity = i.Quantity 
+                        Quantity = i.Quantity,
+                        IsAlatKerja = i.IsAlatKerja
                     }).ToList(),
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
+                    BorrowedByUserId = b.BorrowedByUserId,
                     RequestedAt = b.RequestedAt,
                     IssuedAt = b.IssuedAt,
                     RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null,
@@ -133,10 +138,12 @@ namespace Pm.Services.WarehousePartBorrow
                         PartDescription = i.PartDescription, 
                         PartCode = i.PartCode, 
                         Unit = i.Unit,
-                        Quantity = i.Quantity 
+                        Quantity = i.Quantity,
+                        IsAlatKerja = i.IsAlatKerja
                     }).ToList(),
                     Status = b.Status.ToString(),
                     BorrowedByName = b.BorrowedBy.FullName,
+                    BorrowedByUserId = b.BorrowedByUserId,
                     RequestedAt = b.RequestedAt,
                     IssuedAt = b.IssuedAt,
                     RelatedJobNumber = b.RelatedRepairJob != null ? b.RelatedRepairJob.HelpdeskTicketNumber : null,
@@ -180,6 +187,38 @@ namespace Pm.Services.WarehousePartBorrow
                     (requestedCodes.Contains(p.PartCode) ||
                      requestedNames.Contains(p.PartName)))
                 .ToListAsync();
+            var items = new List<WarehousePartBorrowItem>();
+            foreach (var i in dto.Items)
+            {
+                var code = i.PartCode?.Trim();
+                var name = i.PartDescription.Trim();
+                var catalogItem = !string.IsNullOrWhiteSpace(code)
+                    ? catalogMatches.FirstOrDefault(p => string.Equals(p.PartCode, code, StringComparison.OrdinalIgnoreCase))
+                    : catalogMatches.FirstOrDefault(p => string.Equals(p.PartName, name, StringComparison.OrdinalIgnoreCase));
+                
+                bool isAlatKerja = catalogItem?.Description?.ToLower() == "alat kerja";
+                if (isAlatKerja && !string.IsNullOrWhiteSpace(code))
+                {
+                    i.Quantity = 1;
+                    bool isBorrowed = await _context.WarehousePartBorrowItems.AnyAsync(x => 
+                        x.PartCode == code &&
+                        x.Borrow.Status != WarehousePartBorrowStatus.Returned &&
+                        x.Borrow.Status != WarehousePartBorrowStatus.Rejected &&
+                        x.Borrow.Status != WarehousePartBorrowStatus.Cancelled);
+                        
+                    if (isBorrowed) 
+                        throw new InvalidOperationException($"Alat kerja {name} sedang dipinjam dan belum dikembalikan.");
+                }
+                
+                items.Add(new WarehousePartBorrowItem {
+                    PartDescription = i.PartDescription.Trim(),
+                    PartCode = i.PartCode?.Trim(),
+                    Unit = catalogItem?.Unit?.Trim() ?? i.Unit?.Trim(),
+                    Quantity = i.Quantity,
+                    IsAlatKerja = isAlatKerja
+                });
+            }
+
             var borrow = new Models.WarehousePartBorrow
             {
                 BorrowNumber = number,
@@ -191,12 +230,7 @@ namespace Pm.Services.WarehousePartBorrow
                 Status = WarehousePartBorrowStatus.PendingApproval,
                 RequestedAt = now,
                 CreatedAt = now,
-                Items = dto.Items.Select(i => new WarehousePartBorrowItem {
-                    PartDescription = i.PartDescription.Trim(),
-                    PartCode = i.PartCode?.Trim(),
-                    Unit = ResolveUnit(i, catalogMatches),
-                    Quantity = i.Quantity
-                }).ToList()
+                Items = items
             };
             _context.WarehousePartBorrows.Add(borrow);
             await _context.SaveChangesAsync();
@@ -653,10 +687,12 @@ namespace Pm.Services.WarehousePartBorrow
                 PartDescription = i.PartDescription, 
                 PartCode = i.PartCode, 
                 Unit = i.Unit,
-                Quantity = i.Quantity 
+                Quantity = i.Quantity,
+                IsAlatKerja = i.IsAlatKerja
             }).ToList(),
             Status = b.Status.ToString(),
             BorrowedByName = b.BorrowedBy.FullName,
+            BorrowedByUserId = b.BorrowedByUserId,
             RequestedAt = b.RequestedAt,
             RelatedJobNumber = b.RelatedRepairJob?.HelpdeskTicketNumber,
             TicketNumber = b.TicketNumber,

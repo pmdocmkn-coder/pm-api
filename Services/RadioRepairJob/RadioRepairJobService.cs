@@ -90,12 +90,18 @@ namespace Pm.Services.RadioRepairJob
                     OwnerDivision = j.OwnerDivision ?? (j.Radio != null ? j.Radio.Division : null),
                     OwnerDepartment = j.OwnerDepartment ?? (j.Radio != null ? j.Radio.Department : null),
                     PreviewPhotoBase64 = null, // loaded lazily on frontend
-                    PhotoHandoverId = j.CurrentHandoverId != null 
-                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && !h.IsDeleted).Select(h => h.Id).FirstOrDefault()
-                        : j.Handovers.Where(h => !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.Id).FirstOrDefault(),
-                    PhotoCount = j.CurrentHandoverId != null
-                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && !h.IsDeleted).Select(h => h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null && h.RadioPhotoBase64 != "" ? 1 : 0)).FirstOrDefault()
-                        : j.Handovers.Where(h => !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null && h.RadioPhotoBase64 != "" ? 1 : 0)).FirstOrDefault(),
+                    PhotoHandoverId = j.Handovers
+                        .Where(h => !h.IsDeleted)
+                        .OrderBy(h => h.HandoverType == RadioHandoverType.HelpdeskToTechnician ? 0 : 1)
+                        .ThenBy(h => h.Id)
+                        .Select(h => h.Id)
+                        .FirstOrDefault(),
+                    PhotoCount = j.Handovers
+                        .Where(h => !h.IsDeleted)
+                        .OrderBy(h => h.HandoverType == RadioHandoverType.HelpdeskToTechnician ? 0 : 1)
+                        .ThenBy(h => h.Id)
+                        .Select(h => h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null && h.RadioPhotoBase64 != "" ? 1 : 0))
+                        .FirstOrDefault(),
                     EquipmentTagType = j.EquipmentTagType != null ? j.EquipmentTagType.ToString() : null,
                     IsWarranty = j.IsWarranty,
                     OriginFrom = j.OriginFrom,
@@ -1287,7 +1293,10 @@ namespace Pm.Services.RadioRepairJob
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
                 Remarks = h.Remarks,
-                PicReceiverName = h.PicReceiverName
+                PicReceiverName = h.PicReceiverName,
+                IsPartial = h.IsPartial,
+                ContainsMainRadioUnit = h.ContainsMainRadioUnit,
+                Accessories = h.Accessories.Select(a => a.Quantity + " " + a.Unit + " " + a.ItemName).ToList()
             })],
             PrimaryHandover = job.Handovers
                 .Where(h => !h.IsDeleted && h.HandoverType == RadioHandoverType.HelpdeskToTechnician)

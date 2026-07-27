@@ -60,6 +60,9 @@ namespace Pm.DTOs.RadioHandover
         /// <summary>Status garansi radio. Hanya berlaku untuk tipe HD → Teknisi. Default: tidak warranty.</summary>
         public bool IsWarranty { get; set; } = false;
 
+        public bool IsPartial { get; set; } = false;
+        public bool ContainsMainRadioUnit { get; set; } = true;
+
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
 
@@ -139,6 +142,8 @@ namespace Pm.DTOs.RadioHandover
         public int PhotoCount { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
         public string? PicReceiverName { get; set; }
+        public bool IsPartial { get; set; }
+        public bool ContainsMainRadioUnit { get; set; }
     }
 
     public class UpdateRadioHandoverDto
