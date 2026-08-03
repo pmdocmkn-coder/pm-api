@@ -302,11 +302,16 @@ namespace Pm.Services
 
         private static OperationalDocumentResponseDto MapToResponse(OperationalDocument doc)
         {
+            var isIsr = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase);
+            var (bhpChecklist, bhpPaidCount, bhpTotalCount) = isIsr 
+                ? BuildBhpChecklistResponse(doc) 
+                : (null, null, null);
+
             return new OperationalDocumentResponseDto
             {
                 Id = doc.Id,
                 Name = doc.Name,
-                Type = doc.Type,
+                Type = doc.Type ?? "",
                 ReferenceNumber = doc.ReferenceNumber,
                 GroupName = doc.GroupName,
                 ValidFrom = doc.ValidFrom,
@@ -318,57 +323,103 @@ namespace Pm.Services
                 FollowUpRemark = doc.FollowUpRemark,
                 CreatedAt = doc.CreatedAt,
                 UpdatedAt = doc.UpdatedAt,
-                BhpChecklist = doc.BhpChecklists?.Select(c => new BhpPaymentChecklistItemDto
-                {
-                    Id = c.Id,
-                    Year = c.Year,
-                    IsPaid = c.IsPaid,
-                    InvoiceNumber = c.InvoiceNumber,
-                    PaidAt = c.PaidAt,
-                    PaidByUserName = c.PaidByUserName
-                }).OrderBy(c => c.Year).ToList(),
-                BhpPaidCount = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase) 
-                    ? doc.BhpChecklists?.Count(c => c.IsPaid) ?? 0 : null,
-                BhpTotalCount = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase) 
-                    ? doc.BhpChecklists?.Count ?? 0 : null
+                BhpChecklist = bhpChecklist,
+                BhpPaidCount = bhpPaidCount,
+                BhpTotalCount = bhpTotalCount
             };
+        }
+
+        private static (List<BhpPaymentChecklistItemDto>? checklist, int? paidCount, int? totalCount) BuildBhpChecklistResponse(OperationalDocument doc)
+        {
+            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
+            {
+                return (null, null, null);
+            }
+
+            var dbChecklists = doc.BhpChecklists?.ToList() ?? [];
+            var currentYear = DateTime.UtcNow.Year;
+
+            var validFrom = doc.ValidFrom.Year >= 2000 
+                ? doc.ValidFrom 
+                : (doc.ValidUntil.Year >= 2000 ? doc.ValidUntil.AddYears(-4) : DateTime.UtcNow);
+
+            var validUntil = doc.ValidUntil.Year >= 2000 
+                ? doc.ValidUntil 
+                : validFrom.AddYears(4);
+
+            int startYear = validFrom.Year + 1;
+            if (startYear > validUntil.Year && validUntil.Year >= validFrom.Year)
+            {
+                startYear = validFrom.Year;
+            }
+
+            if (startYear < 2000) startYear = 2000;
+
+            var resultList = new List<BhpPaymentChecklistItemDto>();
+
+            if (validUntil.Year >= startYear)
+            {
+                for (int year = startYear; year <= validUntil.Year; year++)
+                {
+                    var existing = dbChecklists.FirstOrDefault(c => c.Year == year);
+                    if (existing != null)
+                    {
+                        resultList.Add(new BhpPaymentChecklistItemDto
+                        {
+                            Id = existing.Id,
+                            Year = existing.Year,
+                            IsPaid = existing.IsPaid,
+                            InvoiceNumber = existing.InvoiceNumber,
+                            PaidAt = existing.PaidAt,
+                            PaidByUserName = existing.PaidByUserName
+                        });
+                    }
+                    else
+                    {
+                        var isPast = year < currentYear;
+                        resultList.Add(new BhpPaymentChecklistItemDto
+                        {
+                            Id = 0,
+                            Year = year,
+                            IsPaid = isPast,
+                            InvoiceNumber = isPast ? "Data Migrasi" : null,
+                            PaidAt = isPast ? DateTime.UtcNow : null,
+                            PaidByUserName = isPast ? "System" : null
+                        });
+                    }
+                }
+            }
+
+            // Include any existing db checklists outside expected range if any
+            foreach (var existing in dbChecklists)
+            {
+                if (!resultList.Any(r => r.Year == existing.Year))
+                {
+                    resultList.Add(new BhpPaymentChecklistItemDto
+                    {
+                        Id = existing.Id,
+                        Year = existing.Year,
+                        IsPaid = existing.IsPaid,
+                        InvoiceNumber = existing.InvoiceNumber,
+                        PaidAt = existing.PaidAt,
+                        PaidByUserName = existing.PaidByUserName
+                    });
+                }
+            }
+
+            resultList = [.. resultList.OrderBy(r => r.Year)];
+            int paidCount = resultList.Count(r => r.IsPaid);
+            int totalCount = resultList.Count;
+
+            return (resultList, paidCount, totalCount);
         }
 
         private async Task GenerateBhpChecklistAsync(OperationalDocument doc)
         {
-            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
-                return;
-
-            var existingChecklists = await _context.BhpPaymentChecklists
-                .Where(c => c.OperationalDocumentId == doc.Id)
-                .ToListAsync();
-
-            var currentYear = DateTime.UtcNow.Year;
-            bool addedAny = false;
-
-            // ValidFrom.Year+1 s/d ValidUntil.Year (inklusif) — semua tahun aktif ISR wajib bayar BHP
-            for (int year = doc.ValidFrom.Year + 1; year <= doc.ValidUntil.Year; year++)
+            if (EnsureBhpChecklistForDoc(doc, _context))
             {
-                if (!existingChecklists.Any(c => c.Year == year))
-                {
-                    var isPast = year < currentYear;
-                    var checklist = new BhpPaymentChecklist
-                    {
-                        OperationalDocumentId = doc.Id,
-                        Year = year,
-                        IsPaid = isPast,
-                        InvoiceNumber = isPast ? "Data Migrasi" : null,
-                        PaidAt = isPast ? DateTime.UtcNow : null,
-                        PaidByUserName = isPast ? "System" : null
-                    };
-                    _context.BhpPaymentChecklists.Add(checklist);
-                    doc.BhpChecklists.Add(checklist);
-                    addedAny = true;
-                }
-            }
-
-            if (addedAny)
                 await _context.SaveChangesAsync();
+            }
         }
 
         public async Task<(int processedCount, int generatedCount)> BackfillBhpChecklistsAsync()
@@ -383,40 +434,68 @@ namespace Pm.Services
 
             foreach (var doc in isrDocs)
             {
-                var existingYears = doc.BhpChecklists.Select(c => c.Year).ToHashSet();
-                var currentYear = DateTime.UtcNow.Year;
-                bool addedAny = false;
-
-                // ValidFrom.Year+1 s/d ValidUntil.Year (inklusif)
-                for (int year = doc.ValidFrom.Year + 1; year <= doc.ValidUntil.Year; year++)
+                int countBefore = doc.BhpChecklists?.Count ?? 0;
+                if (EnsureBhpChecklistForDoc(doc, _context))
                 {
-                    if (!existingYears.Contains(year))
-                    {
-                        var isPast = year < currentYear;
-                        var checklist = new BhpPaymentChecklist
-                        {
-                            OperationalDocumentId = doc.Id,
-                            Year = year,
-                            IsPaid = isPast,
-                            InvoiceNumber = isPast ? "Data Migrasi" : null,
-                            PaidAt = isPast ? DateTime.UtcNow : null,
-                            PaidByUserName = isPast ? "System" : null
-                        };
-                        _context.BhpPaymentChecklists.Add(checklist);
-                        doc.BhpChecklists.Add(checklist);
-                        generatedCount++;
-                        addedAny = true;
-                    }
-                }
-
-                if (addedAny)
                     processedCount++;
+                    generatedCount += (doc.BhpChecklists?.Count ?? 0) - countBefore;
+                }
             }
 
             if (generatedCount > 0)
                 await _context.SaveChangesAsync();
 
             return (processedCount, generatedCount);
+        }
+
+        private static bool EnsureBhpChecklistForDoc(OperationalDocument doc, AppDbContext context)
+        {
+            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var existingYears = doc.BhpChecklists?.Select(c => c.Year).ToHashSet() ?? [];
+            var currentYear = DateTime.UtcNow.Year;
+            bool addedAny = false;
+
+            var validFrom = doc.ValidFrom.Year >= 2000 
+                ? doc.ValidFrom 
+                : (doc.ValidUntil.Year >= 2000 ? doc.ValidUntil.AddYears(-4) : DateTime.UtcNow);
+
+            var validUntil = doc.ValidUntil.Year >= 2000 
+                ? doc.ValidUntil 
+                : validFrom.AddYears(4);
+
+            int startYear = validFrom.Year + 1;
+            if (startYear > validUntil.Year && validUntil.Year >= validFrom.Year)
+            {
+                startYear = validFrom.Year;
+            }
+
+            if (startYear < 2000) startYear = 2000;
+            if (validUntil.Year < startYear) return false;
+
+            for (int year = startYear; year <= validUntil.Year; year++)
+            {
+                if (!existingYears.Contains(year))
+                {
+                    var isPast = year < currentYear;
+                    var checklist = new BhpPaymentChecklist
+                    {
+                        OperationalDocumentId = doc.Id,
+                        Year = year,
+                        IsPaid = isPast,
+                        InvoiceNumber = isPast ? "Data Migrasi" : null,
+                        PaidAt = isPast ? DateTime.UtcNow : null,
+                        PaidByUserName = isPast ? "System" : null
+                    };
+                    context.BhpPaymentChecklists.Add(checklist);
+                    doc.BhpChecklists ??= [];
+                    doc.BhpChecklists.Add(checklist);
+                    addedAny = true;
+                }
+            }
+
+            return addedAny;
         }
     }
 }
