@@ -12,7 +12,7 @@ namespace Pm.Services
     {
         public async Task<PagedResultDto<OperationalDocumentResponseDto>> GetAllAsync(OperationalDocumentQueryDto query)
         {
-            var q = _context.OperationalDocuments.Include(d => d.BhpChecklists).AsNoTracking().AsQueryable();
+            var q = _context.OperationalDocuments.Include(d => d.BhpChecklists).AsSplitQuery().AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
