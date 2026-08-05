@@ -171,7 +171,7 @@ namespace Pm.Controllers.RadioRepairJob
         }
 
         [HttpPatch("{id}/approve-scrap")]
-        [Authorize(Policy = "RadioScrapCreate")]
+        [Authorize]
         public async Task<IActionResult> ApproveScrap(int id, [FromBody] ApproveScrapDto dto)
         {
             try

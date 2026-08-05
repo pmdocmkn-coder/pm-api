@@ -15,6 +15,8 @@ namespace Pm.Services.RadioHandover
         Task<List<UserOptionDto>> GetHelpdeskReceiversAsync();
         Task<RadioHandoverDetailDto> UpdateAsync(int id, UpdateRadioHandoverDto dto, int userId);
         Task SoftDeleteAsync(int id, int userId);
+        Task CancelPendingHandoverAsync(int id, int userId);
+        Task<RadioHandoverDetailDto> ChangeReceiverAsync(int id, int newReceiverUserId, int currentUserId);
         Task RestoreAsync(int id, int userId);
         Task DeletePermanentAsync(int id, int userId);
     }

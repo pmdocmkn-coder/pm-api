@@ -109,6 +109,8 @@ namespace Pm.Controllers.RadioHandover
                 Enums.RadioHandoverType.HelpdeskToTechnician => HandoverPermissionHelper.CanCreateHelpdeskToTechnician(User),
                 Enums.RadioHandoverType.TechnicianToWarehouse => HandoverPermissionHelper.CanCreateTechnicianToWarehouse(User),
                 Enums.RadioHandoverType.WarehouseToHelpdesk => HandoverPermissionHelper.CanCreateWarehouseToHelpdesk(User),
+                Enums.RadioHandoverType.TechnicianToHelpdesk => HandoverPermissionHelper.CanCreateTechnicianToHelpdesk(User),
+                Enums.RadioHandoverType.HelpdeskToWarehouse => HandoverPermissionHelper.CanCreateHelpdeskToWarehouse(User),
                 _ => false
             };
             if (!allowed)
@@ -180,7 +182,7 @@ namespace Pm.Controllers.RadioHandover
         }
 
         [HttpGet("helpdesk-receivers")]
-        [Authorize(Policy = "RadioHandoverCreateWhHd")]
+        [Authorize]
         public async Task<IActionResult> GetHelpdeskReceivers()
         {
             try
@@ -214,6 +216,35 @@ namespace Pm.Controllers.RadioHandover
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (InvalidOperationException ex) { return ApiResponse.BadRequest("handover", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/cancel-pending")]
+        [Authorize]
+        public async Task<IActionResult> CancelPending(int id)
+        {
+            try
+            {
+                await _service.CancelPendingHandoverAsync(id, CurrentUserId);
+                return ApiResponse.Success(null, "Serah terima berhasil dibatalkan");
+            }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("handover", new[] { ex.Message }); }
+            catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
+        }
+
+        [HttpPatch("{id}/change-receiver")]
+        [Authorize]
+        public async Task<IActionResult> ChangeReceiver(int id, [FromBody] ChangeReceiverDto dto)
+        {
+            try
+            {
+                var data = await _service.ChangeReceiverAsync(id, dto.NewReceiverUserId, CurrentUserId);
+                return ApiResponse.Success(data, "Penerima berhasil diubah");
+            }
+            catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("handover", new[] { ex.Message }); }
+            catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 

@@ -144,6 +144,7 @@ namespace Pm.DTOs.RadioHandover
         public string? PicReceiverName { get; set; }
         public bool IsPartial { get; set; }
         public bool ContainsMainRadioUnit { get; set; }
+        public bool IsScrap { get; set; }
     }
 
     public class UpdateRadioHandoverDto
@@ -258,5 +259,11 @@ namespace Pm.DTOs.RadioHandover
         public int UserId { get; set; }
         public string FullName { get; set; } = null!;
         public string Username { get; set; } = null!;
+    }
+
+    public class ChangeReceiverDto
+    {
+        [Required]
+        public int NewReceiverUserId { get; set; }
     }
 }

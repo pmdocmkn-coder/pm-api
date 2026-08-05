@@ -107,7 +107,8 @@ namespace Pm.Services.RadioHandover
                     PreviewPhotoBase64 = null, // loaded lazily via /thumbnail endpoint
                     PicReceiverName = h.PicReceiverName,
                     IsPartial = h.IsPartial,
-                    ContainsMainRadioUnit = h.ContainsMainRadioUnit
+                    ContainsMainRadioUnit = h.ContainsMainRadioUnit,
+                    IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk))
                 })
                 .ToListAsync();
 
@@ -138,7 +139,9 @@ namespace Pm.Services.RadioHandover
 
             if (dto.HandoverType == RadioHandoverType.HelpdeskToTechnician || 
                 dto.HandoverType == RadioHandoverType.TechnicianToWarehouse ||
-                dto.HandoverType == RadioHandoverType.WarehouseToHelpdesk)
+                dto.HandoverType == RadioHandoverType.WarehouseToHelpdesk ||
+                dto.HandoverType == RadioHandoverType.TechnicianToHelpdesk ||
+                dto.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
             {
                 if (!string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64))
                     _imageValidator.Validate(dto.ReceiverSignatureBase64, StoredImageKind.Signature, "TTD penerima");
@@ -153,6 +156,8 @@ namespace Pm.Services.RadioHandover
                 RadioHandoverType.HelpdeskToTechnician => await CreateHelpdeskToTechnicianAsync(dto, photos, currentUserId),
                 RadioHandoverType.TechnicianToWarehouse => await CreateTechnicianToWarehouseAsync(dto, photos, currentUserId),
                 RadioHandoverType.WarehouseToHelpdesk => await CreateWarehouseToHelpdeskAsync(dto, photos, currentUserId),
+                RadioHandoverType.TechnicianToHelpdesk => await CreateTechnicianToHelpdeskAsync(dto, photos, currentUserId),
+                RadioHandoverType.HelpdeskToWarehouse => await CreateHelpdeskToWarehouseAsync(dto, photos, currentUserId),
                 _ => throw new ArgumentException("Tipe serah terima tidak dikenal.")
             };
         }
@@ -422,6 +427,226 @@ namespace Pm.Services.RadioHandover
             return (await GetByIdAsync(handover.Id))!;
         }
 
+        private async Task<RadioHandoverDetailDto> CreateTechnicianToHelpdeskAsync(
+            CreateRadioHandoverDto dto, List<string> photos, int currentUserId)
+        {
+            if (!dto.RadioRepairJobId.HasValue)
+                throw new ArgumentException("RadioRepairJobId wajib untuk serah terima Tek→HD.");
+
+            if (!dto.HandedOverByWorkshopTechnicianId.HasValue)
+                throw new ArgumentException("Teknisi yang menyerahkan wajib dipilih saat serah terima Teknisi ke Helpdesk.");
+
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.Scrapped)
+                throw new InvalidOperationException("Job harus berstatus Scrapped.");
+
+            var currentRole = await _context.Users.AsNoTracking()
+                .Include(u => u.Role)
+                .Where(u => u.UserId == currentUserId)
+                .Select(u => u.Role!.RoleName)
+                .FirstOrDefaultAsync();
+            if (!OperationalRoleNames.IsTechnicianRole(currentRole))
+                throw new UnauthorizedAccessException("Hanya user dengan role teknisi yang dapat serah terima ke Helpdesk.");
+
+            var pendingHandover = await _context.RadioHandovers.AnyAsync(h => 
+                h.RadioRepairJobId == job.Id && 
+                h.HandoverType == RadioHandoverType.TechnicianToHelpdesk && 
+                h.Status == "PendingReceiverSignature" && 
+                !h.IsDeleted);
+            if (pendingHandover)
+                throw new InvalidOperationException("Masih ada serah terima ke Helpdesk yang menunggu tanda tangan penerima.");
+
+            await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Helpdesk);
+
+            var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
+            var now = DateTime.UtcNow;
+
+            await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.TechnicianToHelpdesk);
+
+            var isReceiverSignatureComplete = !string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64);
+            var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, isReceiverSignatureComplete);
+            handover.RadioId = job.RadioId ?? dto.RadioId;
+            handover.RadioSerialNumber = job.RadioSerialNumber;
+            handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
+
+            if (handover.Accessories.Count == 0)
+                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
+
+            _context.RadioHandovers.Add(handover);
+            await _context.SaveChangesAsync();
+
+            job.CurrentHandoverId = handover.Id;
+            job.UpdatedAt = now;
+
+            if (isReceiverSignatureComplete)
+            {
+                var fromStatus = job.Status;
+                job.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = RadioRepairJobStatus.ReturnedToHelpdesk,
+                    Note = $"Serah terima scrap {strNumber}",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
+
+            if (job.RadioId.HasValue)
+                await AddRepairReturnedToHelpdeskHistoryAsync(job, handover, currentUserId);
+
+            await _activityLog.LogAsync("RadioHandover", handover.Id, "Create",
+                currentUserId, $"STR {strNumber} Tek→HD, tiket {job.HelpdeskTicketNumber}");
+
+            await _context.SaveChangesAsync();
+
+            var technicianName = "Teknisi";
+            if (dto.HandedOverByWorkshopTechnicianId.HasValue)
+            {
+                var tech = await _context.WorkshopTechnicians.FindAsync(dto.HandedOverByWorkshopTechnicianId.Value);
+                if (tech != null) technicianName = tech.Name;
+            }
+
+            if (!isReceiverSignatureComplete)
+            {
+                // Notif untuk TTD
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = dto.ReceivedByUserId,
+                    Title = "Tanda Tangan Serah Terima",
+                    Message = $"Anda ditunjuk sebagai penerima untuk STR {strNumber} (SN: {job.RadioSerialNumber}). Mohon lengkapi tanda tangan Anda.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover?tab=incoming",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+            else
+            {
+                // Notif ke Helpdesk & Supv WKS via permission Tek→HD
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioHandoverWhHd, new CreateNotificationDto
+                {
+                    Title = "Radio Scrap Dikembalikan ke Helpdesk",
+                    Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Helpdesk.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover?tab=incoming",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            return (await GetByIdAsync(handover.Id))!;
+        }
+
+        private async Task<RadioHandoverDetailDto> CreateHelpdeskToWarehouseAsync(
+            CreateRadioHandoverDto dto, List<string> photos, int currentUserId)
+        {
+            if (!dto.RadioRepairJobId.HasValue)
+                throw new ArgumentException("RadioRepairJobId wajib untuk serah terima HD→WH.");
+
+            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
+                ?? throw new KeyNotFoundException("Job tidak ditemukan.");
+
+            if (job.Status != RadioRepairJobStatus.ReturnedToHelpdesk)
+                throw new InvalidOperationException("Job harus berstatus ReturnedToHelpdesk (sudah diterima kembali dari teknisi).");
+
+            var pendingHandover = await _context.RadioHandovers.AnyAsync(h => 
+                h.RadioRepairJobId == job.Id && 
+                h.HandoverType == RadioHandoverType.HelpdeskToWarehouse && 
+                h.Status == "PendingReceiverSignature" && 
+                !h.IsDeleted);
+            if (pendingHandover)
+                throw new InvalidOperationException("Masih ada serah terima ke Warehouse yang menunggu tanda tangan penerima.");
+
+            await ValidateUserRoleAsync(currentUserId, OperationalRoleNames.Helpdesk);
+            await ValidateUserRoleAsync(dto.ReceivedByUserId, OperationalRoleNames.Warehouse);
+
+            var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
+            var now = DateTime.UtcNow;
+
+            await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.HelpdeskToWarehouse);
+
+            var isReceiverSignatureComplete = !string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64);
+            var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, isReceiverSignatureComplete);
+            handover.HandoverType = RadioHandoverType.HelpdeskToWarehouse;
+            handover.RadioId = job.RadioId ?? dto.RadioId;
+            handover.RadioSerialNumber = job.RadioSerialNumber;
+            handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
+
+            if (handover.Accessories.Count == 0)
+                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
+
+            _context.RadioHandovers.Add(handover);
+            await _context.SaveChangesAsync();
+
+            job.CurrentHandoverId = handover.Id;
+            job.UpdatedAt = now;
+
+            if (isReceiverSignatureComplete)
+            {
+                var fromStatus = job.Status;
+                job.Status = RadioRepairJobStatus.HandedToWarehouse;
+
+                _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                {
+                    JobId = job.Id,
+                    FromStatus = fromStatus,
+                    ToStatus = RadioRepairJobStatus.HandedToWarehouse,
+                    Note = $"Serah terima scrap ke warehouse {strNumber}",
+                    UserId = currentUserId,
+                    At = now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob"); // ← Dashboard Perbaikan
+
+            await _activityLog.LogAsync("RadioHandover", handover.Id, "Create",
+                currentUserId, $"STR {strNumber} HD→WH, tiket {job.HelpdeskTicketNumber}");
+
+            await _context.SaveChangesAsync();
+
+            if (!isReceiverSignatureComplete)
+            {
+                // Notif untuk TTD
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = dto.ReceivedByUserId,
+                    Title = "Tanda Tangan Serah Terima",
+                    Message = $"Anda ditunjuk sebagai penerima untuk STR {strNumber} (SN: {job.RadioSerialNumber}). Mohon lengkapi tanda tangan Anda.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover/warehouse",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+            else
+            {
+                await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioHandoverWhHd, new CreateNotificationDto
+                {
+                    Title = "Radio Masuk Warehouse",
+                    Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Helpdesk ke Warehouse.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover/warehouse",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            return (await GetByIdAsync(handover.Id))!;
+        }
+
         private async Task<RadioHandoverDetailDto> CreateWarehouseToHelpdeskAsync(
             CreateRadioHandoverDto dto, List<string> photos, int currentUserId)
         {
@@ -596,12 +821,17 @@ namespace Pm.Services.RadioHandover
                         handover.RadioRepairJob.ClosedAt = now;
                     }
                 }
+                else if (handover.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
+                {
+                    handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
+                }
 
                 string statusNote = handover.HandoverType switch
                 {
                     RadioHandoverType.HelpdeskToTechnician => "Teknisi melengkapi TTD penerima (Radio diterima, menunggu assign teknisi)",
                     RadioHandoverType.TechnicianToWarehouse => "Warehouse melengkapi TTD penerima",
                     RadioHandoverType.WarehouseToHelpdesk => "Helpdesk melengkapi TTD penerima",
+                    RadioHandoverType.HelpdeskToWarehouse => "Warehouse melengkapi TTD penerima (Radio scrap dari Helpdesk)",
                     _ => "TTD penerima dilengkapi"
                 };
 
@@ -1170,7 +1400,7 @@ namespace Pm.Services.RadioHandover
             HandedOverByName = h.HandedOverByWorkshopTechnician?.Name ?? h.HandedOverBy.FullName,
             // Tek→WH: penerima adalah akun Warehouse (ReceivedBy), bukan WorkshopTechnician (itu nama teknisi penyerah)
             // WH→HD / HD→Tek: penerima bisa berupa WorkshopTechnician atau akun sistem
-            ReceivedByName = h.HandoverType == RadioHandoverType.TechnicianToWarehouse
+            ReceivedByName = h.HandoverType == RadioHandoverType.TechnicianToWarehouse || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse
                 ? h.ReceivedBy.FullName
                 : h.WorkshopTechnician?.Name ?? h.ReceivedBy.FullName,
             WorkshopTechnicianId = h.WorkshopTechnicianId,
@@ -1560,11 +1790,106 @@ namespace Pm.Services.RadioHandover
             h.DeletedByUserId = userId;
             h.UpdatedAt = now;
 
+            if (h.RadioRepairJob != null && h.RadioRepairJob.CurrentHandoverId == h.Id)
+            {
+                h.RadioRepairJob.CurrentHandoverId = null;
+                h.RadioRepairJob.UpdatedAt = now;
+            }
+
             await _activityLog.LogAsync("RadioHandover", h.Id, "SoftDelete", userId,
-                $"Arsip STR {h.HandoverNumber}, tiket {h.RadioRepairJob.HelpdeskTicketNumber}");
+                $"Arsip STR {h.HandoverNumber}, tiket {h.RadioRepairJob?.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+        }
+
+        public async Task CancelPendingHandoverAsync(int id, int userId)
+        {
+            var h = await _context.RadioHandovers
+                .Include(x => x.RadioRepairJob)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
+
+            if (h.Status != "PendingReceiverSignature")
+                throw new InvalidOperationException("Hanya serah terima yang masih menunggu TTD penerima yang dapat dibatalkan.");
+
+            if (h.HandedOverByUserId != userId)
+            {
+                // Also allow if userId matches the workshop technician
+                var isOwner = h.RadioRepairJob?.WorkshopTechnicianId.HasValue == true &&
+                              await _context.WorkshopTechnicians.AnyAsync(wt => wt.Id == h.RadioRepairJob.WorkshopTechnicianId && wt.UserId == userId);
+                if (!isOwner)
+                    throw new InvalidOperationException("Anda tidak memiliki hak untuk membatalkan serah terima ini.");
+            }
+
+            var now = DateTime.UtcNow;
+            h.IsDeleted = true;
+            h.DeletedAt = now;
+            h.DeletedByUserId = userId;
+            h.UpdatedAt = now;
+
+            if (h.RadioRepairJob != null && h.RadioRepairJob.CurrentHandoverId == h.Id)
+            {
+                h.RadioRepairJob.CurrentHandoverId = null;
+                h.RadioRepairJob.UpdatedAt = now;
+            }
+
+            await _activityLog.LogAsync("RadioHandover", h.Id, "CancelPending", userId,
+                $"Batalkan STR pending {h.HandoverNumber}, tiket {h.RadioRepairJob?.HelpdeskTicketNumber}");
+
+            await _context.SaveChangesAsync();
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+        }
+
+        public async Task<RadioHandoverDetailDto> ChangeReceiverAsync(int id, int newReceiverUserId, int currentUserId)
+        {
+            var h = await _context.RadioHandovers
+                .Include(x => x.HandedOverBy)
+                .Include(x => x.ReceivedBy)
+                .Include(x => x.RadioRepairJob)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new KeyNotFoundException("Serah terima tidak ditemukan.");
+
+            if (h.Status != "PendingReceiverSignature")
+                throw new InvalidOperationException("Hanya serah terima yang masih menunggu TTD penerima yang dapat diubah penerimanya.");
+
+            if (h.HandedOverByUserId != currentUserId)
+            {
+                var isOwner = h.RadioRepairJob?.WorkshopTechnicianId.HasValue == true &&
+                              await _context.WorkshopTechnicians.AnyAsync(wt => wt.Id == h.RadioRepairJob.WorkshopTechnicianId && wt.UserId == currentUserId);
+                if (!isOwner)
+                    throw new InvalidOperationException("Anda tidak memiliki hak untuk mengubah serah terima ini.");
+            }
+
+            var newUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == newReceiverUserId)
+                ?? throw new InvalidOperationException("User penerima baru tidak valid.");
+
+            h.ReceivedByUserId = newReceiverUserId;
+            h.ReceiverSignatureBase64 = null;   // Reset TTD lama agar penerima baru bisa tanda tangan ulang
+            h.UpdatedAt = DateTime.UtcNow;
+
+            var receiverName = newUser.FullName ?? newUser.Username;
+            await _activityLog.LogAsync("RadioHandover", h.Id, "ChangeReceiver", currentUserId, $"Ubah penerima menjadi {receiverName}");
+            await _context.SaveChangesAsync();
+
+            // Kirim notifikasi ke penerima BARU untuk tanda tangan
+            await _notificationService.CreateAsync(new CreateNotificationDto
+            {
+                RecipientUserId = newReceiverUserId,
+                Title = "Tanda Tangan Serah Terima",
+                Message = $"Anda ditunjuk sebagai penerima baru untuk STR {h.HandoverNumber} (SN: {h.RadioSerialNumber}). Mohon lengkapi tanda tangan Anda.",
+                Category = "handover",
+                LinkUrl = "/radio-handover/warehouse",
+                ReferenceId = h.Id,
+                ReferenceType = "RadioHandover"
+            });
+
+            // Broadcast changes
+            await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+
+            return MapDetail(h);
         }
 
         public async Task RestoreAsync(int id, int userId)

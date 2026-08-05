@@ -126,11 +126,13 @@ namespace Pm.DTOs.RadioRepairJob
         public string EquipmentTagType { get; set; } = "Damaged";
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
+        public int ReceivedByUserId { get; set; }
         public bool HasRadioPhoto { get; set; }
         public bool HasHandedOverSignature { get; set; }
         public bool HasReceiverSignature { get; set; }
         public string? Remarks { get; set; }
         public string? PicReceiverName { get; set; }
+        public string? Status { get; set; }
         public bool IsPartial { get; set; }
         public bool ContainsMainRadioUnit { get; set; }
         public List<string> Accessories { get; set; } = [];

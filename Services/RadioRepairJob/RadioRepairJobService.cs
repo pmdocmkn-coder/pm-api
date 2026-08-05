@@ -135,7 +135,7 @@ namespace Pm.Services.RadioRepairJob
                     HasActiveBorrowedPart = j.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
                     HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
                     PendingHandoverType = j.CurrentHandoverId.HasValue && j.CurrentHandoverId > 0
-                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                        ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed" && !h.IsDeleted).Select(h => h.HandoverType.ToString()).FirstOrDefault() 
                         : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault()
                 })
                 .ToListAsync();
@@ -865,15 +865,16 @@ namespace Pm.Services.RadioRepairJob
         public async Task<RadioRepairJobDetailDto> ApproveScrapAsync(int id, ApproveScrapDto dto, int userId, string? roleName)
         {
             var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop, StringComparison.OrdinalIgnoreCase);
-            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat menyetujui Scrap.");
+            var isHelpdesk = string.Equals(roleName, Pm.Helper.OperationalRoleNames.Helpdesk, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor && !isHelpdesk) throw new UnauthorizedAccessException("Hanya Supervisor atau Helpdesk yang dapat menyetujui / input data Scrap.");
 
             var job = await _context.RadioRepairJobs
                 .Include(j => j.Radio)
                 .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
-            if (job.Status != RadioRepairJobStatus.ProcessScrap)
-                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap.");
+            if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.ReturnedToHelpdesk)
+                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap atau Dikembalikan ke Helpdesk.");
 
             var from = job.Status;
             job.Status = RadioRepairJobStatus.Scrapped;
@@ -898,18 +899,22 @@ namespace Pm.Services.RadioRepairJob
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
 
-            // Notif ke Helpdesk — radio disetujui scrap
             var scrapAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
             var scrapTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
-            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+
+            // Notif ke Helpdesk — radio disetujui scrap (hanya jika yang menyetujui Supervisor)
+            if (isSupervisor)
             {
-                Title = "Radio Disetujui untuk Scrap",
-                Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap oleh Supervisor MKN{scrapTiketInfo}.",
-                Category = "scrap",
-                LinkUrl = "/radio-repair-dashboard",
-                ReferenceId = job.Id,
-                ReferenceType = "RadioRepairJob"
-            });
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+                {
+                    Title = "Radio Disetujui untuk Scrap",
+                    Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap oleh Supervisor MKN{scrapTiketInfo}.",
+                    Category = "scrap",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
 
             // Notif ke Teknisi (akun yang handle job ini)
             if (job.AssignedTechnicianUserId != 0)
@@ -1262,7 +1267,7 @@ namespace Pm.Services.RadioRepairJob
             HasActiveBorrowedPart = job.PartBorrows.Any(pb => pb.Status != WarehousePartBorrowStatus.Returned && pb.Status != WarehousePartBorrowStatus.Rejected),
             HasReturnedBorrowedPart = job.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
             PendingHandoverType = job.CurrentHandoverId.HasValue && job.CurrentHandoverId > 0
-                ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault() 
+                ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed" && !h.IsDeleted).Select(h => h.HandoverType.ToString()).FirstOrDefault() 
                 : job.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
@@ -1289,9 +1294,11 @@ namespace Pm.Services.RadioRepairJob
                 EquipmentTagType = h.EquipmentTagType.ToString(),
                 HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
                 ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
+                ReceivedByUserId = h.ReceivedByUserId,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
+                Status = h.Status,
                 Remarks = h.Remarks,
                 PicReceiverName = h.PicReceiverName,
                 IsPartial = h.IsPartial,
