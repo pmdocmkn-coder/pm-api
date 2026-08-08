@@ -7,6 +7,7 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverQueryDto : BaseQueryDto
     {
         public RadioHandoverType? HandoverType { get; set; }
+        public List<RadioHandoverType>? HandoverTypes { get; set; }
         public int? JobId { get; set; }
         public int? ReceivedByUserId { get; set; }
         public DateTime? FromDate { get; set; }
@@ -62,6 +63,8 @@ namespace Pm.DTOs.RadioHandover
 
         public bool IsPartial { get; set; } = false;
         public bool ContainsMainRadioUnit { get; set; } = true;
+
+        public bool IsScrapFlow { get; set; } = false;
 
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
@@ -144,6 +147,7 @@ namespace Pm.DTOs.RadioHandover
         public string? PicReceiverName { get; set; }
         public bool IsPartial { get; set; }
         public bool ContainsMainRadioUnit { get; set; }
+        public bool IsScrapFlow { get; set; }
     }
 
     public class UpdateRadioHandoverDto
@@ -170,6 +174,8 @@ namespace Pm.DTOs.RadioHandover
 
         /// <summary>Status garansi radio. Default: tidak warranty.</summary>
         public bool IsWarranty { get; set; } = false;
+
+        public bool IsScrapFlow { get; set; } = false;
 
         [MaxLength(100)]
         public string? NoJobErp { get; set; }
@@ -251,6 +257,7 @@ namespace Pm.DTOs.RadioHandover
         // HelpdeskTicketNumber sudah ada di RadioHandoverListDto — tidak perlu redeclare
         public string JobStatus { get; set; } = null!;
         public bool IsWarranty { get; set; }
+        // Inherited from RadioHandoverListDto: public bool IsScrapFlow { get; set; }
     }
 
     public class UserOptionDto
