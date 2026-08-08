@@ -780,7 +780,6 @@ namespace Pm.Services.RadioRepairJob
             if (job.Status is RadioRepairJobStatus.HandedToWarehouse or RadioRepairJobStatus.ReturnedToHelpdesk)
                 throw new InvalidOperationException("Job yang sudah ke warehouse atau helpdesk tidak dapat diedit.");
 
-            var newDamage = dto.DamageDescription?.Trim() ?? "";
             var changes = new List<string>();
 
             if (dto.EquipmentTagType.HasValue && job.EquipmentTagType != dto.EquipmentTagType.Value)
@@ -795,39 +794,46 @@ namespace Pm.Services.RadioRepairJob
                 job.IsWarranty = dto.IsWarranty.Value;
             }
 
-            if (!string.Equals(job.DamageDescription, newDamage, StringComparison.Ordinal))
+            if (dto.DamageDescription != null)
             {
-                changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{newDamage}\"");
-                job.DamageDescription = newDamage;
+                var newDamage = dto.DamageDescription.Trim();
+                if (!string.Equals(job.DamageDescription, newDamage, StringComparison.Ordinal))
+                {
+                    changes.Add($"Kerusakan: \"{job.DamageDescription}\" → \"{newDamage}\"");
+                    job.DamageDescription = newDamage;
+                }
             }
             
-            // Map Green tag fields
-            if (dto.EquipmentTagType == EquipmentTagType.Good)
+            if (dto.EquipmentTagType.HasValue)
             {
-                job.OriginFrom = dto.OriginFrom;
-                job.RepairDataDescription = dto.RepairDataDescription;
-                job.RepairedByName = dto.RepairedByName;
-                job.FrequencyError = dto.FrequencyError;
-                job.AfReading = dto.AfReading;
-                job.PowerReading = dto.PowerReading;
-                job.VoltageOutNoLoad = dto.VoltageOutNoLoad;
-                job.VoltageOutWithLoad = dto.VoltageOutWithLoad;
-                job.PhysicalCondition = dto.PhysicalCondition;
-                job.DisplayCondition = dto.DisplayCondition;
-            }
-            else
-            {
-                // Jika kuning, bersihkan data hijau
-                job.OriginFrom = null;
-                job.RepairDataDescription = null;
-                job.RepairedByName = null;
-                job.FrequencyError = null;
-                job.AfReading = null;
-                job.PowerReading = null;
-                job.VoltageOutNoLoad = null;
-                job.VoltageOutWithLoad = null;
-                job.PhysicalCondition = null;
-                job.DisplayCondition = null;
+                // Map Green tag fields
+                if (dto.EquipmentTagType.Value == EquipmentTagType.Good)
+                {
+                    job.OriginFrom = dto.OriginFrom;
+                    job.RepairDataDescription = dto.RepairDataDescription;
+                    job.RepairedByName = dto.RepairedByName;
+                    job.FrequencyError = dto.FrequencyError;
+                    job.AfReading = dto.AfReading;
+                    job.PowerReading = dto.PowerReading;
+                    job.VoltageOutNoLoad = dto.VoltageOutNoLoad;
+                    job.VoltageOutWithLoad = dto.VoltageOutWithLoad;
+                    job.PhysicalCondition = dto.PhysicalCondition;
+                    job.DisplayCondition = dto.DisplayCondition;
+                }
+                else
+                {
+                    // Jika kuning, bersihkan data hijau
+                    job.OriginFrom = null;
+                    job.RepairDataDescription = null;
+                    job.RepairedByName = null;
+                    job.FrequencyError = null;
+                    job.AfReading = null;
+                    job.PowerReading = null;
+                    job.VoltageOutNoLoad = null;
+                    job.VoltageOutWithLoad = null;
+                    job.PhysicalCondition = null;
+                    job.DisplayCondition = null;
+                }
             }
 
             if (changes.Count == 0 && dto.EquipmentTagType == EquipmentTagType.Good)
@@ -840,13 +846,16 @@ namespace Pm.Services.RadioRepairJob
 
             job.UpdatedAt = DateTime.UtcNow;
 
+            var noteString = $"[Edit oleh teknisi] {string.Join("; ", changes)}";
+            if (noteString.Length > 500) noteString = noteString.Substring(0, 497) + "...";
+
             // Catat di StatusLogs agar muncul di timeline — siapa yang ubah apa
             _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
             {
                 JobId = job.Id,
                 FromStatus = job.Status,
                 ToStatus = job.Status,
-                Note = $"[Edit oleh teknisi] {string.Join("; ", changes)}",
+                Note = noteString,
                 UserId = userId,
                 At = DateTime.UtcNow
             });
