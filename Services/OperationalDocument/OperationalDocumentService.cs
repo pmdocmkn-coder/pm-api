@@ -6,7 +6,9 @@ using Pm.Helper;
 using Pm.Models;
 using Pm.Services.Telegram;
 
+#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace Pm.Services
+#pragma warning restore IDE0130
 {
     public class OperationalDocumentService(AppDbContext _context, ITelegramService _telegramService) : IOperationalDocumentService
     {
@@ -16,42 +18,46 @@ namespace Pm.Services
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
-                q = q.Where(d => EF.Functions.Like(d.Name, $"%{query.Search}%") || 
+                q = q.Where(d => EF.Functions.Like(d.Name, $"%{query.Search}%") ||
                                  (d.ReferenceNumber != null && EF.Functions.Like(d.ReferenceNumber, $"%{query.Search}%")));
             }
 
             if (!string.IsNullOrWhiteSpace(query.Type))
             {
-                q = q.Where(d => d.Type == query.Type);
+                var types = query.Type.Split(',').ToList();
+                q = q.Where(d => types.Contains(d.Type));
             }
 
             if (!string.IsNullOrWhiteSpace(query.GroupName))
             {
-                q = q.Where(d => d.GroupName != null && EF.Functions.Like(d.GroupName, $"%{query.GroupName}%"));
+                var groups = query.GroupName.Split(',').ToList();
+                q = q.Where(d => d.GroupName != null && groups.Contains(d.GroupName));
             }
 
             if (!string.IsNullOrWhiteSpace(query.FollowUpStatus))
             {
-                q = q.Where(d => d.FollowUpStatus == query.FollowUpStatus);
+                var statuses = query.FollowUpStatus.Split(',').ToList();
+                q = q.Where(d => statuses.Contains(d.FollowUpStatus));
             }
 
             // Expiry status filtering (On-the-fly logic)
             if (!string.IsNullOrWhiteSpace(query.ExpiryStatus))
             {
                 var today = DateTime.UtcNow.Date;
-                if (query.ExpiryStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase))
+                var warningDate = today.AddDays(30);
+                var statuses = query.ExpiryStatus.Split(',').Select(s => s.Trim().ToLower()).ToList();
+
+                var includeExpired = statuses.Contains("expired");
+                var includeWarning = statuses.Contains("warning");
+                var includeAman = statuses.Contains("aman");
+
+                if (includeExpired || includeWarning || includeAman)
                 {
-                    q = q.Where(d => d.ValidUntil.Date < today);
-                }
-                else if (query.ExpiryStatus.Equals("Warning", StringComparison.OrdinalIgnoreCase))
-                {
-                    var warningDate = today.AddDays(30);
-                    q = q.Where(d => d.ValidUntil.Date >= today && d.ValidUntil.Date <= warningDate);
-                }
-                else if (query.ExpiryStatus.Equals("Aman", StringComparison.OrdinalIgnoreCase))
-                {
-                    var warningDate = today.AddDays(30);
-                    q = q.Where(d => d.ValidUntil.Date > warningDate);
+                    q = q.Where(d =>
+                        (includeExpired ? d.ValidUntil.Date < today : false) ||
+                        (includeWarning ? (d.ValidUntil.Date >= today && d.ValidUntil.Date <= warningDate) : false) ||
+                        (includeAman ? d.ValidUntil.Date > warningDate : false)
+                    );
                 }
             }
 
@@ -63,7 +69,7 @@ namespace Pm.Services
             // Apply pagination
             var items = await q.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync();
 
-            var dtos = items.Select(MapToResponse).ToList();
+            List<OperationalDocumentResponseDto> dtos = [.. items.Select(MapToResponse)];
             return new PagedResultDto<OperationalDocumentResponseDto>(dtos, query, totalCount);
         }
 
@@ -139,7 +145,6 @@ namespace Pm.Services
             {
                 // UPDATE existing document
                 existing.GroupName = dto.GroupName;
-                
                 // Jika tanggal berakhir berubah, reset follow up status
                 if (existing.ValidUntil.Date != dto.ValidUntil.Date)
                 {
@@ -194,14 +199,12 @@ namespace Pm.Services
             doc.Type = dto.Type;
             doc.ReferenceNumber = dto.ReferenceNumber;
             doc.GroupName = dto.GroupName;
-            
             // If expiry date changes, reset the follow up status
             if (doc.ValidUntil.Date != dto.ValidUntil.Date)
             {
                 doc.FollowUpStatus = "Tidak Ada";
                 doc.FollowUpRemark = null;
             }
-            
             doc.ValidFrom = dto.ValidFrom;
             doc.ValidUntil = dto.ValidUntil;
             doc.PicName = dto.PicName;
@@ -302,9 +305,9 @@ namespace Pm.Services
 
         private static OperationalDocumentResponseDto MapToResponse(OperationalDocument doc)
         {
-            var isIsr = doc.Type != null && doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase);
-            var (bhpChecklist, bhpPaidCount, bhpTotalCount) = isIsr 
-                ? BuildBhpChecklistResponse(doc) 
+            var isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) is true;
+            var (bhpChecklist, bhpPaidCount, bhpTotalCount) = isIsr
+                ? BuildBhpChecklistResponse(doc)
                 : (null, null, null);
 
             return new OperationalDocumentResponseDto
@@ -331,7 +334,7 @@ namespace Pm.Services
 
         private static (List<BhpPaymentChecklistItemDto>? checklist, int? paidCount, int? totalCount) BuildBhpChecklistResponse(OperationalDocument doc)
         {
-            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
+            if (doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) is not true)
             {
                 return (null, null, null);
             }
@@ -339,12 +342,12 @@ namespace Pm.Services
             var dbChecklists = doc.BhpChecklists?.ToList() ?? [];
             var currentYear = DateTime.UtcNow.Year;
 
-            var validFrom = doc.ValidFrom.Year >= 2000 
-                ? doc.ValidFrom 
+            var validFrom = doc.ValidFrom.Year >= 2000
+                ? doc.ValidFrom
                 : (doc.ValidUntil.Year >= 2000 ? doc.ValidUntil.AddYears(-4) : DateTime.UtcNow);
 
-            var validUntil = doc.ValidUntil.Year >= 2000 
-                ? doc.ValidUntil 
+            var validUntil = doc.ValidUntil.Year >= 2000
+                ? doc.ValidUntil
                 : validFrom.AddYears(4);
 
             int startYear = validFrom.Year + 1;
@@ -450,19 +453,19 @@ namespace Pm.Services
 
         private static bool EnsureBhpChecklistForDoc(OperationalDocument doc, AppDbContext context)
         {
-            if (doc.Type == null || !doc.Type.Contains("ISR", StringComparison.OrdinalIgnoreCase))
+            if (doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) is not true)
                 return false;
 
             var existingYears = doc.BhpChecklists?.Select(c => c.Year).ToHashSet() ?? [];
             var currentYear = DateTime.UtcNow.Year;
             bool addedAny = false;
 
-            var validFrom = doc.ValidFrom.Year >= 2000 
-                ? doc.ValidFrom 
+            var validFrom = doc.ValidFrom.Year >= 2000
+                ? doc.ValidFrom
                 : (doc.ValidUntil.Year >= 2000 ? doc.ValidUntil.AddYears(-4) : DateTime.UtcNow);
 
-            var validUntil = doc.ValidUntil.Year >= 2000 
-                ? doc.ValidUntil 
+            var validUntil = doc.ValidUntil.Year >= 2000
+                ? doc.ValidUntil
                 : validFrom.AddYears(4);
 
             int startYear = validFrom.Year + 1;

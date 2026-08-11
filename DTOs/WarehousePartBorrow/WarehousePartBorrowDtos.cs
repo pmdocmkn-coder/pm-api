@@ -10,6 +10,7 @@ namespace Pm.DTOs.WarehousePartBorrow
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public string? TicketNumber { get; set; }
+        public bool? IsAlatKerja { get; set; }
     }
 
     public class WarehousePartBorrowItemDto
