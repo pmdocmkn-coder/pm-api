@@ -9,11 +9,8 @@ namespace Pm.Controllers.RadioRepairJob
     [ApiController]
     [Route("api/radio-repair-jobs")]
     [Authorize]
-    public class RadioRepairJobController : ControllerBase
+    public class RadioRepairJobController(IRadioRepairJobService _service) : ControllerBase
     {
-        private readonly IRadioRepairJobService _service;
-
-        public RadioRepairJobController(IRadioRepairJobService service) => _service = service;
 
         /// <summary>TEMP DEBUG — hapus setelah testing</summary>
         [HttpGet("debug-claims")]
@@ -43,7 +40,7 @@ namespace Pm.Controllers.RadioRepairJob
         private bool HasPermission(string name) =>
             User.HasClaim("Permission", name);
 
-        private IActionResult? GuardArchiveQuery(bool includeDeleted)
+        private ObjectResult? GuardArchiveQuery(bool includeDeleted)
         {
             if (includeDeleted && !HasPermission("radio.repair.view.archive"))
                 return ApiResponse.Forbidden();
@@ -118,8 +115,8 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(data, "Pekerjaan diperbarui");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
-            catch (ArgumentException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (ArgumentException ex) { return ApiResponse.BadRequest("job", [ex.Message]); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -137,7 +134,7 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(data, "Keterangan diperbarui");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -152,7 +149,7 @@ namespace Pm.Controllers.RadioRepairJob
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -166,7 +163,7 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(data);
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -181,7 +178,7 @@ namespace Pm.Controllers.RadioRepairJob
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -196,7 +193,7 @@ namespace Pm.Controllers.RadioRepairJob
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
             catch (UnauthorizedAccessException) { return ApiResponse.Forbidden(); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("status", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -210,7 +207,7 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(null, "Pekerjaan dipindah ke arsip");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 
@@ -237,7 +234,7 @@ namespace Pm.Controllers.RadioRepairJob
                 return ApiResponse.Success(null, "Pekerjaan dihapus permanen");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
-            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", new[] { ex.Message }); }
+            catch (InvalidOperationException ex) { return ApiResponse.BadRequest("job", [ex.Message]); }
             catch (Exception ex) { return ApiResponse.InternalServerError(ex.Message); }
         }
 

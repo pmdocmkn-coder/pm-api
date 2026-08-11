@@ -81,6 +81,11 @@ namespace Pm.Services.WarehousePartBorrow
                 q = q.Where(b => b.TicketNumber != null && b.TicketNumber.ToLower() == tn);
             }
 
+            if (query.IsAlatKerja.HasValue && query.IsAlatKerja.Value)
+            {
+                q = q.Where(b => b.Items.Any(i => i.IsAlatKerja));
+            }
+
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
                 var s = query.Search.Trim().ToLower();

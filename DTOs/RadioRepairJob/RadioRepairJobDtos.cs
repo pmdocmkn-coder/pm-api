@@ -236,10 +236,8 @@ namespace Pm.DTOs.RadioRepairJob
     {
         [Required]
         public DateTime DateScrapped { get; set; }
-        
         [MaxLength(100)]
         public string? ScrapJobNumber { get; set; }
-        
         [MaxLength(1000)]
         public string? Remarks { get; set; }
     }
