@@ -181,10 +181,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 // ===== Authorization =====
-builder.Services.AddAuthorization(options =>
-{
-    options.AddCustomAuthorizationPolicies();
-});
+builder.Services.AddAuthorization(options => options.AddCustomAuthorizationPolicies());
 
 // ===== Services =====
 builder.Services.AddScoped<IUserService, UserService>();
@@ -285,16 +282,7 @@ builder.Services.AddCors(options =>
             var host = uri.Host;
 
             // Exact allowed origins
-            var exactAllowed = new[]
-            {
-                "pm.mknops.web.id",
-                "pmfrontend.vercel.app",
-                "pmdocmkn-web.vercel.app",
-                "v0.dev",
-                "localhost",
-            };
-
-            if (exactAllowed.Contains(host)) return true;
+            if (host is "pm.mknops.web.id" or "pmfrontend.vercel.app" or "pmdocmkn-web.vercel.app" or "v0.dev" or "localhost") return true;
 
             // Wildcard: *.vercel.app
             if (host.EndsWith(".vercel.app")) return true;
@@ -338,15 +326,9 @@ builder.Services.AddLogging(config =>
     config.AddDebug();
 });
 
-builder.Services.Configure<IISServerOptions>(options =>
-{
-    options.MaxRequestBodySize = int.MaxValue;
-});
+builder.Services.Configure<IISServerOptions>(options => options.MaxRequestBodySize = int.MaxValue);
 
-builder.Services.Configure<FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = 1073741824;
-});
+builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 1073741824);
 
 // ===== SignalR =====
 builder.Services.AddSignalR();
