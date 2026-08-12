@@ -8,6 +8,7 @@ namespace Pm.DTOs.RadioRepairJob
     {
         public string? Status { get; set; }
         public int? TechnicianUserId { get; set; }
+        public int? WorkshopTechnicianId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         /// <summary>Hanya dengan permission radio.repair.view.archive.</summary>
@@ -68,6 +69,7 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasActiveBorrowedPart { get; set; }
         public bool HasReturnedBorrowedPart { get; set; }
         public string? PendingHandoverType { get; set; }
+        public bool IsScrap { get; set; }
     }
 
     public class RadioRepairTicketGroupDto
@@ -234,11 +236,11 @@ namespace Pm.DTOs.RadioRepairJob
 
     public class ApproveScrapDto
     {
-        [Required]
-        public DateTime DateScrapped { get; set; }
+        public DateTime? DateScrapped { get; set; }
         [MaxLength(100)]
         public string? ScrapJobNumber { get; set; }
         [MaxLength(1000)]
         public string? Remarks { get; set; }
+        public bool IsPendingHelpdeskScrapFill { get; set; }
     }
 }

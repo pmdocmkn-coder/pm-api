@@ -140,7 +140,7 @@ namespace Pm.Controllers.RadioHandover
         }
 
         [HttpGet("warehouse-receivers")]
-        [Authorize(Policy = "RadioHandoverCreateTekWh")]
+        [Authorize(Policy = "RadioHandoverGetWarehouseReceivers")]
         public async Task<IActionResult> GetWarehouseReceivers()
         {
             try

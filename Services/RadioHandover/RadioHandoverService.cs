@@ -42,7 +42,8 @@ namespace Pm.Services.RadioHandover
                 // TTD button visibility is controlled on the frontend by matching receivedByUserId
                 q = q.Where(h => 
                     h.HandoverType == RadioHandoverType.TechnicianToWarehouse ||
-                    h.HandoverType == RadioHandoverType.WarehouseToHelpdesk
+                    h.HandoverType == RadioHandoverType.WarehouseToHelpdesk ||
+                    h.HandoverType == RadioHandoverType.HelpdeskToWarehouse
                 );
             }
 
@@ -79,7 +80,8 @@ namespace Pm.Services.RadioHandover
                     HandoverNumber = h.HandoverNumber,
                     HandoverType = h.HandoverType.ToString(),
                     RadioRepairJobId = h.RadioRepairJobId,
-                    HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
+                    JobStatus = h.RadioRepairJob.Status.ToString(),
+                    HelpdeskTicketNumber = h.RadioRepairJob!.HelpdeskTicketNumber,
                     NoJobErp = h.NoJobErp,
                     RadioSerialNumber = h.RadioSerialNumber,
                     EquipmentName = h.EquipmentName,
@@ -106,9 +108,32 @@ namespace Pm.Services.RadioHandover
                     PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (h.RadioPhotoBase64 != null ? 1 : 0),
                     PreviewPhotoBase64 = null, // loaded lazily via /thumbnail endpoint
                     PicReceiverName = h.PicReceiverName,
+                    Remarks = h.Remarks,
                     IsPartial = h.IsPartial,
                     ContainsMainRadioUnit = h.ContainsMainRadioUnit,
-                    IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk))
+                    IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
+                    IsPendingScrapData = h.Radio != null && h.Radio.IsScrap && !h.Radio.DateScrapped.HasValue,
+                    // Compute: apakah masih ada barang yang bisa diserahkan ke WH?
+                    // True jika handover ini TechnicianToHelpdesk + Completed + belum SEMUA item diserahkan ke WH
+                    HasRemainingItemsForWarehouse =
+                        h.HandoverType == RadioHandoverType.TechnicianToHelpdesk &&
+                        h.Status == "Completed" &&
+                        h.RadioRepairJob != null &&
+                        (
+                            // Unit radio utama belum diserahkan ke WH?
+                            !h.RadioRepairJob.Handovers.Any(ho =>
+                                ho.HandoverType == RadioHandoverType.HelpdeskToWarehouse &&
+                                !ho.IsDeleted &&
+                                ho.ContainsMainRadioUnit)
+                            ||
+                            // Masih ada aksesoris yang belum diserahkan?
+                            // Bandingkan jumlah aksesoris dari primary (TekToHD) vs yang sudah dikirim (HdToWH)
+                            h.Accessories.Count >
+                            h.RadioRepairJob.Handovers
+                                .Where(ho => ho.HandoverType == RadioHandoverType.HelpdeskToWarehouse && !ho.IsDeleted)
+                                .SelectMany(ho => ho.Accessories)
+                                .Count()
+                        )
                 })
                 .ToListAsync();
 
@@ -340,9 +365,6 @@ namespace Pm.Services.RadioHandover
             handover.RadioSerialNumber = job.RadioSerialNumber;
             handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
 
-            if (handover.Accessories.Count == 0)
-                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
-
             _context.RadioHandovers.Add(handover);
             await _context.SaveChangesAsync();
 
@@ -471,9 +493,6 @@ namespace Pm.Services.RadioHandover
             handover.RadioSerialNumber = job.RadioSerialNumber;
             handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
 
-            if (handover.Accessories.Count == 0)
-                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
-
             _context.RadioHandovers.Add(handover);
             await _context.SaveChangesAsync();
 
@@ -553,11 +572,18 @@ namespace Pm.Services.RadioHandover
             if (!dto.RadioRepairJobId.HasValue)
                 throw new ArgumentException("RadioRepairJobId wajib untuk serah terima HD→WH.");
 
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
+            var job = await _context.RadioRepairJobs
+                .Include(j => j.Radio)
+                .FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
-            if (job.Status != RadioRepairJobStatus.ReturnedToHelpdesk)
-                throw new InvalidOperationException("Job harus berstatus ReturnedToHelpdesk (sudah diterima kembali dari teknisi).");
+            if (job.Status != RadioRepairJobStatus.ReturnedToHelpdesk 
+                && job.Status != RadioRepairJobStatus.Scrapped
+                && job.Status != RadioRepairJobStatus.HandedToWarehouse)
+                throw new InvalidOperationException("Job harus berstatus ReturnedToHelpdesk, Scrapped, atau HandedToWarehouse (untuk sisa aksesoris).");
+
+            if (job.Radio != null && job.Radio.IsScrap && !job.Radio.DateScrapped.HasValue)
+                throw new InvalidOperationException("Radio Scrap belum memiliki data scrap yang lengkap. Harap lengkapi terlebih dahulu sebelum menyerahkan ke Warehouse.");
 
             var pendingHandover = await _context.RadioHandovers.AnyAsync(h => 
                 h.RadioRepairJobId == job.Id && 
@@ -575,15 +601,17 @@ namespace Pm.Services.RadioHandover
 
             await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.HelpdeskToWarehouse);
 
+            if (job.Status == RadioRepairJobStatus.Scrapped || job.Status == RadioRepairJobStatus.ProcessScrap || (job.Radio != null && job.Radio.IsScrap))
+            {
+                dto.EquipmentTagType = EquipmentTagType.Damaged;
+            }
+
             var isReceiverSignatureComplete = !string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64);
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, isReceiverSignatureComplete);
             handover.HandoverType = RadioHandoverType.HelpdeskToWarehouse;
             handover.RadioId = job.RadioId ?? dto.RadioId;
             handover.RadioSerialNumber = job.RadioSerialNumber;
             handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
-
-            if (handover.Accessories.Count == 0)
-                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
 
             _context.RadioHandovers.Add(handover);
             await _context.SaveChangesAsync();
@@ -594,14 +622,22 @@ namespace Pm.Services.RadioHandover
             if (isReceiverSignatureComplete)
             {
                 var fromStatus = job.Status;
-                job.Status = RadioRepairJobStatus.HandedToWarehouse;
+
+                // Hanya ubah status ke HandedToWarehouse jika unit radio utama ikut diserahkan.
+                // Jika parsial (aksesoris saja), status tetap Scrapped agar handover berikutnya bisa dilakukan.
+                if (handover.ContainsMainRadioUnit)
+                {
+                    job.Status = RadioRepairJobStatus.HandedToWarehouse;
+                }
 
                 _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
                 {
                     JobId = job.Id,
                     FromStatus = fromStatus,
-                    ToStatus = RadioRepairJobStatus.HandedToWarehouse,
-                    Note = $"Serah terima scrap ke warehouse {strNumber}",
+                    ToStatus = job.Status,
+                    Note = handover.ContainsMainRadioUnit
+                        ? $"Serah terima scrap ke warehouse {strNumber}"
+                        : $"Serah terima aksesoris scrap ke warehouse {strNumber} (Parsial)",
                     UserId = currentUserId,
                     At = now
                 });
@@ -670,8 +706,16 @@ namespace Pm.Services.RadioHandover
             var strNumber = await DocumentNumberHelper.NextHandoverNumberAsync(_context);
             var now = DateTime.UtcNow;
 
-            if (dto.EquipmentTagType != EquipmentTagType.Damaged)
+            bool isScrap = job.Status == RadioRepairJobStatus.Scrapped || job.Status == RadioRepairJobStatus.ProcessScrap || (job.Radio != null && job.Radio.IsScrap) || await _context.RadioHandovers.AnyAsync(h => h.RadioRepairJobId == job.Id && h.HandoverType == RadioHandoverType.TechnicianToHelpdesk);
+
+            if (isScrap)
+            {
+                dto.EquipmentTagType = EquipmentTagType.Damaged;
+            }
+            else if (dto.EquipmentTagType != EquipmentTagType.Damaged)
+            {
                 dto.EquipmentTagType = EquipmentTagType.Good;
+            }
 
             await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.WarehouseToHelpdesk);
 
@@ -681,9 +725,6 @@ namespace Pm.Services.RadioHandover
             handover.RadioId = job.RadioId ?? dto.RadioId;
             handover.RadioSerialNumber = job.RadioSerialNumber;
             handover.BatterySerialNumber = job.BatterySerialNumber ?? dto.BatterySerialNumber;
-
-            if (handover.Accessories.Count == 0)
-                await CopyAccessoriesFromHelpdeskHandoverAsync(handover, job.Id);
 
             _context.RadioHandovers.Add(handover);
             await _context.SaveChangesAsync();
@@ -790,16 +831,8 @@ namespace Pm.Services.RadioHandover
 
             var now = DateTime.UtcNow;
             handover.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
-            if (!string.IsNullOrWhiteSpace(dto.PicReceiverName))
-            {
-                handover.PicReceiverName = dto.PicReceiverName;
-            }
-            if (!string.IsNullOrWhiteSpace(dto.Remarks))
-            {
-                handover.Remarks = string.IsNullOrWhiteSpace(handover.Remarks) 
-                    ? dto.Remarks 
-                    : $"{handover.Remarks}\n{dto.Remarks}";
-            }
+            handover.PicReceiverName = dto.PicReceiverName;
+            handover.Remarks = dto.Remarks;
             handover.Status = "Completed";
             handover.SignedAt = now;
             handover.UpdatedAt = now;
@@ -823,7 +856,14 @@ namespace Pm.Services.RadioHandover
                 }
                 else if (handover.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
                 {
-                    handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
+                    if (handover.ContainsMainRadioUnit)
+                    {
+                        handover.RadioRepairJob.Status = RadioRepairJobStatus.HandedToWarehouse;
+                    }
+                }
+                else if (handover.HandoverType == RadioHandoverType.TechnicianToHelpdesk)
+                {
+                    handover.RadioRepairJob.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
                 }
 
                 string statusNote = handover.HandoverType switch
@@ -832,6 +872,7 @@ namespace Pm.Services.RadioHandover
                     RadioHandoverType.TechnicianToWarehouse => "Warehouse melengkapi TTD penerima",
                     RadioHandoverType.WarehouseToHelpdesk => "Helpdesk melengkapi TTD penerima",
                     RadioHandoverType.HelpdeskToWarehouse => "Warehouse melengkapi TTD penerima (Radio scrap dari Helpdesk)",
+                    RadioHandoverType.TechnicianToHelpdesk => "Helpdesk melengkapi TTD penerima (Radio scrap dari Teknisi)",
                     _ => "TTD penerima dilengkapi"
                 };
 
@@ -916,6 +957,34 @@ namespace Pm.Services.RadioHandover
                     RecipientUserId = handover.HandedOverByUserId,
                     Title = "TTD Penerima Lengkap",
                     Message = $"Helpdesk ({receiverName}) sudah menandatangani STR {strNumber} (SN: {serial}). Proses perbaikan selesai.",
+                    Category = "handover",
+                    LinkUrl = "/radio-handover",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+            else if (handover.HandoverType == RadioHandoverType.TechnicianToHelpdesk)
+            {
+                // Notif ke teknisi penyerah bahwa Helpdesk sudah TTD (radio scrap diterima)
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = handover.HandedOverByUserId,
+                    Title = "TTD Penerima Lengkap (Scrap)",
+                    Message = $"Helpdesk ({receiverName}) sudah menandatangani STR {strNumber} (SN: {serial}). Radio scrap diterima oleh Helpdesk.",
+                    Category = "handover",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = handover.Id,
+                    ReferenceType = "RadioHandover"
+                });
+            }
+            else if (handover.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
+            {
+                // Notif ke helpdesk penyerah bahwa Warehouse sudah TTD (radio scrap masuk WH)
+                await _notificationService.CreateAsync(new CreateNotificationDto
+                {
+                    RecipientUserId = handover.HandedOverByUserId,
+                    Title = "TTD Penerima Lengkap (Scrap)",
+                    Message = $"Warehouse ({receiverName}) sudah menandatangani STR {strNumber} (SN: {serial}). Radio scrap masuk Warehouse.",
                     Category = "handover",
                     LinkUrl = "/radio-handover",
                     ReferenceId = handover.Id,
@@ -1177,36 +1246,7 @@ namespace Pm.Services.RadioHandover
                 dto.OriginFrom ??= prev.OriginFrom ?? prev.RadioOwnerLabel;
         }
 
-        /// <summary>Salin aksesoris dari STR HD→Tek terakhir jika Tek→WH tidak mengirim daftar baru.</summary>
-        private async Task CopyAccessoriesFromHelpdeskHandoverAsync(Models.RadioHandover target, int jobId)
-        {
-            var prev = await _context.RadioHandovers
-                .AsNoTracking()
-                .Include(h => h.Accessories)
-                .Where(h => h.RadioRepairJobId == jobId
-                            && h.HandoverType == RadioHandoverType.HelpdeskToTechnician
-                            && !h.IsDeleted)
-                .OrderByDescending(h => h.HandoverAt)
-                .FirstOrDefaultAsync();
 
-            if (prev == null) return;
-
-            foreach (var item in prev.Accessories)
-            {
-                if (string.IsNullOrWhiteSpace(item.ItemName)) continue;
-                target.Accessories.Add(new RadioHandoverAccessory
-                {
-                    ItemName = item.ItemName.Trim(),
-                    Quantity = item.Quantity < 1 ? 1 : item.Quantity,
-                    Unit = string.IsNullOrWhiteSpace(item.Unit) ? "EA" : item.Unit.Trim(),
-                    Description = item.Description?.Trim(),
-                    SerialNumber = item.SerialNumber?.Trim()
-                });
-            }
-
-            if (string.IsNullOrWhiteSpace(target.BatterySerialNumber) && !string.IsNullOrWhiteSpace(prev.BatterySerialNumber))
-                target.BatterySerialNumber = prev.BatterySerialNumber.Trim();
-        }
 
         private async Task ValidateRadioSerialAsync(int? radioId, string serialNumber)
         {
@@ -1440,6 +1480,24 @@ namespace Pm.Services.RadioHandover
             IsWarranty = h.RadioRepairJob.IsWarranty,
             IsPartial = h.IsPartial,
             ContainsMainRadioUnit = h.ContainsMainRadioUnit,
+            IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
+            IsPendingScrapData = h.Radio != null && h.Radio.IsScrap && !h.Radio.DateScrapped.HasValue,
+            HasRemainingItemsForWarehouse =
+                h.HandoverType == RadioHandoverType.TechnicianToHelpdesk &&
+                h.Status == "Completed" &&
+                h.RadioRepairJob != null &&
+                (
+                    !h.RadioRepairJob.Handovers.Any(ho =>
+                        ho.HandoverType == RadioHandoverType.HelpdeskToWarehouse &&
+                        !ho.IsDeleted &&
+                        ho.ContainsMainRadioUnit)
+                    ||
+                    h.Accessories.Count >
+                    h.RadioRepairJob.Handovers
+                        .Where(ho => ho.HandoverType == RadioHandoverType.HelpdeskToWarehouse && !ho.IsDeleted)
+                        .SelectMany(ho => ho.Accessories)
+                        .Count()
+                ),
             Accessories = [.. h.Accessories.Select(a => new HandoverAccessoryItemDto
             {
                 ItemName = string.IsNullOrWhiteSpace(a.ItemName) ? (a.AccessoryCode ?? "") : a.ItemName,

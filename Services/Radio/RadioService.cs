@@ -79,8 +79,16 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<PagedResultDto<RadioDto>> GetAllAsync(RadioQueryDto query)
         {
-            var q = _context.Radios.AsNoTracking()
-                .Where(r => r.IsScrap == query.IsScrap);
+            var q = _context.Radios.AsNoTracking().AsQueryable();
+
+            if (query.IsScrap)
+            {
+                q = q.Where(r => r.IsScrap == true && r.DateScrapped != null);
+            }
+            else
+            {
+                q = q.Where(r => r.IsScrap == false);
+            }
 
             if (!string.IsNullOrEmpty(query.Category))
                 q = q.Where(r => r.Category == query.Category);
@@ -208,7 +216,16 @@ namespace Pm.Services.Radio
         // ============================================
         public async Task<IEnumerable<RadioDto>> GetAllUnpagedAsync(string? category = null, bool isScrap = false)
         {
-            var query = _context.Radios.AsNoTracking().Where(r => r.IsScrap == isScrap);
+            var query = _context.Radios.AsNoTracking().AsQueryable();
+            
+            if (isScrap)
+            {
+                query = query.Where(r => r.IsScrap == true && r.DateScrapped != null);
+            }
+            else
+            {
+                query = query.Where(r => r.IsScrap == false);
+            }
 
             if (!string.IsNullOrEmpty(category))
                 query = query.Where(r => r.Category == category);
