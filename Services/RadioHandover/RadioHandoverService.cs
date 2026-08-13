@@ -60,9 +60,9 @@ namespace Pm.Services.RadioHandover
                 q = q.Where(h => h.Status == query.Status);
 
             if (query.FromDate.HasValue)
-                q = q.Where(h => h.HandoverAt >= query.FromDate.Value);
+                q = q.Where(h => h.HandoverAt >= query.FromDate.Value || h.Status == "PendingReceiverSignature");
             if (query.ToDate.HasValue)
-                q = q.Where(h => h.HandoverAt <= query.ToDate.Value.AddDays(1));
+                q = q.Where(h => h.HandoverAt <= query.ToDate.Value.AddDays(1) || h.Status == "PendingReceiverSignature");
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
