@@ -208,6 +208,11 @@ namespace Pm.Helper
                 policy.RequireAnyPermission(
                     HandoverPermissionHelper.CreateTekWh,
                     HandoverPermissionHelper.CreateLegacy));
+            options.AddPolicy("RadioHandoverGetWarehouseReceivers", policy =>
+                policy.RequireAnyPermission(
+                    HandoverPermissionHelper.CreateHd,
+                    HandoverPermissionHelper.CreateTekWh,
+                    HandoverPermissionHelper.CreateLegacy));
             options.AddPolicy("RadioHandoverCreateWhHd", policy =>
                 policy.RequireAnyPermission(
                     HandoverPermissionHelper.CreateWhHd,

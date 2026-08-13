@@ -310,6 +310,8 @@ namespace Pm.Controllers
 
         [Authorize]
         [HttpPost("{userId}/photo")]
+        [DisableRequestSizeLimit]
+        [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(UpdatePhotoResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -318,7 +320,7 @@ namespace Pm.Controllers
         {
             try
             {
-                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var currentUserId = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var canUpdateOthers = User.HasClaim("Permission", "user.update");
 
                 if (userId.ToString() != currentUserId && !canUpdateOthers)
@@ -388,7 +390,7 @@ namespace Pm.Controllers
         {
             try
             {
-                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var currentUserId = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var canUpdateOthers = User.HasClaim("Permission", "user.update");
 
                 if (userId.ToString() != currentUserId && !canUpdateOthers)

@@ -1,4 +1,5 @@
 using Pm.DTOs.Common;
+using Pm.DTOs.RadioHandover;
 using Pm.DTOs.RadioRepairJob;
 
 namespace Pm.Services.RadioRepairJob
@@ -21,5 +22,6 @@ namespace Pm.Services.RadioRepairJob
             RadioRepairJobQueryDto query, int currentUserId, string? roleName, bool includeDeleted);
         Task ResetTestingDataAsync(int userId);
         Task PurgeJobAsync(int jobId, int userId);
+        Task<List<UserOptionDto>> GetTechnicianOptionsAsync();
     }
 }

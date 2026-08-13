@@ -7,6 +7,7 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverQueryDto : BaseQueryDto
     {
         public RadioHandoverType? HandoverType { get; set; }
+        public string? Status { get; set; }
         public int? JobId { get; set; }
         public int? ReceivedByUserId { get; set; }
         public DateTime? FromDate { get; set; }
@@ -115,6 +116,7 @@ namespace Pm.DTOs.RadioHandover
         public string HandoverNumber { get; set; } = null!;
         public string HandoverType { get; set; } = null!;
         public int RadioRepairJobId { get; set; }
+        public string? JobStatus { get; set; }
         public string HelpdeskTicketNumber { get; set; } = null!;
         public string? NoJobErp { get; set; }
         public string RadioSerialNumber { get; set; } = null!;
@@ -142,8 +144,13 @@ namespace Pm.DTOs.RadioHandover
         public int PhotoCount { get; set; }
         public string? PreviewPhotoBase64 { get; set; }
         public string? PicReceiverName { get; set; }
+        public string? Remarks { get; set; }
         public bool IsPartial { get; set; }
         public bool ContainsMainRadioUnit { get; set; }
+        public bool IsScrap { get; set; }
+        public bool IsPendingScrapData { get; set; }
+        /// <summary>True jika masih ada barang (unit utama / aksesoris) yang belum diserahkan ke Warehouse.</summary>
+        public bool HasRemainingItemsForWarehouse { get; set; }
     }
 
     public class UpdateRadioHandoverDto
@@ -246,10 +253,8 @@ namespace Pm.DTOs.RadioHandover
         public List<string> RadioPhotos { get; set; } = [];
         public string? HandedOverSignatureBase64 { get; set; }
         public string? ReceiverSignatureBase64 { get; set; }
-        public string? Remarks { get; set; }
         public List<HandoverAccessoryItemDto> Accessories { get; set; } = [];
         // HelpdeskTicketNumber sudah ada di RadioHandoverListDto — tidak perlu redeclare
-        public string JobStatus { get; set; } = null!;
         public bool IsWarranty { get; set; }
     }
 
@@ -258,5 +263,11 @@ namespace Pm.DTOs.RadioHandover
         public int UserId { get; set; }
         public string FullName { get; set; } = null!;
         public string Username { get; set; } = null!;
+    }
+
+    public class ChangeReceiverDto
+    {
+        [Required]
+        public int NewReceiverUserId { get; set; }
     }
 }

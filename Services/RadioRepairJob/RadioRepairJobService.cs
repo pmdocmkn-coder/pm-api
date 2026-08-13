@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
 using Pm.DTOs.Common;
+using Pm.DTOs.RadioHandover;
 using Pm.DTOs.RadioRepairJob;
 using Pm.Enums;
 using Pm.Models;
 using Pm.Services;
 using Pm.Services.Notification;
 using Pm.DTOs.Notification;
+using Pm.Helper;
 
 namespace Pm.Services.RadioRepairJob
 {
@@ -42,6 +44,9 @@ namespace Pm.Services.RadioRepairJob
 
             if (query.TechnicianUserId.HasValue)
                 q = q.Where(j => j.AssignedTechnicianUserId == query.TechnicianUserId);
+
+            if (query.WorkshopTechnicianId.HasValue)
+                q = q.Where(j => j.WorkshopTechnicianId == query.WorkshopTechnicianId);
 
             if (query.FromDate.HasValue)
                 q = q.Where(j => j.OpenedAt >= query.FromDate.Value);
@@ -121,6 +126,7 @@ namespace Pm.Services.RadioRepairJob
                     CustomStatusLabel = j.CustomStatus != null ? j.CustomStatus.Label : null,
                     CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
                     OpenedAt = j.OpenedAt,
+                    UpdatedAt = j.UpdatedAt,
                     ClosedAt = j.ClosedAt,
                     FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
@@ -133,7 +139,8 @@ namespace Pm.Services.RadioRepairJob
                     HasReturnedBorrowedPart = j.PartBorrows.Any(pb => pb.Status == WarehousePartBorrowStatus.Returned),
                     PendingHandoverType = j.CurrentHandoverId.HasValue && j.CurrentHandoverId > 0
                         ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault()
-                        : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault()
+                        : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
+                    IsScrap = j.Status == RadioRepairJobStatus.ProcessScrap || j.Status == RadioRepairJobStatus.Scrapped || j.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
                 })
                 .ToListAsync();
 
@@ -478,18 +485,7 @@ namespace Pm.Services.RadioRepairJob
                     ReferenceType = "RadioRepairJob"
                 });
             }
-            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
-            {
-                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
-                {
-                    Title = "Radio Masuk Warehouse",
-                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah diserahkan ke Warehouse{tiketInfo}.",
-                    Category = "handover",
-                    LinkUrl = "/radio-handover/warehouse",
-                    ReferenceId = job.Id,
-                    ReferenceType = "RadioRepairJob"
-                });
-            }
+
 
             // Notifikasi untuk Helpdesk (Selalu menerima notifikasi untuk seluruh alur status)
             string hdTitle = "Update Status Radio";
@@ -874,30 +870,59 @@ namespace Pm.Services.RadioRepairJob
         public async Task<RadioRepairJobDetailDto> ApproveScrapAsync(int id, ApproveScrapDto dto, int userId, string? roleName)
         {
             var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop, StringComparison.OrdinalIgnoreCase);
-            if (!isSupervisor) throw new UnauthorizedAccessException("Hanya Supervisor yang dapat menyetujui Scrap.");
+            var isHelpdesk = string.Equals(roleName, Pm.Helper.OperationalRoleNames.Helpdesk, StringComparison.OrdinalIgnoreCase);
+            if (!isSupervisor && !isHelpdesk) throw new UnauthorizedAccessException("Hanya Supervisor atau Helpdesk yang dapat menyetujui / input data Scrap.");
 
             var job = await _context.RadioRepairJobs
                 .Include(j => j.Radio)
                 .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
-            if (job.Status != RadioRepairJobStatus.ProcessScrap)
-                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap.");
+            bool isPendingFill = job.Status == RadioRepairJobStatus.Scrapped && job.Radio?.IsScrap == true && job.Radio?.DateScrapped == null;
+            if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.ReturnedToHelpdesk && !isPendingFill)
+                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap atau sedang menunggu data scrap.");
 
             var from = job.Status;
-            job.Status = RadioRepairJobStatus.Scrapped;
+            
+            if (from == RadioRepairJobStatus.ProcessScrap)
+            {
+                job.Status = RadioRepairJobStatus.Scrapped;
+            }
+            
             job.ClosedAt = DateTime.UtcNow;
             job.UpdatedAt = DateTime.UtcNow;
 
-            var note = $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {dto.ScrapJobNumber}. Keterangan: {dto.Remarks}";
+            string note;
 
-            if (job.Radio != null)
+            if (dto.IsPendingHelpdeskScrapFill)
             {
-                job.Radio.IsScrap = true;
-                job.Radio.DateScrapped = dto.DateScrapped;
-                job.Radio.ScrapJobNumber = dto.ScrapJobNumber ?? job.HelpdeskTicketNumber;
-                job.Radio.Remarks = dto.Remarks;
-                job.Radio.UpdatedAt = DateTime.UtcNow;
+                // Delegated to Helpdesk
+                if (job.Radio != null)
+                {
+                    job.Radio.IsScrap = true;
+                    job.Radio.DateScrapped = null; // Mark as pending
+                    job.Radio.ScrapJobNumber = null;
+                    job.Radio.Remarks = dto.Remarks;
+                    job.Radio.UpdatedAt = DateTime.UtcNow;
+                }
+                
+                note = $"Radio disetujui untuk di-scrap (Menunggu Input Data Scrap dari Helpdesk). Keterangan: {dto.Remarks}";
+            }
+            else
+            {
+                if (!dto.DateScrapped.HasValue)
+                    throw new ArgumentException("Tanggal scrap wajib diisi jika tidak didelegasikan.");
+
+                if (job.Radio != null)
+                {
+                    job.Radio.IsScrap = true;
+                    job.Radio.DateScrapped = dto.DateScrapped.Value;
+                    job.Radio.ScrapJobNumber = dto.ScrapJobNumber ?? job.HelpdeskTicketNumber;
+                    job.Radio.Remarks = dto.Remarks;
+                    job.Radio.UpdatedAt = DateTime.UtcNow;
+                }
+
+                note = $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {dto.ScrapJobNumber}. Keterangan: {dto.Remarks}";
             }
 
             await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
@@ -907,18 +932,22 @@ namespace Pm.Services.RadioRepairJob
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
 
-            // Notif ke Helpdesk — radio disetujui scrap
             var scrapAlatInfo = string.IsNullOrEmpty(job.EquipmentName) ? "" : $" ({job.EquipmentName})";
             var scrapTiketInfo = string.IsNullOrEmpty(job.HelpdeskTicketNumber) ? "" : $" — Tiket {job.HelpdeskTicketNumber}";
-            await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+
+            // Notif ke Helpdesk — radio disetujui scrap (hanya jika yang menyetujui Supervisor)
+            if (isSupervisor)
             {
-                Title = "Radio Disetujui untuk Scrap",
-                Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap oleh Supervisor MKN{scrapTiketInfo}.",
-                Category = "scrap",
-                LinkUrl = "/radio-repair-dashboard",
-                ReferenceId = job.Id,
-                ReferenceType = "RadioRepairJob"
-            });
+                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
+                {
+                    Title = "Radio Disetujui untuk Scrap",
+                    Message = $"Radio SN {job.RadioSerialNumber}{scrapAlatInfo} telah disetujui untuk di-scrap oleh Supervisor MKN{scrapTiketInfo}.",
+                    Category = "scrap",
+                    LinkUrl = "/radio-repair-dashboard",
+                    ReferenceId = job.Id,
+                    ReferenceType = "RadioRepairJob"
+                });
+            }
 
             // Notif ke Teknisi (akun yang handle job ini)
             if (job.AssignedTechnicianUserId != 0)
@@ -1275,6 +1304,7 @@ namespace Pm.Services.RadioRepairJob
             PendingHandoverType = job.CurrentHandoverId.HasValue && job.CurrentHandoverId > 0
                 ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault()
                 : job.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
+            IsScrap = job.Status == RadioRepairJobStatus.ProcessScrap || job.Status == RadioRepairJobStatus.Scrapped || job.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse),
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
@@ -1300,9 +1330,11 @@ namespace Pm.Services.RadioRepairJob
                 EquipmentTagType = h.EquipmentTagType.ToString(),
                 HandedOverByName = h.HandedOverByWorkshopTechnician != null ? h.HandedOverByWorkshopTechnician.Name : h.HandedOverBy.FullName,
                 ReceivedByName = h.WorkshopTechnician != null ? h.WorkshopTechnician.Name : h.ReceivedBy.FullName,
+                ReceivedByUserId = h.ReceivedByUserId,
                 HasRadioPhoto = !string.IsNullOrEmpty(h.RadioPhotoBase64),
                 HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
                 HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
+                Status = h.Status,
                 Remarks = h.Remarks,
                 PicReceiverName = h.PicReceiverName,
                 IsPartial = h.IsPartial,
@@ -1466,6 +1498,22 @@ namespace Pm.Services.RadioRepairJob
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
+        }
+
+        public async Task<List<UserOptionDto>> GetTechnicianOptionsAsync()
+        {
+            var roleNames = OperationalRoleNames.TechnicianRoles;
+            return await _context.Users.AsNoTracking()
+                .Include(u => u.Role)
+                .Where(u => u.IsActive && u.Role != null && roleNames.Contains(u.Role.RoleName))
+                .OrderBy(u => u.FullName)
+                .Select(u => new UserOptionDto
+                {
+                    UserId = u.UserId,
+                    FullName = u.FullName,
+                    Username = u.Username
+                })
+                .ToListAsync();
         }
     }
 }

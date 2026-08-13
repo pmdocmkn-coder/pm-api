@@ -31,6 +31,20 @@ namespace Pm.Controllers.RadioRepairJob
             });
         }
 
+        [HttpGet("technicians")]
+        public async Task<IActionResult> GetTechnicians()
+        {
+            try
+            {
+                var data = await _service.GetTechnicianOptionsAsync();
+                return ApiResponse.Success(data, "Daftar teknisi berhasil dimuat");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse.InternalServerError(ex.Message);
+            }
+        }
+
         private int CurrentUserId =>
             int.Parse(User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                 ?? throw new UnauthorizedAccessException());
@@ -168,7 +182,7 @@ namespace Pm.Controllers.RadioRepairJob
         }
 
         [HttpPatch("{id}/approve-scrap")]
-        [Authorize(Policy = "RadioScrapCreate")]
+        [Authorize]
         public async Task<IActionResult> ApproveScrap(int id, [FromBody] ApproveScrapDto dto)
         {
             try

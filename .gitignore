@@ -22,3 +22,6 @@ appsettings.Production.json
 ## VS Code
 .vscode/
 .vs/
+
+## Node
+node_modules/

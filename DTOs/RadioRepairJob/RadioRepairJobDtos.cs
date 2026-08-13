@@ -8,6 +8,7 @@ namespace Pm.DTOs.RadioRepairJob
     {
         public string? Status { get; set; }
         public int? TechnicianUserId { get; set; }
+        public int? WorkshopTechnicianId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         /// <summary>Hanya dengan permission radio.repair.view.archive.</summary>
@@ -57,6 +58,7 @@ namespace Pm.DTOs.RadioRepairJob
         /// <summary>Warna status custom (Tailwind class atau hex).</summary>
         public string? CustomStatusColor { get; set; }
         public DateTime OpenedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
         public DateTime? FirstInProgressAt { get; set; }
         public DateTime? WorkshopCompletedAt { get; set; }
@@ -68,6 +70,7 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasActiveBorrowedPart { get; set; }
         public bool HasReturnedBorrowedPart { get; set; }
         public string? PendingHandoverType { get; set; }
+        public bool IsScrap { get; set; }
     }
 
     public class RadioRepairTicketGroupDto
@@ -126,11 +129,13 @@ namespace Pm.DTOs.RadioRepairJob
         public string EquipmentTagType { get; set; } = "Damaged";
         public string HandedOverByName { get; set; } = null!;
         public string ReceivedByName { get; set; } = null!;
+        public int ReceivedByUserId { get; set; }
         public bool HasRadioPhoto { get; set; }
         public bool HasHandedOverSignature { get; set; }
         public bool HasReceiverSignature { get; set; }
         public string? Remarks { get; set; }
         public string? PicReceiverName { get; set; }
+        public string? Status { get; set; }
         public bool IsPartial { get; set; }
         public bool ContainsMainRadioUnit { get; set; }
         public List<string> Accessories { get; set; } = [];
@@ -232,11 +237,11 @@ namespace Pm.DTOs.RadioRepairJob
 
     public class ApproveScrapDto
     {
-        [Required]
-        public DateTime DateScrapped { get; set; }
+        public DateTime? DateScrapped { get; set; }
         [MaxLength(100)]
         public string? ScrapJobNumber { get; set; }
         [MaxLength(1000)]
         public string? Remarks { get; set; }
+        public bool IsPendingHelpdeskScrapFill { get; set; }
     }
 }

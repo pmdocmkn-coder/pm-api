@@ -4,6 +4,8 @@ namespace Pm.Enums
     {
         HelpdeskToTechnician,
         TechnicianToWarehouse,
-        WarehouseToHelpdesk
+        WarehouseToHelpdesk,
+        TechnicianToHelpdesk,
+        HelpdeskToWarehouse
     }
 }
