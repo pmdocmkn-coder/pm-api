@@ -54,16 +54,17 @@ namespace Pm.Services
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var Telegram = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+            var Email = scope.ServiceProvider.GetRequiredService<IEmailService>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
             var today = DateTime.UtcNow.Date;
 
             // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
-            // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
+            // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA atau Email
             var documents = await db.OperationalDocuments
                 .Include(d => d.BhpChecklists)
                 .AsNoTracking()
-                .Where(d => d.PicTelegramId != null && d.PicTelegramId != ""
+                .Where(d => ((d.PicTelegramId != null && d.PicTelegramId != "") || (d.PicEmail != null && d.PicEmail != ""))
                          && d.FollowUpStatus != "SedangDiproses"
                          && d.FollowUpStatus != "Selesai")
                 .ToListAsync(ct);
@@ -80,8 +81,9 @@ namespace Pm.Services
                 {
                     GroupName = d.GroupName!,
                     ValidUntilDate = d.ValidUntil.Date,
-                    // Kirim ke PIC phone pertama dalam grup (semua harus sama idealnya)
-                    PicTelegramId = d.PicTelegramId!
+                    // Kirim ke PIC phone/email pertama dalam grup (semua harus sama idealnya)
+                    PicTelegramId = d.PicTelegramId ?? "",
+                    PicEmail = d.PicEmail ?? ""
                 })
                 .ToList();
 
@@ -107,16 +109,34 @@ namespace Pm.Services
 
                     if (!alreadySent)
                     {
-                        _logger.LogInformation("[DocExpiry] Kirim Grouped WA: Group='{Group}', Phone={Phone}, H-{Days}, Count={Count}",
-                            group.Key.GroupName, group.Key.PicTelegramId, daysRemaining, group.Count());
+                        _logger.LogInformation("[DocExpiry] Kirim Grouped WA/Email: Group='{Group}', Phone={Phone}, Email={Email}, H-{Days}, Count={Count}",
+                            group.Key.GroupName, group.Key.PicTelegramId, group.Key.PicEmail, daysRemaining, group.Count());
 
-                        var sent = await Telegram.SendGroupedDocumentExpiryMessageAsync(
-                            chatId: group.Key.PicTelegramId,
-                            groupName: group.Key.GroupName,
-                            daysRemaining: daysRemaining,
-                            validUntil: group.Key.ValidUntilDate,
-                            documents: group.Select(d => (d.Name, d.ValidUntil))
-                        );
+                        bool sent = false;
+
+                        if (!string.IsNullOrWhiteSpace(group.Key.PicTelegramId))
+                        {
+                            bool waSent = await Telegram.SendGroupedDocumentExpiryMessageAsync(
+                                chatId: group.Key.PicTelegramId,
+                                groupName: group.Key.GroupName,
+                                daysRemaining: daysRemaining,
+                                validUntil: group.Key.ValidUntilDate,
+                                documents: group.Select(d => (d.Name, d.ValidUntil))
+                            );
+                            if (waSent) sent = true;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(group.Key.PicEmail))
+                        {
+                            bool emailSent = await Email.SendGroupedDocumentExpiryEmailAsync(
+                                toEmail: group.Key.PicEmail,
+                                groupName: group.Key.GroupName,
+                                daysRemaining: daysRemaining,
+                                validUntil: group.Key.ValidUntilDate,
+                                documents: group.Select(d => (d.Name, d.ValidUntil))
+                            );
+                            if (emailSent) sent = true;
+                        }
 
                         if (sent)
                         {
@@ -191,7 +211,7 @@ namespace Pm.Services
                         // Cek apakah semua ISR → kirim grouped BHP reminder dengan detail
                         bool allIsr = annivDocs.All(d => d.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true);
 
-                        bool sentAnniv;
+                        bool sentAnniv = false;
                         if (allIsr)
                         {
                             // Kirim grouped BHP reminder dengan detail per dokumen
@@ -211,29 +231,59 @@ namespace Pm.Services
 
                             if (groupDetailItems.Count > 0)
                             {
-                                sentAnniv = await Telegram.SendGroupedBhpPaymentReminderAsync(
-                                    chatId: group.Key.PicTelegramId,
-                                    groupName: group.Key.GroupName,
-                                    daysToAnniv: annivDays,
-                                    groupItems: groupDetailItems
-                                );
+                                if (!string.IsNullOrWhiteSpace(group.Key.PicTelegramId))
+                                {
+                                    bool waSent = await Telegram.SendGroupedBhpPaymentReminderAsync(
+                                        chatId: group.Key.PicTelegramId,
+                                        groupName: group.Key.GroupName,
+                                        daysToAnniv: annivDays,
+                                        groupItems: groupDetailItems
+                                    );
+                                    if (waSent) sentAnniv = true;
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(group.Key.PicEmail))
+                                {
+                                    bool emailSent = await Email.SendGroupedBhpPaymentReminderEmailAsync(
+                                        toEmail: group.Key.PicEmail,
+                                        groupName: group.Key.GroupName,
+                                        daysToAnniv: annivDays,
+                                        groupItems: groupDetailItems
+                                    );
+                                    if (emailSent) sentAnniv = true;
+                                }
                             }
                             else
                             {
                                 // Semua sudah lunas, tidak perlu kirim reminder BHP
-                                sentAnniv = false;
                                 _logger.LogInformation("[DocExpiry] Skip BHP reminder grup '{Group}' — semua sudah lunas.", group.Key.GroupName);
                             }
                         }
                         else
                         {
-                            sentAnniv = await Telegram.SendGroupedDocumentAnniversaryMessageAsync(
-                                chatId: group.Key.PicTelegramId,
-                                groupName: group.Key.GroupName,
-                                daysRemaining: annivDays,
-                                validUntil: group.Key.ValidUntilDate,
-                                documents: annivDocs.Select(d => (d.Name, d.Type ?? ""))
-                            );
+                            if (!string.IsNullOrWhiteSpace(group.Key.PicTelegramId))
+                            {
+                                bool waSent = await Telegram.SendGroupedDocumentAnniversaryMessageAsync(
+                                    chatId: group.Key.PicTelegramId,
+                                    groupName: group.Key.GroupName,
+                                    daysRemaining: annivDays,
+                                    validUntil: group.Key.ValidUntilDate,
+                                    documents: annivDocs.Select(d => (d.Name, d.Type ?? ""))
+                                );
+                                if (waSent) sentAnniv = true;
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(group.Key.PicEmail))
+                            {
+                                bool emailSent = await Email.SendGroupedDocumentAnniversaryEmailAsync(
+                                    toEmail: group.Key.PicEmail,
+                                    groupName: group.Key.GroupName,
+                                    daysRemaining: annivDays,
+                                    validUntil: group.Key.ValidUntilDate,
+                                    documents: annivDocs.Select(d => (d.Name, d.Type ?? ""))
+                                );
+                                if (emailSent) sentAnniv = true;
+                            }
                         }
 
                         if (sentAnniv)
@@ -279,17 +329,38 @@ namespace Pm.Services
 
                     if (!alreadySent)
                     {
-                        _logger.LogInformation("[DocExpiry] Kirim WA: DocId={Id}, Phone={Phone}, H-{Days}",
-                            doc.Id, doc.PicTelegramId, daysRemaining);
+                        _logger.LogInformation("[DocExpiry] Kirim WA/Email: DocId={Id}, Phone={Phone}, Email={Email}, H-{Days}",
+                            doc.Id, doc.PicTelegramId, doc.PicEmail, daysRemaining);
 
-                        var sent = await Telegram.SendDocumentExpiryMessageAsync(
-                            chatId: doc.PicTelegramId!,
-                            documentName: doc.Name,
-                            daysRemaining: daysRemaining,
-                            validUntil: doc.ValidUntil,
-                            fileLink: doc.FileLink,
-                            documentId: doc.Id.ToString()
-                        );
+                        bool sent = false;
+
+                        if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
+                        {
+                            bool waSent = await Telegram.SendDocumentExpiryMessageAsync(
+                                chatId: doc.PicTelegramId,
+                                documentName: doc.Name,
+                                daysRemaining: daysRemaining,
+                                validUntil: doc.ValidUntil,
+                                fileLink: doc.FileLink,
+                                documentId: doc.Id.ToString()
+                            );
+                            if (waSent) sent = true;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(doc.PicEmail))
+                        {
+                            bool emailSent = await Email.SendDocumentExpiryEmailAsync(
+                                toEmail: doc.PicEmail,
+                                documentName: doc.Name,
+                                daysRemaining: daysRemaining,
+                                validUntil: doc.ValidUntil,
+                                fileLink: doc.FileLink,
+                                documentId: doc.Id.ToString(),
+                                documentType: doc.Type,
+                                groupName: doc.GroupName
+                            );
+                            if (emailSent) sent = true;
+                        }
 
                         if (sent)
                         {
@@ -340,7 +411,7 @@ namespace Pm.Services
                                 _logger.LogInformation("[DocExpiry] Kirim Anniversary WA: DocId={Id}, H-{Days}", doc.Id, dta);
 
                                 bool isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
-                                bool sentAnniv;
+                                bool sentAnniv = false;
 
                                 if (isIsr && doc.BhpChecklists != null && doc.BhpChecklists.Count > 0)
                                 {
@@ -353,31 +424,64 @@ namespace Pm.Services
                                     var hasUnpaid = doc.BhpChecklists.Any(c => !c.IsPaid);
                                     if (hasUnpaid)
                                     {
-                                        sentAnniv = await Telegram.SendBhpPaymentReminderAsync(
-                                            chatId: doc.PicTelegramId!,
-                                            documentName: doc.Name,
-                                            daysToAnniv: dta,
-                                            currentYear: DateTime.UtcNow.Year,
-                                            bhpItems: bhpItems
-                                        );
+                                        if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
+                                        {
+                                            bool waSent = await Telegram.SendBhpPaymentReminderAsync(
+                                                chatId: doc.PicTelegramId,
+                                                documentName: doc.Name,
+                                                daysToAnniv: dta,
+                                                currentYear: DateTime.UtcNow.Year,
+                                                bhpItems: bhpItems
+                                            );
+                                            if (waSent) sentAnniv = true;
+                                        }
+
+                                        if (!string.IsNullOrWhiteSpace(doc.PicEmail))
+                                        {
+                                            bool emailSent = await Email.SendBhpPaymentReminderEmailAsync(
+                                                toEmail: doc.PicEmail,
+                                                documentName: doc.Name,
+                                                daysToAnniv: dta,
+                                                currentYear: DateTime.UtcNow.Year,
+                                                bhpItems: bhpItems
+                                            );
+                                            if (emailSent) sentAnniv = true;
+                                        }
                                     }
                                     else
                                     {
-                                        sentAnniv = false;
                                         _logger.LogInformation("[DocExpiry] Skip BHP reminder DocId={Id} — semua sudah lunas.", doc.Id);
                                     }
                                 }
                                 else
                                 {
-                                    sentAnniv = await Telegram.SendDocumentAnniversaryMessageAsync(
-                                        chatId: doc.PicTelegramId!,
-                                        documentName: doc.Name,
-                                        daysRemaining: dta,
-                                        validUntil: doc.ValidUntil,
-                                        fileLink: doc.FileLink,
-                                        documentId: doc.Id.ToString(),
-                                        documentType: doc.Type ?? ""
-                                    );
+                                    if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
+                                    {
+                                        bool waSent = await Telegram.SendDocumentAnniversaryMessageAsync(
+                                            chatId: doc.PicTelegramId,
+                                            documentName: doc.Name,
+                                            daysRemaining: dta,
+                                            validUntil: doc.ValidUntil,
+                                            fileLink: doc.FileLink,
+                                            documentId: doc.Id.ToString(),
+                                            documentType: doc.Type ?? ""
+                                        );
+                                        if (waSent) sentAnniv = true;
+                                    }
+
+                                    if (!string.IsNullOrWhiteSpace(doc.PicEmail))
+                                    {
+                                        bool emailSent = await Email.SendDocumentAnniversaryEmailAsync(
+                                            toEmail: doc.PicEmail,
+                                            documentName: doc.Name,
+                                            daysRemaining: dta,
+                                            validUntil: doc.ValidUntil,
+                                            fileLink: doc.FileLink,
+                                            documentId: doc.Id.ToString(),
+                                            documentType: doc.Type ?? ""
+                                        );
+                                        if (emailSent) sentAnniv = true;
+                                    }
                                 }
 
                                 if (sentAnniv)
@@ -423,7 +527,7 @@ namespace Pm.Services
         /// Kirim notifikasi Telegram paksa untuk 1 dokumen tertentu (by ID).
         /// Mengabaikan threshold tanggal — khusus Super Admin.
         /// </summary>
-        public async Task<(bool success, string message)> SendForceNotificationAsync(int documentId)
+        public async Task<(bool success, string message)> SendForceNotificationAsync(int documentId, string channel = "all")
         {
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -437,17 +541,21 @@ namespace Pm.Services
             if (doc == null)
                 return (false, "Dokumen tidak ditemukan.");
 
-            if (string.IsNullOrWhiteSpace(doc.PicTelegramId))
-                return (false, "Dokumen ini tidak memiliki Telegram Chat ID PIC. Harap isi Telegram Chat ID terlebih dahulu.");
+            if (string.IsNullOrWhiteSpace(doc.PicTelegramId) && string.IsNullOrWhiteSpace(doc.PicEmail))
+                return (false, "Dokumen ini tidak memiliki Telegram Chat ID ataupun Email PIC. Harap isi salah satunya terlebih dahulu.");
+
+            var Email = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
             var daysRemaining = (int)(doc.ValidUntil.Date - DateTime.UtcNow.Date).TotalDays;
             bool isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
 
-            var chatIds = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var chatIds = doc.PicTelegramId?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
             bool anySent = false;
 
-            foreach (var chatId in chatIds)
+            if (channel == "all" || channel == "telegram")
             {
+                foreach (var chatId in chatIds)
+                {
                 bool sent;
 
                 if (isIsr && doc.BhpChecklists != null && doc.BhpChecklists.Count > 0)
@@ -479,16 +587,50 @@ namespace Pm.Services
                 }
 
                 if (sent) anySent = true;
+                }
+            }
+
+            if ((channel == "all" || channel == "email") && !string.IsNullOrWhiteSpace(doc.PicEmail))
+            {
+                bool emailSent;
+                if (isIsr && doc.BhpChecklists != null && doc.BhpChecklists.Count > 0)
+                {
+                    var bhpItems = doc.BhpChecklists
+                        .OrderBy(c => c.Year)
+                        .Select(c => (c.Year, c.IsPaid, c.InvoiceNumber));
+
+                    emailSent = await Email.SendBhpPaymentReminderEmailAsync(
+                        toEmail: doc.PicEmail,
+                        documentName: doc.Name,
+                        daysToAnniv: daysRemaining,
+                        currentYear: DateTime.UtcNow.Year,
+                        bhpItems: bhpItems
+                    );
+                }
+                else
+                {
+                    emailSent = await Email.SendDocumentExpiryEmailAsync(
+                        toEmail: doc.PicEmail,
+                        documentName: doc.Name,
+                        daysRemaining: daysRemaining,
+                        validUntil: doc.ValidUntil,
+                        fileLink: doc.FileLink,
+                        documentId: doc.Id.ToString(),
+                        documentType: doc.Type,
+                        groupName: doc.GroupName
+                    );
+                }
+                if (emailSent) anySent = true;
             }
 
             if (anySent)
             {
-                _logger.LogInformation("[DocExpiry] Force notification sent: DocId={Id}, ChatId={ChatId}, IsISR={IsIsr}",
-                    doc.Id, doc.PicTelegramId, isIsr);
-                return (true, $"Notifikasi Telegram berhasil dikirim ke {doc.PicTelegramId}.");
+                _logger.LogInformation("[DocExpiry] Force notification sent: DocId={Id}, ChatId={ChatId}, Email={Email}, IsISR={IsIsr}",
+                    doc.Id, doc.PicTelegramId, doc.PicEmail, isIsr);
+                return (true, $"Notifikasi berhasil dikirim.");
             }
 
-            return (false, "Gagal mengirim notifikasi. Periksa koneksi Telegram Bot.");
+            return (false, "Gagal mengirim notifikasi. Periksa koneksi Telegram Bot atau konfigurasi Email.");
         }
 
         public async Task<(bool isSuccess, string message, int sentCount)> SendForceNotificationBulkAsync(string? groupName, string? type, string? expiryStatus)

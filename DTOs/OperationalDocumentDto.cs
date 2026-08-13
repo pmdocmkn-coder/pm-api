@@ -61,6 +61,9 @@ namespace Pm.DTOs
         [RegularExpression(@"^([-]?[0-9]+)(,[-]?[0-9]+)*$", ErrorMessage = "Telegram Chat ID hanya boleh angka dan tanda minus. Pisahkan dengan koma jika lebih dari satu tanpa spasi")]
         public string? PicTelegramId { get; set; }
 
+        [MaxLength(255)]
+        public string? PicEmail { get; set; }
+
         [MaxLength(1000)]
         public string? FileLink { get; set; }
     }
@@ -80,6 +83,7 @@ namespace Pm.DTOs
         public DateTime ValidUntil { get; set; }
         public string? PicName { get; set; }
         public string? PicTelegramId { get; set; }
+        public string? PicEmail { get; set; }
         public string? FileLink { get; set; }
         public required string FollowUpStatus { get; set; }
         public string? FollowUpRemark { get; set; }
