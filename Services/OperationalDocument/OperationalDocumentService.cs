@@ -114,6 +114,7 @@ namespace Pm.Services
                 ValidUntil = dto.ValidUntil,
                 PicName = dto.PicName,
                 PicTelegramId = dto.PicTelegramId,
+                PicEmail = dto.PicEmail,
                 FileLink = dto.FileLink,
                 FollowUpStatus = "Tidak Ada"
             };
@@ -156,6 +157,7 @@ namespace Pm.Services
                 existing.ValidUntil = dto.ValidUntil;
                 existing.PicName = dto.PicName;
                 existing.PicTelegramId = dto.PicTelegramId;
+                existing.PicEmail = dto.PicEmail;
                 existing.FileLink = dto.FileLink;
                 existing.UpdatedAt = DateTime.UtcNow;
 
@@ -176,6 +178,7 @@ namespace Pm.Services
                     ValidUntil = dto.ValidUntil,
                     PicName = dto.PicName,
                     PicTelegramId = dto.PicTelegramId,
+                    PicEmail = dto.PicEmail,
                     FileLink = dto.FileLink,
                     FollowUpStatus = "Tidak Ada"
                 };
@@ -189,7 +192,9 @@ namespace Pm.Services
 
         public async Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto)
         {
-            var doc = await _context.OperationalDocuments.FirstOrDefaultAsync(d => d.Id == id)
+            var doc = await _context.OperationalDocuments
+                .Include(d => d.BhpChecklists)
+                .FirstOrDefaultAsync(d => d.Id == id)
                       ?? throw new KeyNotFoundException("Dokumen tidak ditemukan.");
 
             if (dto.ValidUntil <= dto.ValidFrom)
@@ -209,6 +214,7 @@ namespace Pm.Services
             doc.ValidUntil = dto.ValidUntil;
             doc.PicName = dto.PicName;
             doc.PicTelegramId = dto.PicTelegramId;
+            doc.PicEmail = dto.PicEmail;
             doc.FileLink = dto.FileLink;
             doc.UpdatedAt = DateTime.UtcNow;
 
@@ -321,6 +327,7 @@ namespace Pm.Services
                 ValidUntil = doc.ValidUntil,
                 PicName = doc.PicName,
                 PicTelegramId = doc.PicTelegramId,
+                PicEmail = doc.PicEmail,
                 FileLink = doc.FileLink,
                 FollowUpStatus = doc.FollowUpStatus,
                 FollowUpRemark = doc.FollowUpRemark,

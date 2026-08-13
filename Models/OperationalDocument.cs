@@ -39,6 +39,9 @@ namespace Pm.Models
         [MaxLength(200)]
         public string? PicTelegramId { get; set; }
 
+        [MaxLength(255)]
+        public string? PicEmail { get; set; }
+
         [MaxLength(1000)]
         public string? FileLink { get; set; }
 

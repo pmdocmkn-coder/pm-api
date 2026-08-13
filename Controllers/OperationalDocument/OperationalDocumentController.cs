@@ -287,11 +287,11 @@ namespace Pm.Controllers
         /// </summary>
         [HttpPost("{id}/send-notification")]
         [Authorize(Policy = "OperationalDocumentSendNotification")]
-        public async Task<IActionResult> SendNotification(int id)
+        public async Task<IActionResult> SendNotification(int id, [FromQuery] string channel = "all")
         {
             try
             {
-                var (success, message) = await _notificationService.SendForceNotificationAsync(id);
+                var (success, message) = await _notificationService.SendForceNotificationAsync(id, channel);
                 if (!success)
                     return ApiResponse.BadRequest("Send Notification", message);
 
