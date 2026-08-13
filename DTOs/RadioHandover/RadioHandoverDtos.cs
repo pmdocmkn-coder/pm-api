@@ -7,6 +7,7 @@ namespace Pm.DTOs.RadioHandover
     public class RadioHandoverQueryDto : BaseQueryDto
     {
         public RadioHandoverType? HandoverType { get; set; }
+        public string? Status { get; set; }
         public int? JobId { get; set; }
         public int? ReceivedByUserId { get; set; }
         public DateTime? FromDate { get; set; }

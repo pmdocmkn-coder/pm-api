@@ -58,6 +58,7 @@ namespace Pm.DTOs.RadioRepairJob
         /// <summary>Warna status custom (Tailwind class atau hex).</summary>
         public string? CustomStatusColor { get; set; }
         public DateTime OpenedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
         public DateTime? FirstInProgressAt { get; set; }
         public DateTime? WorkshopCompletedAt { get; set; }

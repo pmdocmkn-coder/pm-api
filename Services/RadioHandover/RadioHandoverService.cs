@@ -56,6 +56,9 @@ namespace Pm.Services.RadioHandover
             if (query.ReceivedByUserId.HasValue)
                 q = q.Where(h => h.ReceivedByUserId == query.ReceivedByUserId);
 
+            if (!string.IsNullOrEmpty(query.Status))
+                q = q.Where(h => h.Status == query.Status);
+
             if (query.FromDate.HasValue)
                 q = q.Where(h => h.HandoverAt >= query.FromDate.Value);
             if (query.ToDate.HasValue)
@@ -64,14 +67,22 @@ namespace Pm.Services.RadioHandover
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
                 var s = query.Search.Trim();
+                // Avoid using StringComparison in Contains so EF Core can translate it to SQL LIKE
                 q = q.Where(h =>
-                    h.HandoverNumber.Contains(s, StringComparison.OrdinalIgnoreCase) ||
-                    h.RadioSerialNumber.Contains(s, StringComparison.OrdinalIgnoreCase) ||
-                    h.RadioRepairJob.HelpdeskTicketNumber.Contains(s, StringComparison.OrdinalIgnoreCase));
+                    h.HandoverNumber.Contains(s) ||
+                    h.RadioSerialNumber.Contains(s) ||
+                    (h.RadioRepairJob != null && h.RadioRepairJob.HelpdeskTicketNumber != null && h.RadioRepairJob.HelpdeskTicketNumber.Contains(s)) ||
+                    (h.NoJobErp != null && h.NoJobErp.Contains(s)) ||
+                    (h.HandedOverBy != null && h.HandedOverBy.FullName != null && h.HandedOverBy.FullName.Contains(s)) ||
+                    (h.ReceivedBy != null && h.ReceivedBy.FullName != null && h.ReceivedBy.FullName.Contains(s)) ||
+                    (h.WorkshopTechnician != null && h.WorkshopTechnician.Name != null && h.WorkshopTechnician.Name.Contains(s)) ||
+                    (h.HandedOverByWorkshopTechnician != null && h.HandedOverByWorkshopTechnician.Name != null && h.HandedOverByWorkshopTechnician.Name.Contains(s))
+                );
             }
 
             var total = await q.CountAsync();
-            var items = await q.OrderByDescending(h => h.HandoverAt)
+            var items = await q.OrderByDescending(h => h.Status == "PendingReceiverSignature")
+                .ThenByDescending(h => h.HandoverAt)
                 .Skip((query.Page - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .Select(h => new RadioHandoverListDto

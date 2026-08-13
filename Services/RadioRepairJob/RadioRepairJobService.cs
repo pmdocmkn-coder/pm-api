@@ -126,6 +126,7 @@ namespace Pm.Services.RadioRepairJob
                     CustomStatusLabel = j.CustomStatus != null ? j.CustomStatus.Label : null,
                     CustomStatusColor = j.CustomStatus != null ? j.CustomStatus.Color : null,
                     OpenedAt = j.OpenedAt,
+                    UpdatedAt = j.UpdatedAt,
                     ClosedAt = j.ClosedAt,
                     FirstInProgressAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.InProgress).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
                     WorkshopCompletedAt = j.StatusLogs.Where(l => l.ToStatus == RadioRepairJobStatus.RepairCompleted || l.ToStatus == RadioRepairJobStatus.ProcessScrap || l.ToStatus == RadioRepairJobStatus.HandedToWarehouse || l.ToStatus == RadioRepairJobStatus.ReturnedToHelpdesk || l.ToStatus == RadioRepairJobStatus.Scrapped).OrderBy(l => l.At).Select(l => (DateTime?)l.At).FirstOrDefault(),
@@ -484,18 +485,7 @@ namespace Pm.Services.RadioRepairJob
                     ReferenceType = "RadioRepairJob"
                 });
             }
-            else if (dto.Status == RadioRepairJobStatus.HandedToWarehouse)
-            {
-                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Warehouse, new CreateNotificationDto
-                {
-                    Title = "Radio Masuk Warehouse",
-                    Message = $"Radio SN {job.RadioSerialNumber}{alatInfo} telah diserahkan ke Warehouse{tiketInfo}.",
-                    Category = "handover",
-                    LinkUrl = "/radio-handover/warehouse",
-                    ReferenceId = job.Id,
-                    ReferenceType = "RadioRepairJob"
-                });
-            }
+
 
             // Notifikasi untuk Helpdesk (Selalu menerima notifikasi untuk seluruh alur status)
             string hdTitle = "Update Status Radio";
