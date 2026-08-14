@@ -279,7 +279,7 @@ namespace Pm.Services
             };
 
             var sb = new StringBuilder();
-            sb.AppendLine("*[PM Dashboard MKN]*");
+            sb.AppendLine("*\\[PM Dashboard MKN\\]*");
             sb.AppendLine();
             sb.AppendLine("💰 *Peringatan Pembayaran BHP Tahunan*");
             sb.AppendLine();
@@ -339,7 +339,7 @@ namespace Pm.Services
             };
 
             var sb = new StringBuilder();
-            sb.AppendLine("*[PM Dashboard MKN]*");
+            sb.AppendLine("*\\[PM Dashboard MKN\\]*");
             sb.AppendLine();
             sb.AppendLine("💰 *Peringatan Pembayaran BHP Tahunan (Grup)*");
             sb.AppendLine();
