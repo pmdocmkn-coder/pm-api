@@ -1,6 +1,7 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using Pm.Helper;
 
 namespace Pm.Services
 {
@@ -335,6 +336,102 @@ namespace Pm.Services
                 </p>";
 
             return await SendEmailInternalAsync(toEmail, $"[URGENT] Tagihan BHP Grup ISR: {groupName}", GetBaseHtmlTemplate("💰 Tagihan BHP Frekuensi Radio Grup", content));
+        }
+
+        public async Task<bool> SendRadioReadyForHelpdeskEmailAsync(
+            string toEmail,
+            string ticketNumber,
+            string radioSerial,
+            string equipmentName,
+            string? unitNumber,
+            string technicianName,
+            string? notes,
+            DateTime handoverAt,
+            string webAppBaseUrl,
+            bool isFromHelpdesk = false)
+        {
+            var subject = isFromHelpdesk 
+                ? $"[Radio Scrap] Tiket {ticketNumber} - SN: {radioSerial} Diserahkan ke Warehouse"
+                : $"[Radio Ready] Tiket {ticketNumber} - SN: {radioSerial} Masuk Warehouse";
+            var formattedDate = WitaHelper.Format(handoverAt);
+            var targetLink = $"{webAppBaseUrl.TrimEnd('/')}/radio-handover/warehouse";
+
+            var introText = isFromHelpdesk
+                ? "Radio berikut telah <strong>diserahkan ke Warehouse oleh Helpdesk</strong> (misal: untuk proses scrap atau lainnya)."
+                : "Radio berikut telah selesai diperbaiki oleh teknisi workshop dan telah <strong>diserahkan ke Warehouse</strong>. Radio siap untuk diproses serah terima ke Helpdesk / Pengguna.";
+
+            var senderLabel = isFromHelpdesk ? "Diserahkan Oleh" : "Teknisi Penyerah";
+            var title = isFromHelpdesk ? "Radio Masuk WH (Dari Helpdesk)" : "Radio Selesai Diperbaiki — Siap di WH";
+
+            var content = $@"
+                <p style='color:#334155;font-size:14px;line-height:1.6;margin-top:0;'>
+                    Halo Tim Helpdesk,
+                </p>
+                <p style='color:#334155;font-size:14px;line-height:1.6;'>
+                    {introText}
+                </p>
+                
+                <table width='100%' cellpadding='0' cellspacing='0' style='background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;margin:20px 0;'>
+                    <tr>
+                        <td style='padding:16px;'>
+                            <table width='100%' cellpadding='6' cellspacing='0' style='font-size:13px;'>
+                                <tr>
+                                    <td style='color:#64748B;width:130px;font-weight:600;'>No. Tiket MKN</td>
+                                    <td style='color:#0F172A;font-weight:700;'>{ticketNumber}</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>Serial Number</td>
+                                    <td style='color:#0F172A;font-weight:700;'>{radioSerial}</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>Tipe / Model</td>
+                                    <td style='color:#0F172A;'>{equipmentName}</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>No. Unit / Fleet</td>
+                                    <td style='color:#0F172A;'>{unitNumber ?? "-"}</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>{senderLabel}</td>
+                                    <td style='color:#0F172A;'>{technicianName}</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>Waktu Masuk WH</td>
+                                    <td style='color:#0F172A;'>{formattedDate} WITA</td>
+                                </tr>
+                                <tr>
+                                    <td style='color:#64748B;font-weight:600;'>Catatan</td>
+                                    <td style='color:#0F172A;'>{notes ?? "-"}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+                <p style='color:#64748B;font-size:12px;margin-bottom:0;'>
+                    Silakan klik tombol di bawah untuk membuka halaman <strong>Radio Masuk WH</strong>.
+                </p>";
+
+            var body = GetBaseHtmlTemplate(title, content, "Buka Radio Masuk WH", targetLink);
+            return await SendEmailInternalAsync(toEmail, subject, body);
+        }
+
+        public async Task<bool> SendTestNotificationEmailAsync(string toEmail)
+        {
+            var subject = "[Test Email] Pengaturan Notifikasi Email Helpdesk - PM Dashboard";
+            var content = $@"
+                <p style='color:#334155;font-size:14px;line-height:1.6;margin-top:0;'>
+                    Halo,
+                </p>
+                <p style='color:#334155;font-size:14px;line-height:1.6;'>
+                    Ini adalah <strong>email uji coba (test email)</strong> dari sistem PM Dashboard untuk memverifikasi bahwa konfigurasi email notifikasi Helpdesk telah berfungsi dengan baik.
+                </p>
+                <div style='background-color:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:16px;margin:16px 0;color:#166534;font-size:13px;font-weight:600;'>
+                    ✅ Konfigurasi Email Berhasil & Siap Menerima Notifikasi
+                </div>";
+
+            var body = GetBaseHtmlTemplate("Uji Coba Notifikasi Email", content);
+            return await SendEmailInternalAsync(toEmail, subject, body);
         }
     }
 }

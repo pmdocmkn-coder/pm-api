@@ -244,6 +244,7 @@ builder.Services.AddScoped<Pm.Services.CctvKpc.ICctvKpcService, Pm.Services.Cctv
 
 // ===== Notification =====
 builder.Services.AddScoped<Pm.Services.Notification.INotificationService, Pm.Services.Notification.NotificationService>();
+builder.Services.AddScoped<INotificationSettingService, NotificationSettingService>();
 builder.Services.AddHostedService<Pm.Services.Notification.NotificationCleanupService>();
 
 // ===== Operational Documents =====

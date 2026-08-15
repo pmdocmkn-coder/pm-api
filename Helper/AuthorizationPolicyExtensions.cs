@@ -82,6 +82,8 @@ namespace Pm.Helper
             // Setting
             options.AddPolicy("CanViewSettings", policy =>
                 policy.RequireClaim("Permission", "system.settings.view"));
+            options.AddPolicy("CanViewNotificationSettings", policy =>
+                policy.RequireClaim("Permission", "system.notification.setting.view"));
             options.AddPolicy("CanEditSettings", policy =>
                 policy.RequireClaim("Permission", "system.settings.edit"));
             options.AddPolicy("CanViewAuditLog", policy =>
