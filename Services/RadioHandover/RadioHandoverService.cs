@@ -17,7 +17,9 @@ namespace Pm.Services.RadioHandover
         AppDbContext _context,
         IActivityLogService _activityLog,
         IImageBase64Validator _imageValidator,
-        INotificationService _notificationService) : IRadioHandoverService
+        INotificationService _notificationService,
+        IEmailService _emailService,
+        IConfiguration _config) : IRadioHandoverService
     {
 
         public async Task<PagedResultDto<RadioHandoverListDto>> GetAllAsync(
@@ -443,21 +445,57 @@ namespace Pm.Services.RadioHandover
                     ReferenceId = handover.Id,       // handover.Id bukan job.Id — agar ?handoverId= bisa buka detail yang benar
                     ReferenceType = "RadioHandover"
                 });
-                
-                // Notif ke Helpdesk (role fix)
-                await _notificationService.CreateForRoleAsync(Pm.Helper.OperationalRoleNames.Helpdesk, new CreateNotificationDto
-                {
-                    Title = "Radio Diserahkan ke Warehouse",
-                    Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse.",
-                    Category = "handover",
-                    LinkUrl = "/radio-repair-dashboard",
-                    ReferenceId = job.Id,
-                    ReferenceType = "RadioRepairJob"
-                });
             }
+
+            // Notifikasi Email ke Helpdesk (jika diaktifkan di Settings)
+            await TrySendHelpdeskEmailNotificationAsync(job, handover, technicianName);
 
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(handover.Id))!;
+        }
+
+        private async Task TrySendHelpdeskEmailNotificationAsync(Pm.Models.RadioRepairJob job, Pm.Models.RadioHandover handover, string technicianName, bool isFromHelpdesk = false)
+        {
+            try
+            {
+                Console.WriteLine("DEBUG: TrySendHelpdeskEmailNotificationAsync DIPANGGIL");
+                var enabledSetting = await _context.SystemSettings.AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.SettingKey == "HelpdeskEmailNotificationEnabled");
+
+                Console.WriteLine($"DEBUG: HelpdeskEmailNotificationEnabled = {enabledSetting?.SettingValue}");
+
+                if (string.Equals(enabledSetting?.SettingValue, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    var recipientsSetting = await _context.SystemSettings.AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.SettingKey == "HelpdeskNotificationEmails");
+                    
+                    Console.WriteLine($"DEBUG: HelpdeskNotificationEmails = {recipientsSetting?.SettingValue}");
+
+                    if (!string.IsNullOrWhiteSpace(recipientsSetting?.SettingValue))
+                    {
+                        var webAppBaseUrl = _config["AppUrl"] ?? "http://localhost:5173";
+                        Console.WriteLine("DEBUG: Mengirim email via _emailService...");
+                        await _emailService.SendRadioReadyForHelpdeskEmailAsync(
+                            toEmail: recipientsSetting.SettingValue,
+                            ticketNumber: job.HelpdeskTicketNumber ?? "-",
+                            radioSerial: job.RadioSerialNumber ?? "-",
+                            equipmentName: job.EquipmentName ?? "-",
+                            unitNumber: job.UnitNumber,
+                            technicianName: technicianName,
+                            notes: handover.RepairDataDescription ?? job.RepairDataDescription,
+                            handoverAt: handover.HandoverAt,
+                            webAppBaseUrl: webAppBaseUrl,
+                            isFromHelpdesk: isFromHelpdesk
+                        );
+                        Console.WriteLine("DEBUG: Email berhasil dikirim via _emailService");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR in TrySendHelpdeskEmailNotificationAsync: {ex.Message}\n{ex.StackTrace}");
+                // Log exception silently so handover process is not interrupted by SMTP issues
+            }
         }
 
         private async Task<RadioHandoverDetailDto> CreateTechnicianToHelpdeskAsync(
@@ -689,6 +727,10 @@ namespace Pm.Services.RadioHandover
                     ReferenceType = "RadioHandover"
                 });
             }
+
+            var hdUser = await _context.Users.FindAsync(currentUserId);
+            var senderName = hdUser?.FullName ?? "Helpdesk";
+            await TrySendHelpdeskEmailNotificationAsync(job, handover, senderName, true);
 
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
             return (await GetByIdAsync(handover.Id))!;

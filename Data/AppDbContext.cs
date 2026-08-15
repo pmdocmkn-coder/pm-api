@@ -59,6 +59,9 @@ namespace Pm.Data
         // Division Master Data
         public DbSet<Division> Divisions { get; set; } = null!;
 
+        // System Settings
+        public DbSet<SystemSetting> SystemSettings { get; set; } = null!;
+
         // Internal Link
         public DbSet<InternalLink> InternalLinks { get; set; } = null!;
         public DbSet<InternalLinkHistory> InternalLinkHistories { get; set; } = null!;

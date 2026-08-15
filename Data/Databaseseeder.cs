@@ -66,6 +66,7 @@ public static class DatabaseSeeder
                     new() { PermissionId = 20, PermissionName = "system.settings.edit", Description = "Edit system settings", Group = "System", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 21, PermissionName = "system.audit.view", Description = "View audit logs", Group = "System", CreatedAt = DateTime.UtcNow },
                     new() { PermissionId = 22, PermissionName = "delete.all-data", Description = "Reset all data (DANGER)", Group = "System", CreatedAt = DateTime.UtcNow },
+                    new() { PermissionName = "system.notification.setting.view", Description = "Kelola dan atur notifikasi email helpdesk", Group = "System", CreatedAt = DateTime.UtcNow },
 
                     // Inspeksi Temuan KPC
                     new() { PermissionId = 24, PermissionName = "inspeksi.temuan-kpc.view", Description = "View inspeksi temuan", Group = "Inspeksi", CreatedAt = DateTime.UtcNow },

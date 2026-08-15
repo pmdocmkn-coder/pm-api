@@ -58,7 +58,7 @@ namespace Pm.DTOs
         public string? PicName { get; set; }
 
         [MaxLength(200)]
-        [RegularExpression(@"^([-]?[0-9]+)(,[-]?[0-9]+)*$", ErrorMessage = "Telegram Chat ID hanya boleh angka dan tanda minus. Pisahkan dengan koma jika lebih dari satu tanpa spasi")]
+        [RegularExpression(@"^([-]?[0-9]+)?(,([-]?[0-9]+)?)*$", ErrorMessage = "Telegram Chat ID hanya boleh angka dan tanda minus. Pisahkan dengan koma jika lebih dari satu tanpa spasi")]
         public string? PicTelegramId { get; set; }
 
         [MaxLength(255)]
