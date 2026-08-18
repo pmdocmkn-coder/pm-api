@@ -473,7 +473,7 @@ namespace Pm.Services.RadioHandover
 
                     if (!string.IsNullOrWhiteSpace(recipientsSetting?.SettingValue))
                     {
-                        var webAppBaseUrl = _config["AppUrl"] ?? "http://localhost:5173";
+                        var webAppBaseUrl = _config["FrontendUrl"] ?? "https://pm.mknops.web.id/#";
                         Console.WriteLine("DEBUG: Mengirim email via _emailService...");
                         await _emailService.SendRadioReadyForHelpdeskEmailAsync(
                             toEmail: recipientsSetting.SettingValue,
