@@ -878,6 +878,27 @@ namespace Pm.Services.RadioRepairJob
                 .FirstOrDefaultAsync(j => j.Id == id && !j.IsDeleted)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
+            // Jika radio belum terdaftar di master (job.Radio == null), buat radio baru dengan kategori LegacyScrap
+            if (job.Radio == null)
+            {
+                var newRadio = new Models.Radio
+                {
+                    Category = "LegacyScrap",
+                    SerialNumber = job.RadioSerialNumber,
+                    Type = job.EquipmentName ?? "Unknown",
+                    Company = job.RadioOwnerLabel,
+                    Division = job.OwnerDivision,
+                    Department = job.OwnerDepartment,
+                    NomorUnit = job.UnitNumber,
+                    RadioId = job.RadioId?.ToString() ?? job.RadioSerialNumber,
+                    IsScrap = false, // Akan diset true di bawah
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Radios.Add(newRadio);
+                job.Radio = newRadio;
+            }
+
             bool isPendingFill = job.Status == RadioRepairJobStatus.Scrapped && job.Radio?.IsScrap == true && job.Radio?.DateScrapped == null;
             if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.ReturnedToHelpdesk && !isPendingFill)
                 throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap atau sedang menunggu data scrap.");
