@@ -291,7 +291,7 @@ namespace Pm.Services
 
             if (unpaidItems.Count > 0)
             {
-                sb.AppendLine("❌ *Tahun yang BELUM dibayar:*");
+                sb.AppendLine($"❌ *Tagihan Tahun {currentYear} & Tunggakan:*");
                 foreach (var item in unpaidItems)
                     sb.AppendLine($"  • Tahun *{item.Year}* — Belum ada invoice");
             }
@@ -323,6 +323,7 @@ namespace Pm.Services
             string chatId,
             string groupName,
             int daysToAnniv,
+            int currentYear,
             IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems)
         {
             var settings = _configuration.GetSection("TelegramSettings").Get<TelegramSettings>() ?? new TelegramSettings();
@@ -353,7 +354,7 @@ namespace Pm.Services
             {
                 var years = string.Join(", ", item.UnpaidYears);
                 sb.AppendLine($"  • *{EscapeMarkdown(item.DocName)}*");
-                sb.AppendLine($"      └ Belum bayar tahun: {years}");
+                sb.AppendLine($"      └ Tagihan Tahun: {currentYear} (Tunggakan lain: {years})");
             }
 
             if (items.Count > 10)

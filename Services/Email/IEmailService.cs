@@ -11,7 +11,7 @@ namespace Pm.Services
         Task<bool> SendDocumentAnniversaryEmailAsync(string toEmail, string documentName, int daysRemaining, DateTime validUntil, string? fileLink, string documentId, string documentType);
         Task<bool> SendGroupedDocumentAnniversaryEmailAsync(string toEmail, string groupName, int daysRemaining, DateTime validUntil, IEnumerable<(string DocumentName, string DocumentType)> documents);
         Task<bool> SendBhpPaymentReminderEmailAsync(string toEmail, string documentName, int daysToAnniv, int currentYear, IEnumerable<(int Year, bool IsPaid, string? InvoiceNumber)> bhpItems);
-        Task<bool> SendGroupedBhpPaymentReminderEmailAsync(string toEmail, string groupName, int daysToAnniv, IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems);
+        Task<bool> SendGroupedBhpPaymentReminderEmailAsync(string toEmail, string groupName, int daysToAnniv, int currentYear, IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems);
 
         // Radio Repair & Handover Notifications
         Task<bool> SendRadioReadyForHelpdeskEmailAsync(string toEmail, string ticketNumber, string radioSerial, string equipmentName, string? unitNumber, string technicianName, string? notes, DateTime handoverAt, string webAppBaseUrl, bool isFromHelpdesk = false);

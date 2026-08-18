@@ -237,6 +237,7 @@ namespace Pm.Services
                                         chatId: group.Key.PicTelegramId,
                                         groupName: group.Key.GroupName,
                                         daysToAnniv: annivDays,
+                                        currentYear: DateTime.UtcNow.Year,
                                         groupItems: groupDetailItems
                                     );
                                     if (waSent) sentAnniv = true;
@@ -248,6 +249,7 @@ namespace Pm.Services
                                         toEmail: group.Key.PicEmail,
                                         groupName: group.Key.GroupName,
                                         daysToAnniv: annivDays,
+                                        currentYear: DateTime.UtcNow.Year,
                                         groupItems: groupDetailItems
                                     );
                                     if (emailSent) sentAnniv = true;
