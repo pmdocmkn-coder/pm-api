@@ -397,7 +397,7 @@ namespace Pm.Services
                                 </tr>
                                 <tr>
                                     <td style='color:#64748B;font-weight:600;'>Waktu Masuk WH</td>
-                                    <td style='color:#0F172A;'>{formattedDate} WITA</td>
+                                    <td style='color:#0F172A;'>{formattedDate}</td>
                                 </tr>
                                 <tr>
                                     <td style='color:#64748B;font-weight:600;'>Catatan</td>
