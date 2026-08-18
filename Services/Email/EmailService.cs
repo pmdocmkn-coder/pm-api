@@ -296,8 +296,8 @@ namespace Pm.Services
                     Status: <span style='color:{(daysToAnniv <= 0 ? "#e11d48" : "#d97706")}'>{jatuhTempoText}</span>
                 </p>
                 <div style='background-color:#fff1f2;border-left:4px solid #e11d48;padding:16px;border-radius:4px;margin-bottom:24px;'>
-                    <h3 style='margin:0 0 8px;color:#be123c;font-size:16px;'>Rincian Tunggakan Pembayaran:</h3>
-                    <p style='margin:0;color:#881337;font-size:14px;font-weight:bold;'>Tahun Belum Dibayar: {unpaidYears}</p>
+                    <h3 style='margin:0 0 8px;color:#be123c;font-size:16px;'>Tagihan Tahun {currentYear}</h3>
+                    <p style='margin:0;color:#881337;font-size:14px;'>Tunggakan lain: <strong>{unpaidYears}</strong></p>
                 </div>
                 <p style='color:#64748b;font-size:14px;line-height:1.6;margin:0;'>
                     Harap segera melakukan pelunasan sebelum batas waktu agar operasional tidak terganggu dan terhindar dari denda atau pencabutan izin.
@@ -306,10 +306,10 @@ namespace Pm.Services
             return await SendEmailInternalAsync(toEmail, $"[URGENT] Tagihan BHP ISR: {documentName}", GetBaseHtmlTemplate("💰 Tagihan BHP Frekuensi Radio", content));
         }
 
-        public async Task<bool> SendGroupedBhpPaymentReminderEmailAsync(string toEmail, string groupName, int daysToAnniv, IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems)
+        public async Task<bool> SendGroupedBhpPaymentReminderEmailAsync(string toEmail, string groupName, int daysToAnniv, int currentYear, IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems)
         {
             var docsHtml = string.Join("", groupItems.Select(d => 
-                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;color:#e11d48;font-size:14px;font-weight:bold;'>Tahun: {string.Join(", ", d.UnpaidYears)}</td></tr>"
+                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;'><div style='color:#e11d48;font-size:14px;font-weight:bold;'>Tagihan Tahun: {currentYear}</div><div style='color:#64748b;font-size:12px;margin-top:2px;'>Tunggakan lain: {string.Join(", ", d.UnpaidYears)}</div></td></tr>"
             ));
 
             string jatuhTempoText = daysToAnniv < 0

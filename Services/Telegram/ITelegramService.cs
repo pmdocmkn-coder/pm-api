@@ -50,6 +50,7 @@ namespace Pm.Services
             string chatId,
             string groupName,
             int daysToAnniv,
+            int currentYear,
             IEnumerable<(string DocName, int UnpaidCount, IEnumerable<int> UnpaidYears)> groupItems);
 
         Task<bool> SendGroupedDocumentAnniversaryMessageAsync(

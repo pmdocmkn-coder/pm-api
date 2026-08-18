@@ -27,18 +27,22 @@ namespace Pm.Services.Telegram
 
             try
             {
-                var queueItem = new TelegramQueue
+                var chatIds = ChatId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var id in chatIds)
                 {
-                    ChatId = ChatId,
-                    Message = message,
-                    Status = "Pending",
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.TelegramQueues.Add(queueItem);
+                    var queueItem = new TelegramQueue
+                    {
+                        ChatId = id,
+                        Message = message,
+                        Status = "Pending",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.TelegramQueues.Add(queueItem);
+                }
+                
                 await _context.SaveChangesAsync();
                 
-                _logger.LogInformation("Message to {ChatId} successfully queued.", ChatId);
+                _logger.LogInformation("Message to {ChatId} successfully queued to {Count} IDs.", ChatId, chatIds.Length);
             }
             catch (Exception ex)
             {
