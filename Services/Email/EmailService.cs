@@ -210,7 +210,7 @@ namespace Pm.Services
             string status = daysRemaining == 0 ? "Hari ini" : (daysRemaining < 0 ? "Telah Berakhir" : $"H-{daysRemaining}");
             
             var docsHtml = string.Join("", documents.Select(d => 
-                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocumentName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569;font-size:14px;'>{d.WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)}</td></tr>"
+                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocumentName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569;font-size:14px;'>{WitaHelper.ToWita(d.ValidUntil).ToString("dd MMM yyyy", culture)}</td></tr>"
             ));
 
             var content = $@"
@@ -234,8 +234,8 @@ namespace Pm.Services
         public async Task<bool> SendDocumentExtendedEmailAsync(string toEmail, string documentName, string? referenceNumber, DateTime oldValidUntil, DateTime newValidUntil, string updatedByUserName)
         {
             var culture = new System.Globalization.CultureInfo("id-ID");
-            string oldDateStr = oldWitaHelper.ToWita(validUntil).ToString("dd MMMM yyyy", culture);
-            string newDateStr = newWitaHelper.ToWita(validUntil).ToString("dd MMMM yyyy", culture);
+            string oldDateStr = WitaHelper.ToWita(oldValidUntil).ToString("dd MMMM yyyy", culture);
+            string newDateStr = WitaHelper.ToWita(newValidUntil).ToString("dd MMMM yyyy", culture);
 
             string refHtml = !string.IsNullOrWhiteSpace(referenceNumber) 
                 ? $@"<tr>
