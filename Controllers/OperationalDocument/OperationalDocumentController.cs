@@ -128,7 +128,8 @@ namespace Pm.Controllers
 
             try
             {
-                var result = await _service.UpdateAsync(id, dto);
+                var userName = User.Identity?.Name ?? "Unknown";
+                var result = await _service.UpdateAsync(id, dto, userName);
                 return ApiResponse.Success(result);
             }
             catch (KeyNotFoundException ex)

@@ -10,7 +10,7 @@ namespace Pm.Services
         Task<OperationalDocumentResponseDto> GetByIdAsync(int id);
         Task<OperationalDocumentResponseDto> CreateAsync(OperationalDocumentCreateDto dto);
         Task<OperationalDocumentResponseDto> UpsertAsync(OperationalDocumentCreateDto dto);
-        Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto);
+        Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto, string updatedByUserName = "System");
         Task<OperationalDocumentResponseDto> UpdateFollowUpStatusAsync(int id, string status, string? remark = null);
         Task<OperationalDocumentResponseDto> MarkBhpPaymentAsync(int id, int year, string invoiceNumber, string userName);
         Task<OperationalDocumentResponseDto> UnmarkBhpPaymentAsync(int id, int year);
