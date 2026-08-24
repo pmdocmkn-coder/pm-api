@@ -93,8 +93,8 @@ namespace Pm.Services
                 message.AppendLine($"📌 No. Referensi: `{EscapeMarkdown(referenceNumber)}`");
             }
             var culture = new System.Globalization.CultureInfo("id-ID");
-            string oldDateStr = oldWitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture);
-            string newDateStr = newWitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture);
+            string oldDateStr = WitaHelper.ToWita(oldValidUntil).ToString("dd MMM yyyy", culture);
+            string newDateStr = WitaHelper.ToWita(newValidUntil).ToString("dd MMM yyyy", culture);
 
             message.AppendLine($"📆 *Dari:* {oldDateStr}");
             message.AppendLine($"📆 *Menjadi:* {newDateStr}");
@@ -147,7 +147,7 @@ namespace Pm.Services
 
             if (allSameDate)
             {
-                sb.AppendLine($"📅 Status: {statusLabel} ({docList[0].WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)})");
+                sb.AppendLine($"📅 Status: {statusLabel} ({WitaHelper.ToWita(docList[0].ValidUntil).ToString("dd MMM yyyy", culture)})");
                 sb.AppendLine();
                 sb.AppendLine($"Dokumen terkait ({docList.Count} dokumen):");
                 foreach (var doc in docList.Take(10))
@@ -170,7 +170,7 @@ namespace Pm.Services
                         _ => $"⏰ {docDays} hari lagi"
                     };
                     sb.AppendLine($"  • {EscapeMarkdown(doc.Name)}");
-                    sb.AppendLine($"      └ s/d {doc.WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)} ({docLabel})");
+                    sb.AppendLine($"      └ s/d {WitaHelper.ToWita(doc.ValidUntil).ToString("dd MMM yyyy", culture)} ({docLabel})");
                 }
             }
 
