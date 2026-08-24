@@ -146,6 +146,9 @@ namespace Pm.Services
 
         public async Task<bool> SendDocumentExpiryEmailAsync(string toEmail, string documentName, int daysRemaining, DateTime validUntil, string? fileLink, string documentId, string? documentType = null, string? groupName = null)
         {
+            var culture = new System.Globalization.CultureInfo("id-ID");
+            string validUntilStr = WitaHelper.ToWita(validUntil).ToString("dd MMMM yyyy", culture);
+
             string color = daysRemaining <= 7 ? "#dc2626" : (daysRemaining <= 14 ? "#f59e0b" : "#2b6cb0");
             string statusText = daysRemaining == 0 ? "Hari ini" : (daysRemaining < 0 ? "Telah Berakhir" : $"H-{daysRemaining}");
             string bgColor = daysRemaining <= 7 ? "#fef2f2" : (daysRemaining <= 14 ? "#fffbeb" : "#eff6ff");
@@ -201,11 +204,13 @@ namespace Pm.Services
 
         public async Task<bool> SendGroupedDocumentExpiryEmailAsync(string toEmail, string groupName, int daysRemaining, DateTime validUntil, IEnumerable<(string DocumentName, DateTime ValidUntil)> documents)
         {
+            var culture = new System.Globalization.CultureInfo("id-ID");
+
             string color = daysRemaining <= 7 ? "#dc2626" : (daysRemaining <= 14 ? "#f59e0b" : "#2b6cb0");
             string status = daysRemaining == 0 ? "Hari ini" : (daysRemaining < 0 ? "Telah Berakhir" : $"H-{daysRemaining}");
             
             var docsHtml = string.Join("", documents.Select(d => 
-                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocumentName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569;font-size:14px;'>{d.ValidUntil:dd MMM yyyy}</td></tr>"
+                $"<tr><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;color:#1e293b;font-size:14px;'>{d.DocumentName}</td><td style='padding:8px 0;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569;font-size:14px;'>{d.WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)}</td></tr>"
             ));
 
             var content = $@"
@@ -228,6 +233,10 @@ namespace Pm.Services
 
         public async Task<bool> SendDocumentExtendedEmailAsync(string toEmail, string documentName, string? referenceNumber, DateTime oldValidUntil, DateTime newValidUntil, string updatedByUserName)
         {
+            var culture = new System.Globalization.CultureInfo("id-ID");
+            string oldDateStr = oldWitaHelper.ToWita(validUntil).ToString("dd MMMM yyyy", culture);
+            string newDateStr = newWitaHelper.ToWita(validUntil).ToString("dd MMMM yyyy", culture);
+
             string refHtml = !string.IsNullOrWhiteSpace(referenceNumber) 
                 ? $@"<tr>
                         <td style='padding:4px 0;color:#64748b;width:150px;'>No. Referensi</td>
@@ -245,11 +254,11 @@ namespace Pm.Services
                         {refHtml}
                         <tr>
                             <td style='padding:4px 0;color:#64748b;width:150px;'>Masa Berlaku Lama</td>
-                            <td style='padding:4px 0;color:#ef4444;text-decoration:line-through;'>{oldValidUntil:dd MMMM yyyy}</td>
+                            <td style='padding:4px 0;color:#ef4444;text-decoration:line-through;'>{oldDateStr}</td>
                         </tr>
                         <tr>
                             <td style='padding:4px 0;color:#64748b;'>Masa Berlaku Baru</td>
-                            <td style='padding:4px 0;color:#10b981;font-weight:bold;'>{newValidUntil:dd MMMM yyyy}</td>
+                            <td style='padding:4px 0;color:#10b981;font-weight:bold;'>{newDateStr}</td>
                         </tr>
                         <tr>
                             <td style='padding:4px 0;color:#64748b;'>Diperbarui Oleh</td>

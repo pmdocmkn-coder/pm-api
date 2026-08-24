@@ -1,4 +1,5 @@
 using System.Text;
+using Pm.Helper;
 using Pm.Services.Telegram;
 
 namespace Pm.Services
@@ -38,11 +39,14 @@ namespace Pm.Services
                 _ => $"⏰ akan berakhir *{daysRemaining} hari lagi*"
             };
 
+            var culture = new System.Globalization.CultureInfo("id-ID");
+            string validUntilStr = WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture);
+
             var message = new StringBuilder();
             message.AppendLine("*\\[PM Dashboard MKN\\]*");
             message.AppendLine();
             message.AppendLine($"📄 Dokumen: *{EscapeMarkdown(documentName)}*");
-            message.AppendLine($"📅 Status: {statusLabel} ({validUntil:dd MMM yyyy})");
+            message.AppendLine($"📅 Status: {statusLabel} ({validUntilStr})");
 
             if (!string.IsNullOrWhiteSpace(fileLink))
                 message.AppendLine($"🔗 File: {EscapeMarkdown(fileLink)}");
@@ -88,8 +92,12 @@ namespace Pm.Services
             {
                 message.AppendLine($"📌 No. Referensi: `{EscapeMarkdown(referenceNumber)}`");
             }
-            message.AppendLine($"📆 *Dari:* {oldValidUntil:dd MMM yyyy}");
-            message.AppendLine($"📆 *Menjadi:* {newValidUntil:dd MMM yyyy}");
+            var culture = new System.Globalization.CultureInfo("id-ID");
+            string oldDateStr = oldWitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture);
+            string newDateStr = newWitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture);
+
+            message.AppendLine($"📆 *Dari:* {oldDateStr}");
+            message.AppendLine($"📆 *Menjadi:* {newDateStr}");
             message.AppendLine();
             message.AppendLine($"👤 Diperbarui oleh: {EscapeMarkdown(updatedByUserName)}");
 
@@ -129,6 +137,7 @@ namespace Pm.Services
             };
 
             var docList = documents.ToList();
+            var culture = new System.Globalization.CultureInfo("id-ID");
             var sb = new StringBuilder();
             sb.AppendLine("*\\[PM Dashboard MKN\\]*");
             sb.AppendLine();
@@ -138,7 +147,7 @@ namespace Pm.Services
 
             if (allSameDate)
             {
-                sb.AppendLine($"📅 Status: {statusLabel} ({docList[0].ValidUntil:dd MMM yyyy})");
+                sb.AppendLine($"📅 Status: {statusLabel} ({docList[0].WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)})");
                 sb.AppendLine();
                 sb.AppendLine($"Dokumen terkait ({docList.Count} dokumen):");
                 foreach (var doc in docList.Take(10))
@@ -161,7 +170,7 @@ namespace Pm.Services
                         _ => $"⏰ {docDays} hari lagi"
                     };
                     sb.AppendLine($"  • {EscapeMarkdown(doc.Name)}");
-                    sb.AppendLine($"      └ s/d {doc.ValidUntil:dd MMM yyyy} ({docLabel})");
+                    sb.AppendLine($"      └ s/d {doc.WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)} ({docLabel})");
                 }
             }
 
@@ -207,6 +216,7 @@ namespace Pm.Services
                 _ => $"⏰ *{daysRemaining} hari lagi*"
             };
 
+            var culture = new System.Globalization.CultureInfo("id-ID");
             bool isIsr = documentType?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
             string titleMsg = isIsr ? "⚠️ *Peringatan Tahunan (BHP/Evaluasi) Dokumen*" : "⚠️ *Peringatan Tahunan Dokumen*";
 
@@ -216,7 +226,7 @@ namespace Pm.Services
             message.AppendLine(titleMsg);
             message.AppendLine($"📄 Dokumen: *{EscapeMarkdown(documentName)}*");
             message.AppendLine($"📅 Jadwal Tahunan: {statusLabel}");
-            message.AppendLine($"_(Catatan: Dokumen ini baru akan berakhir penuh pada {validUntil:dd MMM yyyy})_");
+            message.AppendLine($"_(Catatan: Dokumen ini baru akan berakhir penuh pada {WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)})_");
 
             if (!string.IsNullOrWhiteSpace(fileLink))
                 message.AppendLine($"🔗 File: {EscapeMarkdown(fileLink)}");
@@ -260,6 +270,7 @@ namespace Pm.Services
             };
 
             var docList = documents.ToList();
+            var culture = new System.Globalization.CultureInfo("id-ID");
             bool anyIsr = docList.Any(d => d.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true);
             string titleMsg = anyIsr ? "⚠️ *Peringatan Tahunan Grup (BHP/Evaluasi)*" : "⚠️ *Peringatan Tahunan Grup*";
 
@@ -269,7 +280,7 @@ namespace Pm.Services
             sb.AppendLine(titleMsg);
             sb.AppendLine($"📂 Grup Dokumen: *{EscapeMarkdown(groupName)}*");
             sb.AppendLine($"📅 Jadwal Tahunan: {statusLabel}");
-            sb.AppendLine($"_(Catatan: Masa berlaku penuh grup ini berakhir pada {validUntil:dd MMM yyyy})_");
+            sb.AppendLine($"_(Catatan: Masa berlaku penuh grup ini berakhir pada {WitaHelper.ToWita(validUntil).ToString("dd MMM yyyy", culture)})_");
             sb.AppendLine();
             sb.AppendLine($"Dokumen terkait ({docList.Count} dokumen):");
             
