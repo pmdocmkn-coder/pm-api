@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Pm.Data;
+using Pm.Helper;
 using Pm.Models;
 using Pm.Services.Notification;
 using Pm.DTOs.Notification;
@@ -57,7 +58,7 @@ namespace Pm.Services
             var Email = scope.ServiceProvider.GetRequiredService<IEmailService>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-            var today = DateTime.UtcNow.Date;
+            var today = WitaHelper.Today;
 
             // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA
             // Ambil semua dokumen yang belum selesai ditindaklanjuti dan punya no WA atau Email
@@ -237,7 +238,7 @@ namespace Pm.Services
                                         chatId: group.Key.PicTelegramId,
                                         groupName: group.Key.GroupName,
                                         daysToAnniv: annivDays,
-                                        currentYear: DateTime.UtcNow.Year,
+                                        currentYear: WitaHelper.Today.Year,
                                         groupItems: groupDetailItems
                                     );
                                     if (waSent) sentAnniv = true;
@@ -249,7 +250,7 @@ namespace Pm.Services
                                         toEmail: group.Key.PicEmail,
                                         groupName: group.Key.GroupName,
                                         daysToAnniv: annivDays,
-                                        currentYear: DateTime.UtcNow.Year,
+                                        currentYear: WitaHelper.Today.Year,
                                         groupItems: groupDetailItems
                                     );
                                     if (emailSent) sentAnniv = true;
@@ -432,7 +433,7 @@ namespace Pm.Services
                                                 chatId: doc.PicTelegramId,
                                                 documentName: doc.Name,
                                                 daysToAnniv: dta,
-                                                currentYear: DateTime.UtcNow.Year,
+                                                currentYear: WitaHelper.Today.Year,
                                                 bhpItems: bhpItems
                                             );
                                             if (waSent) sentAnniv = true;
@@ -444,7 +445,7 @@ namespace Pm.Services
                                                 toEmail: doc.PicEmail,
                                                 documentName: doc.Name,
                                                 daysToAnniv: dta,
-                                                currentYear: DateTime.UtcNow.Year,
+                                                currentYear: WitaHelper.Today.Year,
                                                 bhpItems: bhpItems
                                             );
                                             if (emailSent) sentAnniv = true;
@@ -548,7 +549,7 @@ namespace Pm.Services
 
             var Email = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
-            var daysRemaining = (int)(doc.ValidUntil.Date - DateTime.UtcNow.Date).TotalDays;
+            var daysRemaining = (int)(doc.ValidUntil.Date - WitaHelper.Today).TotalDays;
             bool isIsr = doc.Type?.Contains("ISR", StringComparison.OrdinalIgnoreCase) == true;
 
             var chatIds = doc.PicTelegramId?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
@@ -571,7 +572,7 @@ namespace Pm.Services
                         chatId: chatId,
                         documentName: doc.Name,
                         daysToAnniv: daysRemaining,
-                        currentYear: DateTime.UtcNow.Year,
+                        currentYear: WitaHelper.Today.Year,
                         bhpItems: bhpItems
                     );
                 }
@@ -605,7 +606,7 @@ namespace Pm.Services
                         toEmail: doc.PicEmail,
                         documentName: doc.Name,
                         daysToAnniv: daysRemaining,
-                        currentYear: DateTime.UtcNow.Year,
+                        currentYear: WitaHelper.Today.Year,
                         bhpItems: bhpItems
                     );
                 }
@@ -649,7 +650,7 @@ namespace Pm.Services
             if (!string.IsNullOrWhiteSpace(type))
                 query = query.Where(d => d.Type == type);
 
-            var today = DateTime.UtcNow.Date;
+            var today = WitaHelper.Today;
             if (!string.IsNullOrWhiteSpace(expiryStatus))
             {
                 if (expiryStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase))
@@ -722,7 +723,7 @@ namespace Pm.Services
         private TimeSpan GetDelayUntilNextRun()
         {
             var runHour = _configuration.GetValue("TelegramSettings:NotificationRunHour", 7);
-            var nowWib = DateTime.UtcNow.AddHours(7); // UTC+7
+            var nowWib = WitaHelper.Now; // UTC+7
             var nextRun = nowWib.Date.AddHours(runHour);
 
             if (nowWib >= nextRun)

@@ -43,7 +43,7 @@ namespace Pm.Services
             // Expiry status filtering (On-the-fly logic)
             if (!string.IsNullOrWhiteSpace(query.ExpiryStatus))
             {
-                var today = DateTime.UtcNow.Date;
+                var today = WitaHelper.Today;
                 var warningDate = today.AddDays(30);
                 var statuses = query.ExpiryStatus.Split(',').Select(s => s.Trim().ToLower()).ToList();
 
@@ -90,7 +90,7 @@ namespace Pm.Services
 
         public async Task<OperationalDocumentSummaryDto> GetSummaryAsync()
         {
-            var today = DateTime.UtcNow.Date;
+            var today = WitaHelper.Today;
             var warningDate = today.AddDays(30);
 
             var q = _context.OperationalDocuments.AsNoTracking();
