@@ -10,7 +10,7 @@ using Pm.Services.Telegram;
 namespace Pm.Services
 #pragma warning restore IDE0130
 {
-    public class OperationalDocumentService(AppDbContext _context, ITelegramService _telegramService) : IOperationalDocumentService
+    public class OperationalDocumentService(AppDbContext _context, ITelegramService _telegramService, IEmailService _emailService) : IOperationalDocumentService
     {
         public async Task<PagedResultDto<OperationalDocumentResponseDto>> GetAllAsync(OperationalDocumentQueryDto query)
         {
@@ -64,7 +64,22 @@ namespace Pm.Services
             var totalCount = await q.CountAsync();
             var sortField = string.IsNullOrWhiteSpace(query.SortBy) ? "ValidUntil" : query.SortBy;
             var sortDir  = string.IsNullOrWhiteSpace(query.SortDir) ? "asc" : query.SortDir;
-            q = q.ApplySorting(sortField, sortDir);
+            
+            if (sortField.Equals("ValidUntil", StringComparison.OrdinalIgnoreCase))
+            {
+                if (sortDir.Equals("asc", StringComparison.OrdinalIgnoreCase))
+                {
+                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenBy(d => d.ValidUntil);
+                }
+                else
+                {
+                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenByDescending(d => d.ValidUntil);
+                }
+            }
+            else
+            {
+                q = q.ApplySorting(sortField, sortDir);
+            }
 
             // Apply pagination
             var items = await q.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToListAsync();
@@ -190,7 +205,7 @@ namespace Pm.Services
             }
         }
 
-        public async Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto)
+        public async Task<OperationalDocumentResponseDto> UpdateAsync(int id, OperationalDocumentUpdateDto dto, string updatedByUserName = "System")
         {
             var doc = await _context.OperationalDocuments
                 .Include(d => d.BhpChecklists)
@@ -199,6 +214,9 @@ namespace Pm.Services
 
             if (dto.ValidUntil <= dto.ValidFrom)
                 throw new ArgumentException("Tanggal berakhir harus lebih besar dari tanggal berlaku.");
+
+            var oldValidUntil = doc.ValidUntil;
+            bool isExtended = dto.ValidUntil.Date > oldValidUntil.Date;
 
             doc.Name = dto.Name;
             doc.Type = dto.Type;
@@ -220,6 +238,25 @@ namespace Pm.Services
 
             await _context.SaveChangesAsync();
             await GenerateBhpChecklistAsync(doc);
+
+            // Trigger notification if it's an extension
+            if (isExtended)
+            {
+                if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
+                {
+                    var chatIds = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    foreach (var chatId in chatIds)
+                    {
+                        await _telegramService.SendDocumentExtendedMessageAsync(chatId, doc.Name, doc.ReferenceNumber, oldValidUntil, doc.ValidUntil, updatedByUserName);
+                    }
+                }
+                
+                if (!string.IsNullOrWhiteSpace(doc.PicEmail))
+                {
+                    await _emailService.SendDocumentExtendedEmailAsync(doc.PicEmail, doc.Name, doc.ReferenceNumber, oldValidUntil, doc.ValidUntil, updatedByUserName);
+                }
+            }
+
             return MapToResponse(doc);
         }
 
@@ -271,19 +308,26 @@ namespace Pm.Services
 
             await _context.SaveChangesAsync();
 
+            var paidCount = doc.BhpChecklists.Count(c => c.IsPaid);
+            var totalCount = doc.BhpChecklists.Count;
+            var isAllPaid = paidCount == totalCount && totalCount > 0;
+
             // Kirim notif Telegram ke semua PIC jika ada
             if (!string.IsNullOrWhiteSpace(doc.PicTelegramId))
             {
-                var paidCount = doc.BhpChecklists.Count(c => c.IsPaid);
-                var totalCount = doc.BhpChecklists.Count;
-                var isAllPaid = paidCount == totalCount && totalCount > 0;
-
                 var chatIds = doc.PicTelegramId.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 foreach (var chatId in chatIds)
                 {
                     await _telegramService.SendBhpPaymentConfirmationAsync(
                         chatId, doc.Name, year, invoiceNumber, userName, isAllPaid, paidCount, totalCount);
                 }
+            }
+
+            // Kirim notif Email ke PIC jika ada
+            if (!string.IsNullOrWhiteSpace(doc.PicEmail))
+            {
+                await _emailService.SendBhpPaymentConfirmationEmailAsync(
+                    doc.PicEmail, doc.Name, year, invoiceNumber, userName, isAllPaid, paidCount, totalCount);
             }
 
             return MapToResponse(doc);

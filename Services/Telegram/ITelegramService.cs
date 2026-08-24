@@ -23,6 +23,14 @@ namespace Pm.Services
             string documentId, 
             string documentType);
 
+        Task<bool> SendDocumentExtendedMessageAsync(
+            string chatId,
+            string documentName,
+            string? referenceNumber,
+            DateTime oldValidUntil,
+            DateTime newValidUntil,
+            string updatedByUserName);
+
         Task<bool> SendBhpPaymentConfirmationAsync(
             string chatId,
             string documentName,

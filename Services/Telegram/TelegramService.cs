@@ -62,6 +62,49 @@ namespace Pm.Services
             }
         }
 
+        public async Task<bool> SendDocumentExtendedMessageAsync(
+            string chatId,
+            string documentName,
+            string? referenceNumber,
+            DateTime oldValidUntil,
+            DateTime newValidUntil,
+            string updatedByUserName)
+        {
+            var settings = _configuration.GetSection("TelegramSettings").Get<TelegramSettings>() ?? new TelegramSettings();
+
+            if (string.IsNullOrWhiteSpace(settings.BotToken))
+            {
+                _logger.LogWarning("Telegram BotToken belum dikonfigurasi. Extension WA tidak terkirim untuk dokumen {DocName}", documentName);
+                return false;
+            }
+
+            var message = new StringBuilder();
+            message.AppendLine("*\\[PM Dashboard MKN\\]*");
+            message.AppendLine();
+            message.AppendLine("🔄 *Perpanjangan Dokumen Berhasil*");
+            message.AppendLine();
+            message.AppendLine($"📄 Dokumen: *{EscapeMarkdown(documentName)}*");
+            if (!string.IsNullOrWhiteSpace(referenceNumber))
+            {
+                message.AppendLine($"📌 No. Referensi: `{EscapeMarkdown(referenceNumber)}`");
+            }
+            message.AppendLine($"📆 *Dari:* {oldValidUntil:dd MMM yyyy}");
+            message.AppendLine($"📆 *Menjadi:* {newValidUntil:dd MMM yyyy}");
+            message.AppendLine();
+            message.AppendLine($"👤 Diperbarui oleh: {EscapeMarkdown(updatedByUserName)}");
+
+            try
+            {
+                await _queueService.EnqueueMessageAsync(chatId, message.ToString());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception saat queue Extension Telegram ke {ChatId} untuk dokumen {DocName}", chatId, documentName);
+                return false;
+            }
+        }
+
         public async Task<bool> SendGroupedDocumentExpiryMessageAsync(
             string chatId,
             string groupName,

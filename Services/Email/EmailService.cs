@@ -226,6 +226,44 @@ namespace Pm.Services
             return await SendEmailInternalAsync(toEmail, $"Peringatan Grup ({status}): {groupName}", GetBaseHtmlTemplate("⚠️ Peringatan Kadaluarsa Grup", content));
         }
 
+        public async Task<bool> SendDocumentExtendedEmailAsync(string toEmail, string documentName, string? referenceNumber, DateTime oldValidUntil, DateTime newValidUntil, string updatedByUserName)
+        {
+            string refHtml = !string.IsNullOrWhiteSpace(referenceNumber) 
+                ? $@"<tr>
+                        <td style='padding:4px 0;color:#64748b;width:150px;'>No. Referensi</td>
+                        <td style='padding:4px 0;color:#1e293b;font-weight:bold;'>{referenceNumber}</td>
+                     </tr>" 
+                : "";
+
+            var content = $@"
+                <p style='color:#334155;font-size:15px;margin:0 0 16px;'>Yth. Pihak Terkait,</p>
+                <p style='color:#64748b;font-size:14px;line-height:1.6;margin:0 0 24px;'>
+                    Kami informasikan bahwa masa berlaku untuk dokumen <strong>{documentName}</strong> telah berhasil diperpanjang.
+                </p>
+                <div style='background-color:#eff6ff;border-left:4px solid #3b82f6;padding:16px;border-radius:4px;margin-bottom:24px;'>
+                    <table width='100%' cellpadding='0' cellspacing='0' style='font-size:14px;'>
+                        {refHtml}
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;width:150px;'>Masa Berlaku Lama</td>
+                            <td style='padding:4px 0;color:#ef4444;text-decoration:line-through;'>{oldValidUntil:dd MMMM yyyy}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;'>Masa Berlaku Baru</td>
+                            <td style='padding:4px 0;color:#10b981;font-weight:bold;'>{newValidUntil:dd MMMM yyyy}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;'>Diperbarui Oleh</td>
+                            <td style='padding:4px 0;color:#1e293b;font-weight:bold;'>{updatedByUserName}</td>
+                        </tr>
+                    </table>
+                </div>
+                <p style='color:#64748b;font-size:14px;line-height:1.6;margin:0;'>
+                    Sistem pengingat (reminder) telah diatur ulang dan akan memberitahukan Anda kembali saat dokumen mendekati masa berlaku yang baru.
+                </p>";
+
+            return await SendEmailInternalAsync(toEmail, $"🔄 Perpanjangan Dokumen: {documentName}", GetBaseHtmlTemplate("Perpanjangan Dokumen Berhasil", content));
+        }
+
         public async Task<bool> SendDocumentAnniversaryEmailAsync(string toEmail, string documentName, int daysRemaining, DateTime validUntil, string? fileLink, string documentId, string documentType)
         {
             string jatuhTempoText = daysRemaining < 0
@@ -336,6 +374,49 @@ namespace Pm.Services
                 </p>";
 
             return await SendEmailInternalAsync(toEmail, $"[URGENT] Tagihan BHP Grup ISR: {groupName}", GetBaseHtmlTemplate("💰 Tagihan BHP Frekuensi Radio Grup", content));
+        }
+
+        public async Task<bool> SendBhpPaymentConfirmationEmailAsync(string toEmail, string documentName, int year, string invoiceNumber, string paidByUserName, bool isAllPaid, int paidCount, int totalCount)
+        {
+            string progressText = isAllPaid 
+                ? $"<span style='color:#059669;font-weight:bold;'>Seluruh tagihan telah lunas ({paidCount}/{totalCount} tahun).</span>" 
+                : $"<span style='color:#d97706;font-weight:bold;'>Sebagian tagihan lunas ({paidCount}/{totalCount} tahun).</span>";
+
+            var content = $@"
+                <p style='color:#334155;font-size:15px;margin:0 0 16px;'>Yth. Pihak Terkait,</p>
+                <p style='color:#64748b;font-size:14px;line-height:1.6;margin:0 0 24px;'>
+                    Kami informasikan bahwa pembayaran Biaya Hak Penggunaan (BHP) Frekuensi Radio telah berhasil dicatat pada sistem dengan rincian berikut:
+                </p>
+                <div style='background-color:#f0fdf4;border-left:4px solid #10b981;padding:16px;border-radius:4px;margin-bottom:24px;'>
+                    <table width='100%' cellpadding='0' cellspacing='0' style='font-size:14px;'>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;width:120px;'>Dokumen</td>
+                            <td style='padding:4px 0;color:#1e293b;font-weight:bold;'>{documentName}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;'>Tahun Tagihan</td>
+                            <td style='padding:4px 0;color:#1e293b;font-weight:bold;'>{year}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;'>No. Invoice</td>
+                            <td style='padding:4px 0;color:#1e293b;font-weight:bold;'>{invoiceNumber}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:4px 0;color:#64748b;'>Oleh</td>
+                            <td style='padding:4px 0;color:#1e293b;'>{paidByUserName}</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:8px 0 0;border-top:1px dashed #a7f3d0;margin-top:4px;' colspan='2'>
+                                {progressText}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <p style='color:#64748b;font-size:14px;line-height:1.6;margin:0;'>
+                    Terima kasih atas pelunasan tagihan BHP Anda. Operasional perusahaan kini dapat berjalan lebih lancar tanpa kendala administratif.
+                </p>";
+
+            return await SendEmailInternalAsync(toEmail, $"✅ Konfirmasi Pembayaran BHP: {documentName} ({year})", GetBaseHtmlTemplate("✅ Pembayaran BHP Berhasil", content));
         }
 
         public async Task<bool> SendRadioReadyForHelpdeskEmailAsync(
