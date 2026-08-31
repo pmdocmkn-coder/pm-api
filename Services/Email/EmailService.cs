@@ -36,6 +36,13 @@ namespace Pm.Services
                     message.To.Add(new MailboxAddress(trimmedEmail, trimmedEmail));
                 }
             }
+
+            if (message.To.Count == 0)
+            {
+                _logger.LogWarning("⚠️ No valid recipient email addresses found in '{ToEmail}'", toEmail);
+                return false;
+            }
+
             message.Subject = subject;
 
             var bodyBuilder = new BodyBuilder { HtmlBody = htmlBody };
@@ -58,7 +65,10 @@ namespace Pm.Services
             }
             finally
             {
-                await client.DisconnectAsync(true);
+                if (client.IsConnected)
+                {
+                    await client.DisconnectAsync(true);
+                }
             }
         }
 
