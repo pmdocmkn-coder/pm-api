@@ -114,6 +114,14 @@ namespace Pm.Services
             return MapToResponse(doc);
         }
 
+        private static string? SanitizeCsv(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return null;
+            var parts = input.Split(',', StringSplitOptions.TrimEntries);
+            var hasAny = parts.Any(p => !string.IsNullOrWhiteSpace(p));
+            return hasAny ? string.Join(",", parts) : null;
+        }
+
         public async Task<OperationalDocumentResponseDto> CreateAsync(OperationalDocumentCreateDto dto)
         {
             if (dto.ValidUntil <= dto.ValidFrom)
@@ -127,9 +135,9 @@ namespace Pm.Services
                 GroupName = dto.GroupName,
                 ValidFrom = dto.ValidFrom,
                 ValidUntil = dto.ValidUntil,
-                PicName = dto.PicName,
-                PicTelegramId = dto.PicTelegramId,
-                PicEmail = dto.PicEmail,
+                PicName = SanitizeCsv(dto.PicName),
+                PicTelegramId = SanitizeCsv(dto.PicTelegramId),
+                PicEmail = SanitizeCsv(dto.PicEmail),
                 FileLink = dto.FileLink,
                 FollowUpStatus = "Tidak Ada"
             };
@@ -170,9 +178,9 @@ namespace Pm.Services
 
                 existing.ValidFrom = dto.ValidFrom;
                 existing.ValidUntil = dto.ValidUntil;
-                existing.PicName = dto.PicName;
-                existing.PicTelegramId = dto.PicTelegramId;
-                existing.PicEmail = dto.PicEmail;
+                existing.PicName = SanitizeCsv(dto.PicName);
+                existing.PicTelegramId = SanitizeCsv(dto.PicTelegramId);
+                existing.PicEmail = SanitizeCsv(dto.PicEmail);
                 existing.FileLink = dto.FileLink;
                 existing.UpdatedAt = DateTime.UtcNow;
 
@@ -191,9 +199,9 @@ namespace Pm.Services
                     GroupName = dto.GroupName,
                     ValidFrom = dto.ValidFrom,
                     ValidUntil = dto.ValidUntil,
-                    PicName = dto.PicName,
-                    PicTelegramId = dto.PicTelegramId,
-                    PicEmail = dto.PicEmail,
+                    PicName = SanitizeCsv(dto.PicName),
+                    PicTelegramId = SanitizeCsv(dto.PicTelegramId),
+                    PicEmail = SanitizeCsv(dto.PicEmail),
                     FileLink = dto.FileLink,
                     FollowUpStatus = "Tidak Ada"
                 };
@@ -230,9 +238,9 @@ namespace Pm.Services
             }
             doc.ValidFrom = dto.ValidFrom;
             doc.ValidUntil = dto.ValidUntil;
-            doc.PicName = dto.PicName;
-            doc.PicTelegramId = dto.PicTelegramId;
-            doc.PicEmail = dto.PicEmail;
+            doc.PicName = SanitizeCsv(dto.PicName);
+            doc.PicTelegramId = SanitizeCsv(dto.PicTelegramId);
+            doc.PicEmail = SanitizeCsv(dto.PicEmail);
             doc.FileLink = dto.FileLink;
             doc.UpdatedAt = DateTime.UtcNow;
 
