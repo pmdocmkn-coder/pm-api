@@ -1689,8 +1689,35 @@ namespace Pm.Services.RadioHandover
                     h.ReceiverSignatureBase64 = dto.ReceiverSignatureBase64;
                     if (h.Status != "Completed")
                     {
+                        var now = DateTime.UtcNow;
                         h.Status = "Completed";
-                        h.SignedAt = DateTime.UtcNow;
+                        h.SignedAt = now;
+
+                        // Completing Tek->WH through Edit must advance the job just like
+                        // CompleteReceiverSignatureAsync. Editing an already completed STR
+                        // must not move a job back from a later handover stage.
+                        if (h.HandoverType == RadioHandoverType.TechnicianToWarehouse)
+                        {
+                            var job = h.RadioRepairJob
+                                ?? throw new InvalidOperationException("Job serah terima tidak ditemukan.");
+                            if (job.Status != RadioRepairJobStatus.RepairCompleted &&
+                                job.Status != RadioRepairJobStatus.Scrapped &&
+                                job.Status != RadioRepairJobStatus.HandedToWarehouse)
+                                throw new InvalidOperationException("Status job sudah berubah. Muat ulang sebelum melengkapi TTD Warehouse.");
+
+                            var oldStatus = job.Status;
+                            job.Status = RadioRepairJobStatus.HandedToWarehouse;
+                            job.UpdatedAt = now;
+                            _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                            {
+                                JobId = job.Id,
+                                FromStatus = oldStatus,
+                                ToStatus = job.Status,
+                                Note = $"Warehouse melengkapi TTD penerima via edit STR {h.HandoverNumber}",
+                                UserId = userId,
+                                At = now
+                            });
+                        }
                     }
                 }
 
@@ -1882,6 +1909,7 @@ namespace Pm.Services.RadioHandover
             }
 
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
+            await _notificationService.BroadcastRefreshDataAsync("RadioRepairJob");
             return (await GetByIdAsync(id))!;
         }
 
