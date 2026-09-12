@@ -140,7 +140,10 @@ namespace Pm.Services.RadioRepairJob
                     PendingHandoverType = j.CurrentHandoverId.HasValue && j.CurrentHandoverId > 0
                         ? j.Handovers.Where(h => h.Id == j.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault()
                         : j.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
-                    IsScrap = j.Status == RadioRepairJobStatus.ProcessScrap || j.Status == RadioRepairJobStatus.Scrapped || j.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse)
+                    IsScrap = (j.Radio != null && j.Radio.IsScrap) || j.Status == RadioRepairJobStatus.ProcessScrap || j.Status == RadioRepairJobStatus.Scrapped || j.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse),
+                    DateScrapped = j.Radio != null ? j.Radio.DateScrapped : null,
+                    ScrapJobNumber = j.Radio != null ? j.Radio.ScrapJobNumber : null,
+                    ScrapRemarks = j.Radio != null ? j.Radio.Remarks : null,
                 })
                 .ToListAsync();
 
@@ -306,6 +309,8 @@ namespace Pm.Services.RadioRepairJob
             var from = job.Status;
             var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop,
                 StringComparison.OrdinalIgnoreCase);
+            if (dto.Status == RadioRepairJobStatus.Scrapped)
+                throw new ArgumentException("Gunakan persetujuan scrap dan lengkapi data scrap oleh Supervisor.");
             ValidateStatusTransition(from, dto.Status, isSupervisor);
 
             if (dto.Status == RadioRepairJobStatus.RepairCompleted && job.EquipmentTagType == null)
@@ -870,8 +875,12 @@ namespace Pm.Services.RadioRepairJob
         public async Task<RadioRepairJobDetailDto> ApproveScrapAsync(int id, ApproveScrapDto dto, int userId, string? roleName)
         {
             var isSupervisor = string.Equals(roleName, Pm.Helper.OperationalRoleNames.SupervisorWorkshop, StringComparison.OrdinalIgnoreCase);
-            var isHelpdesk = string.Equals(roleName, Pm.Helper.OperationalRoleNames.Helpdesk, StringComparison.OrdinalIgnoreCase);
-            if (!isSupervisor && !isHelpdesk) throw new UnauthorizedAccessException("Hanya Supervisor atau Helpdesk yang dapat menyetujui / input data Scrap.");
+            if (!isSupervisor)
+                throw new UnauthorizedAccessException("Hanya Supervisor Workshop yang dapat menyetujui dan mengisi data scrap.");
+            if (dto.IsPendingHelpdeskScrapFill)
+                throw new ArgumentException("Data scrap wajib dilengkapi Supervisor dan tidak dapat didelegasikan ke Helpdesk.");
+            if (!dto.DateScrapped.HasValue)
+                throw new ArgumentException("Tanggal scrap wajib diisi oleh Supervisor.");
 
             var job = await _context.RadioRepairJobs
                 .Include(j => j.Radio)
@@ -899,9 +908,11 @@ namespace Pm.Services.RadioRepairJob
                 job.Radio = newRadio;
             }
 
-            bool isPendingFill = job.Status == RadioRepairJobStatus.Scrapped && job.Radio?.IsScrap == true && job.Radio?.DateScrapped == null;
-            if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.ReturnedToHelpdesk && !isPendingFill)
-                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap atau sedang menunggu data scrap.");
+            bool isAllowed = job.Status == RadioRepairJobStatus.ProcessScrap
+                || job.Status == RadioRepairJobStatus.Scrapped
+                || (job.Status == RadioRepairJobStatus.ReturnedToHelpdesk && job.Radio?.IsScrap == true);
+            if (!isAllowed)
+                throw new InvalidOperationException("Job tidak dalam status Proses Radio Scrap atau Scrap.");
 
             var from = job.Status;
             
@@ -915,36 +926,16 @@ namespace Pm.Services.RadioRepairJob
 
             string note;
 
-            if (dto.IsPendingHelpdeskScrapFill)
-            {
-                // Delegated to Helpdesk
-                if (job.Radio != null)
-                {
-                    job.Radio.IsScrap = true;
-                    job.Radio.DateScrapped = null; // Mark as pending
-                    job.Radio.ScrapJobNumber = null;
-                    job.Radio.Remarks = dto.Remarks;
-                    job.Radio.UpdatedAt = DateTime.UtcNow;
-                }
-                
-                note = $"Radio disetujui untuk di-scrap (Menunggu Input Data Scrap dari Helpdesk). Keterangan: {dto.Remarks}";
-            }
-            else
-            {
-                if (!dto.DateScrapped.HasValue)
-                    throw new ArgumentException("Tanggal scrap wajib diisi jika tidak didelegasikan.");
-
-                if (job.Radio != null)
-                {
-                    job.Radio.IsScrap = true;
-                    job.Radio.DateScrapped = dto.DateScrapped.Value;
-                    job.Radio.ScrapJobNumber = dto.ScrapJobNumber ?? job.HelpdeskTicketNumber;
-                    job.Radio.Remarks = dto.Remarks;
-                    job.Radio.UpdatedAt = DateTime.UtcNow;
-                }
-
-                note = $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {dto.ScrapJobNumber}. Keterangan: {dto.Remarks}";
-            }
+            job.Radio!.IsScrap = true;
+            job.Radio.DateScrapped = dto.DateScrapped.Value;
+            job.Radio.ScrapJobNumber = string.IsNullOrWhiteSpace(dto.ScrapJobNumber)
+                ? job.HelpdeskTicketNumber : dto.ScrapJobNumber.Trim();
+            job.Radio.Remarks = dto.Remarks;
+            job.Radio.UpdatedAt = DateTime.UtcNow;
+            job.EquipmentTagType = EquipmentTagType.Damaged;
+            note = from == RadioRepairJobStatus.ProcessScrap
+                ? $"Radio disetujui untuk di-scrap. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {job.Radio.ScrapJobNumber}. Keterangan: {dto.Remarks}"
+                : $"Data scrap diperbarui oleh Supervisor. Tanggal: {dto.DateScrapped:dd/MM/yyyy}, Job: {job.Radio.ScrapJobNumber}. Keterangan: {dto.Remarks}";
 
             await AddStatusLogAsync(job.Id, from, job.Status, note, userId);
             await WriteRepairHistoryAsync(job, from, job.Status, note, userId);
@@ -1000,6 +991,12 @@ namespace Pm.Services.RadioRepairJob
 
             if (job.Status != RadioRepairJobStatus.ProcessScrap && job.Status != RadioRepairJobStatus.Scrapped)
                 throw new InvalidOperationException("Job tidak dalam status Scrap atau menunggu persetujuan Scrap.");
+
+            var hasActiveHandover = await _context.RadioHandovers.AnyAsync(h =>
+                h.RadioRepairJobId == job.Id && !h.IsDeleted &&
+                (h.HandoverType == RadioHandoverType.TechnicianToWarehouse || h.HandoverType == RadioHandoverType.TechnicianToHelpdesk));
+            if (hasActiveHandover)
+                throw new InvalidOperationException("Tidak dapat membatalkan scrap karena serah terima ke Warehouse sudah dibuat. Batalkan serah terima terlebih dahulu.");
 
             var from = job.Status;
             job.Status = RadioRepairJobStatus.InProgress;
@@ -1325,7 +1322,10 @@ namespace Pm.Services.RadioRepairJob
             PendingHandoverType = job.CurrentHandoverId.HasValue && job.CurrentHandoverId > 0
                 ? job.Handovers.Where(h => h.Id == job.CurrentHandoverId && h.Status != "Completed").Select(h => h.HandoverType.ToString()).FirstOrDefault()
                 : job.Handovers.Where(h => h.Status != "Completed" && !h.IsDeleted).OrderByDescending(h => h.Id).Select(h => h.HandoverType.ToString()).FirstOrDefault(),
-            IsScrap = job.Status == RadioRepairJobStatus.ProcessScrap || job.Status == RadioRepairJobStatus.Scrapped || job.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse),
+            IsScrap = (job.Radio != null && job.Radio.IsScrap) || job.Status == RadioRepairJobStatus.ProcessScrap || job.Status == RadioRepairJobStatus.Scrapped || job.Handovers.Any(h => h.HandoverType == RadioHandoverType.TechnicianToHelpdesk || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse),
+            DateScrapped = job.Radio?.DateScrapped,
+            ScrapJobNumber = job.Radio?.ScrapJobNumber,
+            ScrapRemarks = job.Radio?.Remarks,
             StatusLogs = [.. job.StatusLogs.OrderByDescending(l => l.At).Select(l => new RadioRepairJobStatusLogDto
             {
                 Id = l.Id,
@@ -1423,6 +1423,12 @@ namespace Pm.Services.RadioRepairJob
                 // agar konsisten dengan data yang tampil di detail panel
                 if (!string.IsNullOrWhiteSpace(radio.Type))
                     item.EquipmentName = radio.Type.Trim();
+                if (!item.DateScrapped.HasValue)
+                    item.DateScrapped = radio.DateScrapped;
+                if (string.IsNullOrWhiteSpace(item.ScrapJobNumber))
+                    item.ScrapJobNumber = radio.ScrapJobNumber;
+                if (string.IsNullOrWhiteSpace(item.ScrapRemarks))
+                    item.ScrapRemarks = radio.Remarks;
             }
         }
 
