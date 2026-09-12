@@ -124,8 +124,11 @@ namespace Pm.Services.RadioHandover
                     Remarks = h.Remarks,
                     IsPartial = h.IsPartial,
                     ContainsMainRadioUnit = h.ContainsMainRadioUnit,
-                    IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
+                    IsScrap = (h.Radio != null && h.Radio.IsScrap) || h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
                     IsPendingScrapData = h.Radio != null && h.Radio.IsScrap && !h.Radio.DateScrapped.HasValue,
+                    DateScrapped = h.Radio != null ? h.Radio.DateScrapped : (h.RadioRepairJob != null && h.RadioRepairJob.Radio != null ? h.RadioRepairJob.Radio.DateScrapped : null),
+                    ScrapJobNumber = h.Radio != null ? h.Radio.ScrapJobNumber : (h.RadioRepairJob != null && h.RadioRepairJob.Radio != null ? h.RadioRepairJob.Radio.ScrapJobNumber : null),
+                    ScrapRemarks = h.Radio != null ? h.Radio.Remarks : (h.RadioRepairJob != null && h.RadioRepairJob.Radio != null ? h.RadioRepairJob.Radio.Remarks : null),
                     // Compute: apakah masih ada barang yang bisa diserahkan ke WH?
                     // True jika handover ini TechnicianToHelpdesk + Completed + belum SEMUA item diserahkan ke WH
                     HasRemainingItemsForWarehouse =
@@ -162,6 +165,7 @@ namespace Pm.Services.RadioHandover
                 .Include(x => x.HandedOverByWorkshopTechnician)
                 .Include(x => x.Radio)
                 .Include(x => x.RadioRepairJob)
+                    .ThenInclude(j => j.Radio)
                 .Include(x => x.Accessories)
                 .Include(x => x.Photos)
                 .AsSplitQuery()
@@ -194,7 +198,7 @@ namespace Pm.Services.RadioHandover
                 RadioHandoverType.HelpdeskToTechnician => await CreateHelpdeskToTechnicianAsync(dto, photos, currentUserId),
                 RadioHandoverType.TechnicianToWarehouse => await CreateTechnicianToWarehouseAsync(dto, photos, currentUserId),
                 RadioHandoverType.WarehouseToHelpdesk => await CreateWarehouseToHelpdeskAsync(dto, photos, currentUserId),
-                RadioHandoverType.TechnicianToHelpdesk => await CreateTechnicianToHelpdeskAsync(dto, photos, currentUserId),
+                RadioHandoverType.TechnicianToHelpdesk => throw new ArgumentException("Alur scrap telah berubah. Gunakan serah terima Teknisi ke Warehouse."),
                 RadioHandoverType.HelpdeskToWarehouse => await CreateHelpdeskToWarehouseAsync(dto, photos, currentUserId),
                 _ => throw new ArgumentException("Tipe serah terima tidak dikenal.")
             };
@@ -343,11 +347,15 @@ namespace Pm.Services.RadioHandover
             if (!dto.HandedOverByWorkshopTechnicianId.HasValue)
                 throw new ArgumentException("Teknisi yang menyerahkan wajib dipilih saat serah terima Teknisi ke Warehouse.");
 
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
+            var job = await _context.RadioRepairJobs.Include(j => j.Radio).FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (job.Status != RadioRepairJobStatus.RepairCompleted && job.Status != RadioRepairJobStatus.Scrapped)
                 throw new InvalidOperationException("Job harus berstatus RepairCompleted atau Scrapped.");
+
+            var isScrap = job.Status == RadioRepairJobStatus.Scrapped || job.Radio?.IsScrap == true;
+            if (isScrap && (job.Radio == null || !job.Radio.IsScrap || !job.Radio.DateScrapped.HasValue))
+                throw new ArgumentException("Supervisor harus melengkapi data scrap sebelum radio diserahkan ke Warehouse.");
 
             var currentRole = await _context.Users.AsNoTracking()
                 .Include(u => u.Role)
@@ -359,7 +367,7 @@ namespace Pm.Services.RadioHandover
 
             var pendingHandover = await _context.RadioHandovers.AnyAsync(h => 
                 h.RadioRepairJobId == job.Id && 
-                h.HandoverType == RadioHandoverType.TechnicianToWarehouse && 
+                (h.HandoverType == RadioHandoverType.TechnicianToWarehouse || h.HandoverType == RadioHandoverType.TechnicianToHelpdesk) && 
                 h.Status == "PendingReceiverSignature" && 
                 !h.IsDeleted);
             if (pendingHandover)
@@ -371,6 +379,9 @@ namespace Pm.Services.RadioHandover
             var now = DateTime.UtcNow;
 
             await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.TechnicianToWarehouse);
+
+            if (isScrap)
+                dto.EquipmentTagType = EquipmentTagType.Damaged;
 
             var isReceiverSignatureComplete = !string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64);
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, isReceiverSignatureComplete);
@@ -438,8 +449,8 @@ namespace Pm.Services.RadioHandover
                 // Notif ke Warehouse & Supv WKS via permission Tek→WH
                 await _notificationService.CreateForPermissionAsync(Pm.Helper.NotificationPermissions.RadioHandoverTekWh, new CreateNotificationDto
                 {
-                    Title = "Radio Masuk Warehouse",
-                    Message = $"Radio SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse. Menunggu serah terima ke Helpdesk.",
+                    Title = isScrap ? "Radio Scrap Masuk Warehouse" : "Radio Masuk Warehouse",
+                    Message = $"Radio{(isScrap ? " Scrap" : "")} SN {job.RadioSerialNumber} telah diserahkan oleh Teknisi {technicianName} ke Warehouse. Menunggu serah terima ke Helpdesk.",
                     Category = "handover",
                     LinkUrl = "/radio-handover/warehouse",
                     ReferenceId = handover.Id,       // handover.Id bukan job.Id — agar ?handoverId= bisa buka detail yang benar
@@ -626,6 +637,13 @@ namespace Pm.Services.RadioHandover
                 .FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
+            // Hanya melanjutkan barang yang sudah diterima Helpdesk melalui alur lama.
+            var hasLegacyReceipt = await _context.RadioHandovers.AnyAsync(h =>
+                h.RadioRepairJobId == job.Id && !h.IsDeleted &&
+                h.HandoverType == RadioHandoverType.TechnicianToHelpdesk && h.Status == "Completed");
+            if (!hasLegacyReceipt)
+                throw new ArgumentException("Radio scrap harus diserahkan langsung dari Teknisi ke Warehouse.");
+
             if (job.Status != RadioRepairJobStatus.ReturnedToHelpdesk 
                 && job.Status != RadioRepairJobStatus.Scrapped
                 && job.Status != RadioRepairJobStatus.HandedToWarehouse)
@@ -742,7 +760,7 @@ namespace Pm.Services.RadioHandover
             if (!dto.RadioRepairJobId.HasValue)
                 throw new ArgumentException("RadioRepairJobId wajib untuk serah terima WH→Helpdesk.");
 
-            var job = await _context.RadioRepairJobs.FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
+            var job = await _context.RadioRepairJobs.Include(j => j.Radio).FirstOrDefaultAsync(j => j.Id == dto.RadioRepairJobId)
                 ?? throw new KeyNotFoundException("Job tidak ditemukan.");
 
             if (job.Status != RadioRepairJobStatus.HandedToWarehouse)
@@ -771,6 +789,8 @@ namespace Pm.Services.RadioHandover
             }
 
             await ApplyInheritedTagFieldsAsync(dto, job.Id, RadioHandoverType.WarehouseToHelpdesk);
+            if (isScrap)
+                dto.EquipmentTagType = EquipmentTagType.Damaged;
 
             var receiverComplete = !string.IsNullOrWhiteSpace(dto.ReceiverSignatureBase64);
             var handover = BuildHandover(dto, photos, strNumber, job.Id, currentUserId, dto.ReceivedByUserId, now, receiverComplete);
@@ -1469,72 +1489,78 @@ namespace Pm.Services.RadioHandover
                 })
                 .ToListAsync();
 
-        private static RadioHandoverDetailDto MapDetail(Models.RadioHandover h) => new()
+        private static RadioHandoverDetailDto MapDetail(Models.RadioHandover h)
         {
-            Id = h.Id,
-            HandoverNumber = h.HandoverNumber,
-            HandoverType = h.HandoverType.ToString(),
-            RadioRepairJobId = h.RadioRepairJobId,
-            HelpdeskTicketNumber = h.RadioRepairJob.HelpdeskTicketNumber,
-            NoJobErp = h.NoJobErp,
-            JobStatus = h.RadioRepairJob.Status.ToString(),
-            RadioSerialNumber = h.RadioSerialNumber,
-            RadioId = h.RadioId,
-            RadioMasterRadioId = h.Radio?.RadioId,
-            RadioFleet = h.Radio?.Fleet,
-            EquipmentName = h.EquipmentName ?? h.Radio?.Type,
-            UnitNumber = h.UnitNumber ?? h.Radio?.NomorUnit,
-            RadioOwnerLabel = h.RadioOwnerLabel ?? (h.Radio != null ? FormatRadioOwnerLabel(h.Radio) : null),
-            OwnerDivision = h.OwnerDivision ?? h.Radio?.Division,
-            OwnerDepartment = h.OwnerDepartment ?? h.Radio?.Department,
-            BatterySerialNumber = h.BatterySerialNumber,
-            DamageDescription = h.RadioRepairJob.DamageDescription,
-            ReceivedByUserId = h.ReceivedByUserId,
-            HandedOverByName = h.HandedOverByWorkshopTechnician?.Name ?? h.HandedOverBy.FullName,
-            // Tek→WH: penerima adalah akun Warehouse (ReceivedBy), bukan WorkshopTechnician (itu nama teknisi penyerah)
-            // WH→HD / HD→Tek: penerima bisa berupa WorkshopTechnician atau akun sistem
-            ReceivedByName = h.HandoverType == RadioHandoverType.TechnicianToWarehouse || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse
-                ? h.ReceivedBy.FullName
-                : h.WorkshopTechnician?.Name ?? h.ReceivedBy.FullName,
-            WorkshopTechnicianId = h.WorkshopTechnicianId,
-            WorkshopTechnicianName = h.WorkshopTechnician?.Name,
-            HandedOverByWorkshopTechnicianId = h.HandedOverByWorkshopTechnicianId,
-            HandedOverByWorkshopTechnicianName = h.HandedOverByWorkshopTechnician?.Name,
-            HandoverAt = h.HandoverAt,
-            SignedAt = h.SignedAt,
-            EquipmentTagType = h.EquipmentTagType.ToString(),
-            OriginFrom = h.OriginFrom,
-            RepairDataDescription = h.RepairDataDescription,
-            RepairedByName = h.RepairedByName,
-            FrequencyError = h.FrequencyError,
-            AfReading = h.AfReading,
-            PowerReading = h.PowerReading,
-            VoltageOutNoLoad = h.VoltageOutNoLoad,
-            VoltageOutWithLoad = h.VoltageOutWithLoad,
-            PhysicalCondition = h.PhysicalCondition,
-            DisplayCondition = h.DisplayCondition,
-            HasRadioPhoto = h.Photos.Count > 0 || !string.IsNullOrEmpty(h.RadioPhotoBase64),
-            HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
-            HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
-            Status = h.Status,
-            PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (string.IsNullOrEmpty(h.RadioPhotoBase64) ? 0 : 1),
-            PreviewPhotoBase64 = h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64).FirstOrDefault()
-                ?? h.RadioPhotoBase64,
-            RadioPhotoBase64 = h.RadioPhotoBase64,
-            RadioPhotos = h.Photos.Count > 0
-                ? [.. h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64)]
-                : (string.IsNullOrEmpty(h.RadioPhotoBase64) ? [] : [h.RadioPhotoBase64]),
-            HandedOverSignatureBase64 = h.HandedOverSignatureBase64,
-            ReceiverSignatureBase64 = h.ReceiverSignatureBase64,
-            Remarks = h.Remarks,
-            PicReceiverName = h.PicReceiverName,
-            IsDeleted = h.IsDeleted,
-            DeletedAt = h.DeletedAt,
-            IsWarranty = h.RadioRepairJob.IsWarranty,
-            IsPartial = h.IsPartial,
-            ContainsMainRadioUnit = h.ContainsMainRadioUnit,
-            IsScrap = h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
-            IsPendingScrapData = h.Radio != null && h.Radio.IsScrap && !h.Radio.DateScrapped.HasValue,
+            var radioEntity = h.Radio ?? h.RadioRepairJob?.Radio;
+            return new RadioHandoverDetailDto
+            {
+                Id = h.Id,
+                HandoverNumber = h.HandoverNumber,
+                HandoverType = h.HandoverType.ToString(),
+                RadioRepairJobId = h.RadioRepairJobId,
+                HelpdeskTicketNumber = h.RadioRepairJob?.HelpdeskTicketNumber ?? "",
+                NoJobErp = h.NoJobErp,
+                JobStatus = h.RadioRepairJob?.Status.ToString(),
+                RadioSerialNumber = h.RadioSerialNumber,
+                RadioId = h.RadioId,
+                RadioMasterRadioId = radioEntity?.RadioId,
+                RadioFleet = radioEntity?.Fleet,
+                EquipmentName = h.EquipmentName ?? radioEntity?.Type,
+                UnitNumber = h.UnitNumber ?? radioEntity?.NomorUnit,
+                RadioOwnerLabel = h.RadioOwnerLabel ?? (radioEntity != null ? FormatRadioOwnerLabel(radioEntity) : null),
+                OwnerDivision = h.OwnerDivision ?? radioEntity?.Division,
+                OwnerDepartment = h.OwnerDepartment ?? radioEntity?.Department,
+                BatterySerialNumber = h.BatterySerialNumber,
+                DamageDescription = h.RadioRepairJob?.DamageDescription,
+                ReceivedByUserId = h.ReceivedByUserId,
+                HandedOverByName = h.HandedOverByWorkshopTechnician?.Name ?? h.HandedOverBy.FullName,
+                // Tek→WH: penerima adalah akun Warehouse (ReceivedBy), bukan WorkshopTechnician (itu nama teknisi penyerah)
+                // WH→HD / HD→Tek: penerima bisa berupa WorkshopTechnician atau akun sistem
+                ReceivedByName = h.HandoverType == RadioHandoverType.TechnicianToWarehouse || h.HandoverType == RadioHandoverType.HelpdeskToWarehouse
+                    ? h.ReceivedBy.FullName
+                    : h.WorkshopTechnician?.Name ?? h.ReceivedBy.FullName,
+                WorkshopTechnicianId = h.WorkshopTechnicianId,
+                WorkshopTechnicianName = h.WorkshopTechnician?.Name,
+                HandedOverByWorkshopTechnicianId = h.HandedOverByWorkshopTechnicianId,
+                HandedOverByWorkshopTechnicianName = h.HandedOverByWorkshopTechnician?.Name,
+                HandoverAt = h.HandoverAt,
+                SignedAt = h.SignedAt,
+                EquipmentTagType = h.EquipmentTagType.ToString(),
+                OriginFrom = h.OriginFrom,
+                RepairDataDescription = h.RepairDataDescription,
+                RepairedByName = h.RepairedByName,
+                FrequencyError = h.FrequencyError,
+                AfReading = h.AfReading,
+                PowerReading = h.PowerReading,
+                VoltageOutNoLoad = h.VoltageOutNoLoad,
+                VoltageOutWithLoad = h.VoltageOutWithLoad,
+                PhysicalCondition = h.PhysicalCondition,
+                DisplayCondition = h.DisplayCondition,
+                HasRadioPhoto = h.Photos.Count > 0 || !string.IsNullOrEmpty(h.RadioPhotoBase64),
+                HasHandedOverSignature = !string.IsNullOrEmpty(h.HandedOverSignatureBase64),
+                HasReceiverSignature = !string.IsNullOrEmpty(h.ReceiverSignatureBase64),
+                Status = h.Status,
+                PhotoCount = h.Photos.Count > 0 ? h.Photos.Count : (string.IsNullOrEmpty(h.RadioPhotoBase64) ? 0 : 1),
+                PreviewPhotoBase64 = h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64).FirstOrDefault()
+                    ?? h.RadioPhotoBase64,
+                RadioPhotoBase64 = h.RadioPhotoBase64,
+                RadioPhotos = h.Photos.Count > 0
+                    ? [.. h.Photos.OrderBy(p => p.SortOrder).Select(p => p.PhotoBase64)]
+                    : (string.IsNullOrEmpty(h.RadioPhotoBase64) ? [] : [h.RadioPhotoBase64]),
+                HandedOverSignatureBase64 = h.HandedOverSignatureBase64,
+                ReceiverSignatureBase64 = h.ReceiverSignatureBase64,
+                Remarks = h.Remarks,
+                PicReceiverName = h.PicReceiverName,
+                IsDeleted = h.IsDeleted,
+                DeletedAt = h.DeletedAt,
+                IsWarranty = h.RadioRepairJob.IsWarranty,
+                IsPartial = h.IsPartial,
+                ContainsMainRadioUnit = h.ContainsMainRadioUnit,
+                IsScrap = (radioEntity != null && radioEntity.IsScrap) || h.RadioRepairJob != null && (h.RadioRepairJob.Status == RadioRepairJobStatus.ProcessScrap || h.RadioRepairJob.Status == RadioRepairJobStatus.Scrapped || h.RadioRepairJob.Handovers.Any(ho => ho.HandoverType == RadioHandoverType.TechnicianToHelpdesk)),
+                IsPendingScrapData = radioEntity != null && radioEntity.IsScrap && !radioEntity.DateScrapped.HasValue,
+                DateScrapped = radioEntity?.DateScrapped,
+                ScrapJobNumber = radioEntity?.ScrapJobNumber,
+                ScrapRemarks = radioEntity?.Remarks,
             HasRemainingItemsForWarehouse =
                 h.HandoverType == RadioHandoverType.TechnicianToHelpdesk &&
                 h.Status == "Completed" &&
@@ -1559,7 +1585,8 @@ namespace Pm.Services.RadioHandover
                 Description = a.Description,
                 SerialNumber = a.SerialNumber
             })]
-        };
+            };
+        }
 
         public async Task<RadioHandoverDetailDto> UpdateAsync(int id, UpdateRadioHandoverDto dto, int userId)
         {
@@ -1942,7 +1969,7 @@ namespace Pm.Services.RadioHandover
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");
         }
 
-        public async Task CancelPendingHandoverAsync(int id, int userId)
+        public async Task CancelPendingHandoverAsync(int id, CancelPendingHandoverDto? dto, int userId, string? roleName)
         {
             var h = await _context.RadioHandovers
                 .Include(x => x.RadioRepairJob)
@@ -1952,29 +1979,92 @@ namespace Pm.Services.RadioHandover
             if (h.Status != "PendingReceiverSignature")
                 throw new InvalidOperationException("Hanya serah terima yang masih menunggu TTD penerima yang dapat dibatalkan.");
 
-            if (h.HandedOverByUserId != userId)
+            var isOwner = h.HandedOverByUserId == userId;
+            var isReceiver = h.ReceivedByUserId == userId;
+            var isWorkshopTech = h.RadioRepairJob?.WorkshopTechnicianId.HasValue == true &&
+                          await _context.WorkshopTechnicians.AnyAsync(wt => wt.Id == h.RadioRepairJob.WorkshopTechnicianId && wt.UserId == userId);
+            var isPrivilegedRole = !string.IsNullOrEmpty(roleName) && (
+                roleName.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+                roleName.Equals("Warehouse", StringComparison.OrdinalIgnoreCase) ||
+                roleName.Equals("Supervisor", StringComparison.OrdinalIgnoreCase) ||
+                roleName.Equals("Super Admin", StringComparison.OrdinalIgnoreCase) ||
+                roleName.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (!isOwner && !isReceiver && !isWorkshopTech && !isPrivilegedRole)
             {
-                // Also allow if userId matches the workshop technician
-                var isOwner = h.RadioRepairJob?.WorkshopTechnicianId.HasValue == true &&
-                              await _context.WorkshopTechnicians.AnyAsync(wt => wt.Id == h.RadioRepairJob.WorkshopTechnicianId && wt.UserId == userId);
-                if (!isOwner)
-                    throw new InvalidOperationException("Anda tidak memiliki hak untuk membatalkan serah terima ini.");
+                throw new InvalidOperationException("Anda tidak memiliki hak untuk membatalkan serah terima ini.");
             }
 
             var now = DateTime.UtcNow;
+            h.Status = "Cancelled";
             h.IsDeleted = true;
             h.DeletedAt = now;
             h.DeletedByUserId = userId;
             h.UpdatedAt = now;
 
-            if (h.RadioRepairJob != null && h.RadioRepairJob.CurrentHandoverId == h.Id)
+            var reason = dto?.Reason?.Trim() ?? "Dibatalkan oleh pengguna";
+            var notes = dto?.Notes?.Trim();
+            var cancelRemark = $"[Dibatalkan] Alasan: {reason}" + (!string.IsNullOrWhiteSpace(notes) ? $" ({notes})" : "");
+
+            if (!string.IsNullOrWhiteSpace(h.Remarks))
             {
-                h.RadioRepairJob.CurrentHandoverId = null;
+                h.Remarks = $"{cancelRemark} | Catatan sebelumnya: {h.Remarks}";
+            }
+            else
+            {
+                h.Remarks = cancelRemark;
+            }
+
+            var isDirectInstall = (dto?.IsDirectInstall == true) ||
+                                  reason.Contains("install", StringComparison.OrdinalIgnoreCase) || 
+                                  reason.Contains("unit", StringComparison.OrdinalIgnoreCase) ||
+                                  reason.Contains("pasang", StringComparison.OrdinalIgnoreCase);
+
+            if (h.RadioRepairJob != null)
+            {
+                if (h.RadioRepairJob.CurrentHandoverId == h.Id)
+                {
+                    h.RadioRepairJob.CurrentHandoverId = null;
+                }
                 h.RadioRepairJob.UpdatedAt = now;
+
+                if (isDirectInstall)
+                {
+                    var oldStatus = h.RadioRepairJob.Status;
+                    h.RadioRepairJob.Status = RadioRepairJobStatus.ReturnedToHelpdesk;
+                    h.RadioRepairJob.ClosedAt = now;
+                    h.RadioRepairJob.CurrentHandoverId = null;
+
+                    var installNote = $"Radio langsung di-install ke unit (STR {h.HandoverNumber} dibatalkan: {reason})";
+                    if (!string.IsNullOrWhiteSpace(notes))
+                    {
+                        installNote += $" - {notes}";
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(h.RadioRepairJob.RepairDataDescription))
+                    {
+                        h.RadioRepairJob.RepairDataDescription += $" | {installNote}";
+                    }
+                    else
+                    {
+                        h.RadioRepairJob.RepairDataDescription = installNote;
+                    }
+
+                    _context.RadioRepairJobStatusLogs.Add(new RadioRepairJobStatusLog
+                    {
+                        JobId = h.RadioRepairJob.Id,
+                        FromStatus = oldStatus,
+                        ToStatus = RadioRepairJobStatus.ReturnedToHelpdesk,
+                        Note = $"Selesai otomatis: {installNote}",
+                        UserId = userId,
+                        At = now
+                    });
+                }
             }
 
             await _activityLog.LogAsync("RadioHandover", h.Id, "CancelPending", userId,
-                $"Batalkan STR pending {h.HandoverNumber}, tiket {h.RadioRepairJob?.HelpdeskTicketNumber}");
+                $"Batalkan STR pending {h.HandoverNumber} (Alasan: {reason}), tiket {h.RadioRepairJob?.HelpdeskTicketNumber}");
 
             await _context.SaveChangesAsync();
             await _notificationService.BroadcastRefreshDataAsync("RadioHandover");

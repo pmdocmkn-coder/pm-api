@@ -149,6 +149,9 @@ namespace Pm.DTOs.RadioHandover
         public bool ContainsMainRadioUnit { get; set; }
         public bool IsScrap { get; set; }
         public bool IsPendingScrapData { get; set; }
+        public DateTime? DateScrapped { get; set; }
+        public string? ScrapJobNumber { get; set; }
+        public string? ScrapRemarks { get; set; }
         /// <summary>True jika masih ada barang (unit utama / aksesoris) yang belum diserahkan ke Warehouse.</summary>
         public bool HasRemainingItemsForWarehouse { get; set; }
     }
@@ -269,5 +272,16 @@ namespace Pm.DTOs.RadioHandover
     {
         [Required]
         public int NewReceiverUserId { get; set; }
+    }
+
+    public class CancelPendingHandoverDto
+    {
+        [Required, MaxLength(200)]
+        public string Reason { get; set; } = null!;
+
+        [MaxLength(1000)]
+        public string? Notes { get; set; }
+
+        public bool? IsDirectInstall { get; set; }
     }
 }

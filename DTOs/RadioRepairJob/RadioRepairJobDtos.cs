@@ -71,6 +71,9 @@ namespace Pm.DTOs.RadioRepairJob
         public bool HasReturnedBorrowedPart { get; set; }
         public string? PendingHandoverType { get; set; }
         public bool IsScrap { get; set; }
+        public DateTime? DateScrapped { get; set; }
+        public string? ScrapJobNumber { get; set; }
+        public string? ScrapRemarks { get; set; }
     }
 
     public class RadioRepairTicketGroupDto
