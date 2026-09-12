@@ -30,7 +30,8 @@ namespace Pm.Controllers.RadioHandover
 
         private IActionResult? GuardArchiveQuery(bool includeDeleted)
         {
-            if (includeDeleted && !User.HasClaim("Permission", "radio.handover.view.archive"))
+            if (includeDeleted && !User.HasClaim("Permission", "radio.handover.view.archive") &&
+                RoleName != "Warehouse" && RoleName != "Supervisor Warehouse" && RoleName != "Admin" && RoleName != "Super Admin" && RoleName != "Supv WKS")
                 return ApiResponse.Forbidden();
             return null;
         }
@@ -221,11 +222,11 @@ namespace Pm.Controllers.RadioHandover
 
         [HttpPatch("{id}/cancel-pending")]
         [Authorize]
-        public async Task<IActionResult> CancelPending(int id)
+        public async Task<IActionResult> CancelPending(int id, [FromBody] CancelPendingHandoverDto? dto)
         {
             try
             {
-                await _service.CancelPendingHandoverAsync(id, CurrentUserId);
+                await _service.CancelPendingHandoverAsync(id, dto, CurrentUserId, RoleName);
                 return ApiResponse.Success(null, "Serah terima berhasil dibatalkan");
             }
             catch (KeyNotFoundException ex) { return ApiResponse.NotFound(ex.Message); }
