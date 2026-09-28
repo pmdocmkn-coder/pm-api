@@ -921,7 +921,7 @@ namespace Pm.Services.RadioRepairJob
                 job.Status = RadioRepairJobStatus.Scrapped;
             }
             
-            job.ClosedAt = DateTime.UtcNow;
+            job.ClosedAt = null;
             job.UpdatedAt = DateTime.UtcNow;
 
             string note;
