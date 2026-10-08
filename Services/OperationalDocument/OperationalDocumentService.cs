@@ -14,7 +14,7 @@ namespace Pm.Services
     {
         public async Task<PagedResultDto<OperationalDocumentResponseDto>> GetAllAsync(OperationalDocumentQueryDto query)
         {
-            var q = _context.OperationalDocuments.Include(d => d.BhpChecklists).AsSplitQuery().AsNoTracking().AsQueryable();
+            var q = _context.OperationalDocuments.Include(d => d.BhpChecklists).AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
@@ -69,11 +69,11 @@ namespace Pm.Services
             {
                 if (sortDir.Equals("asc", StringComparison.OrdinalIgnoreCase))
                 {
-                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenBy(d => d.ValidUntil);
+                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenBy(d => d.ValidUntil).ThenBy(d => d.Id);
                 }
                 else
                 {
-                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenByDescending(d => d.ValidUntil);
+                    q = q.OrderBy(d => d.FollowUpStatus == "Selesai" ? 1 : 0).ThenByDescending(d => d.ValidUntil).ThenBy(d => d.Id);
                 }
             }
             else
